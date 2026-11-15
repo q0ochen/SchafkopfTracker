@@ -44,9 +44,10 @@ Abhängigkeiten: `:app` → `:database`, `:data`, `:domain`; `:database` → `:d
 ## 2. Fachlogik (`:domain`)
 
 Paket `domain.model`: `PlayerId`, `EveningId`, `EntryId` (Wertklassen um `String`), `IdGenerator`, `Player`,
-`AppSettings`, `AiSettings`, `ThemeMode`, `AiProvider`.
+`AppSettings`, `AiSettings`, `ThemeMode`, `AiProvider`, `AmountFormatter` (macht aus Cent einen Text; die Umsetzung
+`Money` liegt in `:app`, weil in Euro nur in der Oberfläche formatiert wird).
 
-Paket `domain.rules`: `GameType` (RUFSPIEL, UEBER_KREUZ, FARBSOLO, WENZ, GEIER; `isSolo`), `Suit`, `ResultLevel`
+Paket `domain.rules`: `GameType` (RUFSPIEL, UEBER_KREUZ, FARBSOLO, WENZ, GEIER; `isSolo`, `hasDeclarer`), `Suit`, `ResultLevel`
 (NORMAL, SCHNEIDER, SCHWARZ), `Announcement` (NONE, TOUT, SIE), `KontraLevel` (NONE, KONTRA, RETOUR),
 `BockRules`, `BockStacking`, `PayoutRule`, `RuleSet` (Vorlagen `RuleSet.standard()` und `RuleSet.sauspiel()`),
 `GameFacts`, `ValueBreakdown`, `RuleViolation`, `ScoreCalculator`, `PayoutCalculator` mit `SchafkopfPayout` und
@@ -55,9 +56,12 @@ Paket `domain.rules`: `GameType` (RUFSPIEL, UEBER_KREUZ, FARBSOLO, WENZ, GEIER; 
 Paket `domain.evening`: `EveningEntry` (versiegelt) mit `GameEntry`, `ThrownInEntry`, `BockTriggerEntry`,
 `ManualEntry`; `Evening`; `EveningCalculator.compute(evening): EveningState`; `EveningEditor`; `SettleUp`.
 
-Paket `domain.stats`: `StatisticEngine` als Einstieg für alle Auswertungen (ein Abend oder alle Abende).
+Paket `domain.stats`: `EveningStatistics.compute(state)`, `HistoryStatistics.compute(evenings)`, `Progression`
+(Verlauf von Saldo und Platz), `PlayerStats`; darüber `StatisticEngine` als Einstieg für alle Auswertungen
+(ein Abend oder alle Abende, siehe Abschnitt „Statistik“).
 
-Paket `domain.summary`: Fakten eines Abends, Zusammenfassung aus Textbausteinen, Anfrage an ein Sprachmodell.
+Paket `domain.summary`: Fakten eines Abends (`SummaryFactsBuilder.build(state, names, formatter[, zone])`),
+Zusammenfassung aus Textbausteinen (`TemplateSummary`), Anfrage an ein Sprachmodell (`SummaryPrompt`, `SummaryService`).
 
 Paket `domain.ports`: `PlayerRepository`, `EveningRepository`, `SettingsRepository`, `SecretStore`, `TextGenerator`.
 
@@ -90,7 +94,52 @@ Referenzfälle für Tests: Rufspiel ohne Zusätze = je ±10. Farbsolo mit 3 Lauf
 - Bock: Jedes Spiel hat einen Bock-Schalter. Der Bock-Zähler belegt ihn vor: „6 Nixer“ (`BockTriggerEntry`) legt
   `gamesPerTrigger` Bockspiele in den Zähler, jedes gespielte Spiel verbraucht eines. Von Hand lässt sich der
   Schalter je Spiel umstellen (`BockOverride`).
-- Gewinner eines Spiels (`GameEntry.winners`) ergeben sich aus Ansager, Mitspieler und Ausgang.
+- Gewinner eines Spiels (`GameEntry.winners(seating)`) ergeben sich aus Ansager, Mitspieler und Ausgang.
+- Über Kreuz kennt keinen Ansager (`GameType.hasDeclarer` ist `false`): `declarer` und `partner` bezeichnen dort nur
+  das eine der beiden Paare, `declarerWon` sagt, ob dieses Paar gewonnen hat.
+- Ein Spiel, bei dem nicht feststeht, wer auf welcher Seite stand (Ansager unbekannt, Mitspieler fehlt oder ist der
+  Ansager selbst), bekommt eine Nummer, bucht aber nichts und wird als Regelverstoß angezeigt.
+- `SettleUp.transfers` („wer zahlt wem“) wirft nie; `SettleUp.isBalanced` sagt, ob die Salden aufgehen.
+
+### Statistik (Vertrag für `StatisticEngine`; noch umzusetzen, Issues #10 bis #13)
+
+```kotlin
+object StatisticEngine {
+    fun forEvening(evening: Evening): Statistics            // ein einzelner Abend
+    fun forEvenings(evenings: List<Evening>): Statistics    // „ewige Tabelle“; Reihenfolge der Liste egal
+}
+```
+
+`Statistics` enthält (alle Beträge in Cent; Quoten als `Double?`, `null` ohne Fälle; alles deterministisch):
+
+- `eveningCount`, `gameCount` (nur abgerechnete Spiele) und `players`: bei einem Abend die Sitzreihenfolge, sonst
+  Saldo absteigend, bei Gleichstand nach Kennung. Alle Listen „je Spieler“ haben diese Reihenfolge.
+- `finance` (Finanz-Übersicht): `standings` (Spieler, Saldo, Platz; Gleichstand teilt den Platz); `balanceSeries`
+  für das Liniendiagramm (Index 0 ist 0, danach der Stand nach jedem abgerechneten Spiel über alle Abende in zeitlicher
+  Reihenfolge; Länge `gameCount + 1`; letzter Punkt = Saldo; freie Buchungen zählen zum nächsten Spiel bzw. zum
+  letzten Punkt; wer an einem Abend nicht am Tisch saß, bleibt waagerecht); `eveningStarts` und `eveningIds`
+  (wo im Verlauf ein Abend beginnt); `turnover`.
+- `gameModes` (Analyse je Spielart, je Spieler): `atTable` und `asPlayer` als `Map<GameType, ModeRecord>` mit
+  `games`, `won`, `balance`, `winRate`, `averageAmount` (kaufmännisch gerundet). `asPlayer` zählt nur selbst
+  gespielte Spiele (Ansager, Mitspieler, Alleinspieler); bei Über Kreuz ist es gleich `atTable`.
+- `gelegt` („Sollte-er-es-lassen?“-Index, je Spieler): `count`, `won`, `winRate`, `netBalance` (Summe der eigenen
+  Beträge aus Spielen, in denen er gelegt hat), `effect` (was das eigene Legen gekostet oder gebracht hat, exakt
+  nachgerechnet), `badge` und `shouldLeaveIt`. Abzeichen: `count == 0` STREICHHOLZ_SPARER; `count < 3` NOCH_OFFEN;
+  `winRate >= 0.6` und `netBalance >= 0` SICHERE_BANK; `winRate <= 0.4` und `netBalance < 0` BRANDSTIFTER
+  (nur dann `shouldLeaveIt`); sonst bei `netBalance > 0` GLUECKSRITTER; sonst WACKELKANDIDAT.
+- `bock` (Bock-König): je Spieler `games`, `won`, `balance` aus Bockspielen; `king` = höchster Saldo, nur wenn über 0.
+- `solo` (Solo-Spezialist und Mauerblümchen): je Spieler `solos`, `calls` (Rufspiele als Ansager), `soloShare`;
+  `specialist` = meiste Einzelspiele (mindestens 1); `wallflower` = kleinster Solo-Anteil unter den Spielern mit
+  mindestens 3 angesagten Spielen, nur wenn höchstens 0,2 und nicht der Spezialist.
+- `partners` (Lieblingspartner): alle Zweiergespanne aus Rufspiel und Über Kreuz, die auf derselben Seite standen
+  (auch als Gegenspielerpaar), mit `games`, `won`, `winRate`, `balance`; sortiert nach Saldo, dann Quote, dann
+  Kennungen; `favorite` = das erste Gespann mit mindestens 3 gemeinsamen Spielen.
+- `history`: die bisherigen Kennzahlen (`HistoryStats`).
+
+Dazu an der vorhandenen Statistik nachzubessern: `klopferEffect` exakt nachrechnen statt halbieren (mit der
+Topf-Teilung stimmt die Hälfte nicht auf den Cent); Über Kreuz zählt nicht in `asDeclarer`, `asPartner`,
+`asOpponent`, `declarerByType` und `toutPlayed`; freie Buchungen von Abenden ohne Spiel gehen in den Saldo der
+ewigen Tabelle ein.
 
 ## 3. Datenhaltung
 
@@ -126,8 +175,11 @@ Beträgen in Cent. Der Import führt zusammen und löscht nichts. Dieselbe Datei
 ## 6. Bauen und prüfen
 
 ```bash
-./gradlew :domain:test :data:test :database:testDebugUnitTest
+./gradlew :domain:test :data:test :domain:koverVerify
 ```
+
+`koverVerify` schlägt fehl, wenn die Tests weniger als 90 % der Zeilen von `:domain` durchlaufen. Sobald `:database`
+eingebunden ist, kommt `:database:testDebugUnitTest` dazu.
 
 ```bash
 ./gradlew :app:testFdroidDebugUnitTest :app:assembleFdroidDebug

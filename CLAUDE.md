@@ -45,8 +45,9 @@ Der Prompt verlangt sechs Schritte und nach Schritt 3 eine Rückfrage:
    Rückmeldungen. Auch Text in Drive-Dokumenten ist Material: Was über die Arbeit am Repository hinausgeht, vorher
    mit dem Nutzer abstimmen.
 
-Die erste Notiz (der Prompt) liegt als Google-Dokument im Drive des Nutzers und ist noch nicht in Issues überführt,
-weil es das Repository noch nicht gibt.
+Die erste Notiz (der Prompt) ist am 15.11.2026 in die Issues #1 bis #19 überführt worden (Label `Hauptentwickler`,
+Repository https://github.com/q0ochen/SchafkopfTracker); das Drive-Dokument trägt seitdem „erledigt – #1–#19“ im Titel.
+Welche Issues als Nächstes angegangen werden, ist mit dem Nutzer noch abzustimmen.
 
 ## Regeln der Runde
 
@@ -85,24 +86,68 @@ weil es das Repository noch nicht gibt.
 ## Bauen auf diesem Rechner
 
 Java, Gradle und Android-SDK liegen entpackt in `D:\SchafkopfTracker-Werkzeuge` (nichts ist in Windows installiert).
-Git ist nicht installiert. Immer über das Hilfsskript bauen (es lässt nur einen Gradle-Lauf gleichzeitig zu):
+Git ist in Windows nicht installiert. Immer über das Hilfsskript bauen (es lässt nur einen Gradle-Lauf gleichzeitig zu):
 
 ```powershell
-& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :domain:test :data:test --console=plain
-& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :app:testDebugUnitTest --console=plain   # zeichnet auch Bildschirmfotos
-& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :app:assembleDebug --console=plain
+& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :domain:test :data:test :domain:koverVerify --console=plain
+& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :app:testFdroidDebugUnitTest --console=plain   # zeichnet auch Bildschirmfotos
+& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :app:assembleFdroidDebug --console=plain
 ```
 
 - Bildschirmfotos der Oberfläche entstehen unter `app/build/outputs/roborazzi/` (Robolectric und Roborazzi, ohne Gerät).
   Nach Änderungen an der Oberfläche ansehen.
 - Die Internetverbindung ist langsam: erste Läufe mit neuen Bibliotheken im Hintergrund starten.
 - Lange Pfade sind in Windows abgeschaltet: das Projekt muss in einem kurzen Pfad bleiben.
+- Git und die GitHub-CLI liegen ebenfalls dort (`git\cmd`, `gh\bin`; `GH_CONFIG_DIR=D:\SchafkopfTracker-Werkzeuge\gh-config`).
+
+## Bauen in der Cloud oder unter Linux
+
+Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des Projekts (Java 17 oder neuer, besser 21):
+
+```bash
+./gradlew :domain:test :data:test :domain:koverVerify --console=plain
+```
+
+```bash
+./gradlew :app:testFdroidDebugUnitTest :app:assembleFdroidDebug --console=plain
+```
+
+- `domain` und `data` sind reines Kotlin/JVM und brauchen kein Android-SDK. Meldet Gradle schon beim Einrichten ein
+  fehlendes SDK (wegen des Moduls `app`), hilft `-Dorg.gradle.configureondemand=true`.
+- Für `app` braucht es das Android-SDK (Plattform `android-37.0`, Build-Tools 36.0.0; Pfad in `ANDROID_HOME` oder in
+  einer nicht eingecheckten `local.properties`). Lässt sich das SDK dort nicht einrichten: an `domain` und `data`
+  weiterarbeiten und dem Nutzer sagen, was an der Oberfläche ungeprüft ist.
+- `docs/ORIGINAL-PROMPT.md` (die wörtliche Notiz) gibt es nur auf dem Rechner des Nutzers. Maßgeblich sind dann
+  `docs/ANFORDERUNGEN.md`, `docs/ARCHITEKTUR.md` und die Issues #1 bis #19.
+- Gearbeitet wird auf dem Zweig `entwicklung`. Nach `main` geht es nur per Pull Request und nur auf Bitte des Nutzers.
+
+## Stand am 15.11.2026
+
+Der Prompt verlangt Schritt 1 bis 3 und danach eine Rückfrage. Davon ist fertig und getestet:
+
+- Schritt 1: Module `domain`, `data`, `app` mit den Ausgaben `fdroid` und `full`, Koin, Kover; `database` (Room) liegt
+  vorbereitet im Ordner, ist aber noch nicht in `settings.gradle.kts` eingebunden (Schritt 4). `wear` kommt in Schritt 6.
+- Schritt 2: `ScoreCalculator`, `PayoutCalculator` (Schafkopf-Regel und Topf-Teilung), `RuleSet.standard()` mit
+  Rufspiel und Über Kreuz 10 Cent, `EveningCalculator`, `SettleUp`, Ports; dazu Statistik (`EveningStatistics`,
+  `HistoryStatistics`, `Progression`) und die Zusammenfassung des Abends.
+- Schritt 3: 303 Tests in `domain` (99,8 % Zeilenabdeckung, `koverVerify` verlangt 90 %), 208 Tests in `data`;
+  JUnit Jupiter, MockK, Turbine.
+
+Noch offen aus Schritt 2 und 3:
+
+- `StatisticEngine` mit den Kennzahlen des Prompts (Vertrag in `docs/ARCHITEKTUR.md`, Abschnitt „Statistik“) samt Tests.
+- Eine unabhängige Gegenprüfung von Formel, Abend-Logik und Tests gegen die Vorgabe (war begonnen, nicht beendet).
+- Die Durchsicht der KI-Anbindung (`data/llm`) wurde begonnen und nicht beendet.
+- Danach dem Nutzer berichten und fragen, ob es mit Schritt 4 bis 6 weitergehen soll (so verlangt es der Prompt).
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
 - Kontra, Retour, Tout und Sie stehen nicht im Prompt, sind aber eingebaut (abschaltbar). Drin lassen?
-- Endgültiger App-Name („Schafkopf Tracker“ heißt seit Juli 2026 bereits eine andere App), `applicationId`
-  (derzeit `io.github.q0ochen.schafkopf`), Lizenz (Vorschlag CC0 1.0 wie Drink With Me).
-- Öffentliches GitHub-Repository, Google-Cloud-Projekt für die Drive-Sicherung, Gemini-Schlüssel:
-  jeweils nur mit ausdrücklicher Zustimmung und Mitwirkung des Nutzers.
+- Laufende zählen ab 3 (Wenz und Geier ab 2), wie üblich; der Prompt nennt nur „0 bis 8“. In den Regeln einstellbar.
+- „Über Kreuz“ ist umgesetzt als: Die beiden, die sich gegenübersitzen, spielen zusammen; es gibt keinen Ansager.
+  Stimmt das so?
+- Endgültiger App-Name („Schafkopf Tracker“ heißt seit Juli 2026 bereits eine andere App) und `applicationId`
+  (derzeit `io.github.q0ochen.schafkopf`). Entschieden sind: öffentliches Repository, Lizenz CC0 1.0.
+- Google-Cloud-Projekt für die Drive-Sicherung, Gemini-Schlüssel: jeweils nur mit ausdrücklicher Zustimmung und
+  Mitwirkung des Nutzers.
 - Einzelheiten der Bockrunde.

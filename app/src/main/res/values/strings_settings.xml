@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spieler -->
+    <string name="players_title">Spieler</string>
+    <string name="players_empty">Noch keine Spieler angelegt.</string>
+    <string name="players_archived_badge">archiviert</string>
+    <string name="players_edit_title">Spieler bearbeiten</string>
+    <string name="players_archive_label">Archiviert (erscheint nicht mehr in der Auswahl)</string>
+    <string name="players_archive_hint">Alte Abende bleiben erhalten.</string>
+
+    <!-- Einstellungen -->
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_keep_screen_on">Bildschirm anlassen</string>
+    <string name="settings_keep_screen_on_hint">Solange ein Abend läuft, geht der Bildschirm nicht aus.</string>
+    <string name="settings_theme">Erscheinungsbild</string>
+    <string name="settings_theme_system">wie System</string>
+    <string name="settings_theme_light">hell</string>
+    <string name="settings_theme_dark">dunkel</string>
+    <string name="settings_rules">Regeln für neue Abende</string>
+    <string name="settings_ai">KI-Zusammenfassung</string>
+    <string name="settings_ai_hint">Freiwillig und standardmäßig aus.</string>
+    <string name="settings_backup">Sicherung und Export</string>
+    <string name="settings_backup_hint">Alle Daten als Datei speichern oder einlesen.</string>
+    <string name="settings_version">Version %1$s</string>
+
+    <!-- Regelwerk -->
+    <string name="rules_title_template">Regeln für neue Abende</string>
+    <string name="rules_title_evening">Regeln dieses Abends</string>
+    <string name="rules_evening_hint">Änderungen gelten für alle Spiele dieses Abends; die Stände werden neu berechnet.</string>
+    <string name="rules_template_hint">Diese Regeln gelten für jeden neuen Abend. Bereits angelegte Abende behalten ihre Regeln.</string>
+    <string name="rules_name">Name des Regelwerks</string>
+    <string name="rules_tariff">Tarif (in Cent)</string>
+    <string name="rules_unit">Schneider, Schwarz, je Laufendem</string>
+    <string name="rules_price">Preis %1$s</string>
+    <string name="rules_preset_round">Runde: 10 / 50</string>
+    <string name="rules_preset_10_20_50">Sauspiel: 10-20-50</string>
+    <string name="rules_types">Spielarten</string>
+    <string name="rules_payout">Abrechnung beim Einzelspiel</string>
+    <string name="rules_payout_schafkopf">Schafkopf-Regel</string>
+    <string name="rules_payout_pot_split">Topf-Teilung</string>
+    <string name="rules_payout_schafkopf_hint">Der Alleinspieler rechnet mit jedem der drei Gegner einzeln ab: Er bekommt oder zahlt dreimal den Spielwert.</string>
+    <string name="rules_payout_pot_split_hint">Es geht nur um einen Spielwert: Die drei Gegner teilen ihn sich (je ein Drittel).</string>
+    <string name="rules_laufende">Laufende zählen ab</string>
+    <string name="rules_doubling">Verdoppeln</string>
+    <string name="rules_klopfen">Legen (Klopfen)</string>
+    <string name="rules_kontra">Kontra</string>
+    <string name="rules_retour">Retour</string>
+    <string name="rules_sie">Wertung des Sie</string>
+    <string name="rules_sie_tout">wie Tout mit 8 Laufenden</string>
+    <string name="rules_sie_fourfold">vierfach</string>
+    <string name="rules_bock">Bockrunde</string>
+    <string name="rules_bock_enabled">Bockrunde bei 6 Nixern</string>
+    <string name="rules_bock_length">Länge in Spielen</string>
+    <string name="rules_bock_stacking">Wird während einer Bockrunde wieder eine ausgelöst</string>
+    <string name="rules_bock_append">anhängen</string>
+    <string name="rules_bock_stack">stapeln (×4)</string>
+    <string name="rules_bock_ignore">ignorieren</string>
+    <string name="rules_bock_thrown_in">Zusammengeworfenes Blatt verbraucht ein Bockspiel</string>
+    <string name="rules_misc">Sonstiges</string>
+    <string name="rules_dealer_advances">Nach dem Zusammenwerfen gibt der Nächste</string>
+    <string name="rules_display">Anzeige</string>
+    <string name="rules_display_money">Euro</string>
+    <string name="rules_display_points">Punkte</string>
+    <string name="rules_reset">Auf die Regeln der Runde zurücksetzen</string>
+    <string name="rules_reset_sauspiel">Regeln von sauspiel.de übernehmen</string>
+    <string name="rules_decrease">%1$s verringern</string>
+    <string name="rules_increase">%1$s erhöhen</string>
+</resources>

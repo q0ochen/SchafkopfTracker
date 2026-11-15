@@ -1,0 +1,161 @@
+package io.github.q0ochen.schafkopf.app.ui.start
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.q0ochen.schafkopf.R
+import io.github.q0ochen.schafkopf.app.ui.common.AmountText
+import io.github.q0ochen.schafkopf.app.ui.common.SectionHeading
+import org.koin.androidx.compose.koinViewModel
+import io.github.q0ochen.schafkopf.app.ui.common.formatDate
+import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
+import io.github.q0ochen.schafkopf.app.ui.navigation.Screen
+
+/** Startseite: laufender Abend, neuer Abend, frühere Abende und die Wege zu Statistik, Spielern und Einstellungen. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun StartScreen(navigator: Navigator) {
+    val viewModel: StartViewModel = koinViewModel()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) }) { padding ->
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+        ) {
+            state.running?.let { running ->
+                item(key = "running") {
+                    Card(
+                        onClick = { navigator.open(Screen.Board(running.id)) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(stringResource(R.string.start_running_title), style = MaterialTheme.typography.titleLarge)
+                            EveningSummary(running)
+                            Button(
+                                onClick = { navigator.open(Screen.Board(running.id)) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 56.dp),
+                            ) { Text(stringResource(R.string.start_continue), style = MaterialTheme.typography.titleMedium) }
+                        }
+                    }
+                }
+            }
+
+            item(key = "new") {
+                Button(
+                    onClick = { navigator.open(Screen.NewEvening) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp),
+                ) { Text(stringResource(R.string.start_new_evening), style = MaterialTheme.typography.titleMedium) }
+            }
+
+            item(key = "links") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    LinkButton(R.string.start_statistics, Modifier.weight(1f)) { navigator.open(Screen.Statistics) }
+                    LinkButton(R.string.start_players, Modifier.weight(1f)) { navigator.open(Screen.Players) }
+                    LinkButton(R.string.start_settings, Modifier.weight(1f)) { navigator.open(Screen.Settings) }
+                }
+            }
+
+            item(key = "heading") { SectionHeading(stringResource(R.string.start_past_evenings)) }
+
+            if (!state.loading && state.evenings.isEmpty()) {
+                item(key = "empty") {
+                    Text(stringResource(R.string.start_no_evenings), style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+
+            items(state.evenings, key = { it.id }) { evening ->
+                Card(onClick = { navigator.open(Screen.Board(evening.id)) }, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) { EveningSummary(evening) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LinkButton(labelRes: Int, modifier: Modifier, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+        modifier = modifier.heightIn(min = 48.dp),
+    ) {
+        Text(stringResource(labelRes), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Datum, Zahl der Spiele und die Rangliste eines Abends. */
+@Composable
+private fun EveningSummary(evening: EveningCard) {
+    val date = formatDate(evening.startedAt)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (evening.location.isBlank()) date else stringResource(R.string.evening_date_location, date, evening.location),
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (evening.running) {
+                Text(
+                    text = stringResource(R.string.start_evening_running_badge),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        Text(
+            text = pluralStringResource(R.plurals.games_count, evening.games, evening.games),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        for (standing in evening.standings) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.common_rank, standing.rank) + " " + standing.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                AmountText(standing.balance, evening.asMoney, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
