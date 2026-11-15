@@ -124,7 +124,9 @@ class GameFormViewModel(
         }
         val breakdown = facts?.let { ScoreCalculator.breakdown(it, evening.rules) }
         val declarerAmount = if (facts != null && missing == null) {
-            ScoreCalculator.amounts(facts, evening.rules).getValue(facts.declarer)
+            // Sitzt der Ansager nicht am Tisch (das kann nur aus beschädigten Daten stammen), gibt es für ihn keinen
+            // Betrag: Das Formular zeigt dann 0, statt abzustürzen.
+            ScoreCalculator.amounts(facts, evening.rules)[facts.declarer] ?: 0
         } else {
             0
         }
