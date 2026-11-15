@@ -71,6 +71,9 @@ Welche Issues als Nächstes angegangen werden, ist mit dem Nutzer noch abzustimm
 - `database/` Android-Bibliothek: Room (Tabellen, DAOs mit `Flow`, Repositories).
 - `app/` Android: Compose-Oberfläche, ViewModels (MVVM), Koin-Module (`app/di/AppModule.kt`).
 - `wear/` (geplant) Wear-OS-App.
+- `web/` Web-App fürs iPhone (TypeScript, Preact, kein Gradle-Modul): Port von `domain` (`web/src/core`) und vom
+  Dateiformat aus `data` (`web/src/data/format`), beide mit Golden-Tests gegen den Kotlin-Code; eigene Oberfläche,
+  Speicher in IndexedDB. Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 7; Befehle: `web/README.md`.
 - Gespeichert werden nur Tatsachen. Beträge, Salden, Geber und Bock-Zähler berechnet `EveningCalculator` neu.
   Beträge sind ganze Cent; in Euro formatiert wird nur in der Oberfläche.
 
@@ -134,6 +137,12 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 - Maven Central drosselt die Rechner der Cloud (HTTP 429, Umleitung auf einen nicht erlaubten Spiegel); Gradle merkt
   sich eine so verfehlte Bibliothek einen Tag lang als „nicht vorhanden“. Deshalb der Spiegel bei Google, auch für
   Robolectric (die Bildschirmtests laden ihre Android-Laufzeit selbst nach).
+- **Web-App** (in `web/`, Node.js 22; Chromium für Playwright ist in der Cloud vorinstalliert, nie neu installieren):
+  `npm ci`, dann `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`.
+  Bildschirmfotos zum Ansehen: `SCREENSHOT_DIR=/pfad npx playwright test screenshots --project handy` (nach
+  Änderungen an der Oberfläche ansehen). Ändert sich Kotlin-Code in `domain` oder `data`, schlägt dort der
+  Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
+  (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
   `domain` 517, `data` 228, `app` 12. Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
   Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel

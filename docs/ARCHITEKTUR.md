@@ -29,6 +29,7 @@ Wer davon abweichen muss, ändert zuerst dieses Dokument. Was die App können so
 | `:database` | Android-Bibliothek | `io.github.q0ochen.schafkopf.database` | Room: Tabellen, DAOs mit `Flow`, Repositories |
 | `:app` | Android-App | `io.github.q0ochen.schafkopf.app` | Compose-Oberfläche, ViewModels (MVVM), Navigation, Koin-Module, Android-Adapter |
 | `:wear` | Wear-OS-App (geplant) | `io.github.q0ochen.schafkopf.wear` | Kachel und Schnelleingabe auf der Uhr |
+| `web/` | Web-App (TypeScript, Preact; kein Gradle-Modul) | `web/src` | Zwischenlösung fürs iPhone: Port von `:domain` und vom Dateiformat aus `:data`, eigene Oberfläche, Speicher im Browser (Abschnitt 7) |
 
 Abhängigkeiten: `:app` → `:database`, `:data`, `:domain`; `:database` → `:domain`; `:data` → `:domain`;
 `:domain` hängt von keinem Projektmodul ab und kennt kein Android.
@@ -253,3 +254,20 @@ eingebunden ist, kommt `:database:testDebugUnitTest` dazu.
 Der Build-Cache von Gradle ist ausgeschaltet (`gradle.properties`), weil mit ihm nach Änderungen an öffentlichen
 Schnittstellen Tests unbemerkt wegfielen. Ohne Android-SDK lassen sich `:domain` und `:data` mit
 `tools/jvm-build.sh` bauen und testen; `tools/cloud-setup.sh` richtet das SDK auf einer frischen Linux-Maschine ein.
+
+## 7. Web-App (`web/`)
+
+Zwischenlösung fürs iPhone, solange es nur die Android-App gibt. Sie läuft im Browser (Safari: „Zum
+Home-Bildschirm“), braucht keinen Server und wird von `main` aus auf GitHub Pages veröffentlicht
+(`.github/workflows/web.yml`). Einzelheiten und Befehle: [web/README.md](../web/README.md).
+
+| Regel | Umsetzung |
+|---|---|
+| Gleiche Rechnung | `web/src/core` ist ein Port von `:domain` (Regelwerk, `ScoreCalculator`, `PayoutCalculator`, `EveningCalculator`, `SettleUp`, `StatisticEngine`) mit denselben Namen. Kotlin-Objekte werden gleichnamige Objekte, abgeleitete Eigenschaften fertig berechnete Felder, Maps `ReadonlyMap` in derselben Reihenfolge; wo Kotlin mit `Int` überläuft, läuft der Port genauso über. |
+| Gleiche Dateien | `web/src/data/format` ist ein Port des Dateiformats und der Sicherung aus `:data` (gleiche Texte, gleiche Prüfungen, gleiche Meldungen). Eine Sicherung vom iPhone liest die Android-App und umgekehrt. |
+| Golden-Tests | Kotlin-Tests (`WebGoldenTest` in `:domain`, `WebFormatGoldenTest` in `:data`) lassen den echten Kotlin-Code viele Fälle rechnen und schreiben die Ergebnisse nach `web/src/core/golden/kotlin-golden.json` bzw. `web/src/data/golden/kotlin-format-golden.json`. Die TypeScript-Tests vergleichen jedes Feld. Ändert sich der Kotlin-Code, schlägt der Kotlin-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port angepasst ist. |
+| Speicher | IndexedDB (`web/src/data/repository.ts`): je Abend, für die Spielerliste und für die Einstellungen ein JSON-Text im Dateiformat der Android-App. Nichts verlässt das Gerät. |
+| Gleiche Spieler | Die vorbelegte Runde hat dieselben Kennungen wie in der Android-App (`spieler-1` bis `spieler-4`). |
+| Oberfläche | Logik der Bildschirme als reine Funktionen nach dem Vorbild der ViewModels (`web/src/ui/gameForm.ts`, `newEvening.ts`, `board.ts`), Oberflächen-Tests mit Playwright in iPhone-Größe und Prüfung mit axe. Spielerfarben aus einer auf Farbfehlsichtigkeit geprüften Palette, als Punkt neben dem Namen. |
+| Leitplanken | Dieselben wie oben, sinngemäß: nur freie Bibliotheken (`preact`, `idb`), keine Analyse, Content-Security-Policy ohne fremde Quellen, Start ohne Netz über den Service Worker. Die KI-Zusammenfassung gibt es in der Web-App nicht. |
+

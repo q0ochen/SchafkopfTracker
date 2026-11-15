@@ -79,10 +79,11 @@ einlesen.
 | Abend-Liste mit laufendem Stand, Plätzen, Geber und Bock-Zähler | fertig |
 | Dunkles Design als Standard, große Tippflächen, Bedienung mit Screenreader | fertig |
 | Statistik für einen Abend und über alle Abende: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index, Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner | Rechenwerk fertig, getestet |
-| Statistik-Bildschirm mit Diagrammen, Teilen als Text und Bild | geplant |
+| Statistik-Bildschirm mit Diagrammen, Abschluss mit „Wer zahlt wem“, Teilen als Text | in der Web-App fertig, in der Android-App geplant |
 | Speichern auf dem Gerät (jede Eingabe sofort) | fertig |
 | Testversion für Android über eine eigene F-Droid-Paketquelle, Web-App fürs iPhone | eingerichtet |
-| Sicherung (Datei, Google Drive), Stammtisch-Zusammenfassung, Wear-OS-App | geplant |
+| Sicherung als Datei (speichern und einlesen, zwischen iPhone und Android austauschbar) | in der Web-App fertig, in der Android-App geplant |
+| Sicherung auf Google Drive, Stammtisch-Zusammenfassung, Wear-OS-App, Teilen als Bild | geplant |
 
 Alles liegt nur auf dem Gerät. Kein Konto, kein Server, keine Werbung, keine Auswertung des Nutzungsverhaltens.
 

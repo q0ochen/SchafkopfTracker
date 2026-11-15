@@ -32,6 +32,8 @@ export default defineConfig(({ mode }) => {
       include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
       environment: "node",
       restoreMocks: true,
+      // Feste Zeitzone, damit Datumsangaben überall gleich herauskommen.
+      env: { TZ: "Europe/Berlin" },
     },
   };
 });
