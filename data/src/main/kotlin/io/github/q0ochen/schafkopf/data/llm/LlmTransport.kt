@@ -4,6 +4,8 @@ import io.github.q0ochen.schafkopf.domain.ports.LlmError
 import io.github.q0ochen.schafkopf.domain.ports.LlmResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.DeserializationStrategy
@@ -12,6 +14,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import okhttp3.ConnectionPool
 import okhttp3.Interceptor
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
@@ -22,6 +25,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.ResponseBody
 import java.io.IOException
+import java.net.Proxy
+import java.util.concurrent.TimeUnit
 
 /** Bei diesen Antworten ist der Dienst überlastet oder kurz nicht erreichbar: Ein zweiter Versuch lohnt sich. */
 private val RETRY_STATUSES = setOf(429, 500, 502, 503, 504)
@@ -34,6 +39,9 @@ internal const val MAX_DETAIL_LENGTH = 120
 
 /** Größere Antworten werden nicht gelesen. Eine Zusammenfassung oder Modell-Liste ist um Größenordnungen kleiner. */
 internal const val MAX_BODY_BYTES = 8L * 1024 * 1024
+
+/** So viele unbenutzte Verbindungen hält die Netzanbindung für spätere Aufrufe bereit: keine. */
+private const val NO_IDLE_CONNECTIONS = 0
 
 private const val RETRY_AFTER = "Retry-After"
 
@@ -66,7 +74,8 @@ internal class HttpAnswer(val status: Int, val body: String?) {
  *
  * - Netzaufrufe auf dem übergebenen Dispatcher laufen und zusammen mit der Coroutine abgebrochen werden,
  * - bei Überlastung (HTTP 429, 500, 502, 503, 504) genau ein zweiter Versuch folgt und sonst nie einer,
- * - der Schlüssel nur an die eingestellte Adresse geht (Weiterleitungen werden nicht befolgt),
+ * - der Schlüssel nur an die eingestellte Adresse geht (Weiterleitungen werden nicht befolgt, unverschlüsselte
+ *   Aufrufe laufen nie über einen Proxy),
  * - aus jedem Fehler ein [LlmResult.Failure] wird statt einer Exception.
  *
  * @param baseClient Der gemeinsame HTTP-Client der App.
@@ -81,14 +90,26 @@ internal class LlmTransport(
     /**
      * Der übergebene Client mit strengeren Regeln: Er folgt keiner Weiterleitung und sendet von sich aus nichts
      * ein zweites Mal (auch nicht über eine andere Adresse desselben Dienstes, wenn die Verbindung mitten in der
-     * Antwort abreißt). Zeitlimits und alles Übrige übernimmt er vom übergebenen Client.
+     * Antwort abreißt). Er hebt keine Verbindung für später auf: Jede wird geschlossen, sobald ihr Aufruf endet,
+     * auch nach einem Abbruch oder einer Zeitüberschreitung. Über HTTP/2 bliebe sie sonst im Vorrat des
+     * übergebenen Clients liegen, und die nächste Anfrage liefe über die alte Verbindung. Zeitlimits und alles
+     * Übrige übernimmt er vom übergebenen Client.
      */
     val client: OkHttpClient = baseClient.newBuilder()
         .followRedirects(false)
         .followSslRedirects(false)
         .retryOnConnectionFailure(false)
+        .connectionPool(ConnectionPool(NO_IDLE_CONNECTIONS, 1, TimeUnit.SECONDS))
         .addNetworkInterceptor(DropRetryAfter)
         .build()
+
+    /**
+     * Derselbe Client für unverschlüsselte Aufrufe (`http`), die nur zum eigenen Gerät und ins eigene Netz erlaubt
+     * sind. Er geht immer direkt dorthin, auch wenn im Gerät oder im übergebenen Client ein Proxy eingestellt ist:
+     * Über den Proxy bekäme ein weiterer Rechner den Schlüssel und die Zahlen des Abends im Klartext zu sehen.
+     * Verschlüsselte Aufrufe dürfen über einen Proxy laufen; er reicht sie durch, ohne hineinsehen zu können.
+     */
+    private val directClient: OkHttpClient = client.newBuilder().proxy(Proxy.NO_PROXY).build()
 
     /**
      * Führt [work] auf dem Dispatcher aus und macht aus allem, was dabei schiefgeht, ein Ergebnis: Netzfehler
@@ -99,7 +120,11 @@ internal class LlmTransport(
         try {
             withContext(dispatcher) { work() }
         } catch (e: CancellationException) {
-            throw e
+            // Durchgereicht wird nur ein echter Abbruch dieser Coroutine. Dieselbe Ausnahme kann auch aus einem
+            // Baustein des HTTP-Clients oder von einem beendeten Dispatcher kommen, obwohl niemand abgebrochen hat:
+            // Dann ist sie ein Fehler wie jeder andere. Durchgereicht ließe sie den Aufrufer stillschweigend enden.
+            if (!currentCoroutineContext().isActive) throw e
+            LlmResult.Failure(LlmError.UNKNOWN, e.shortName())
         } catch (e: IOException) {
             LlmResult.Failure(LlmError.NETWORK, e.shortName())
         } catch (e: Exception) {
@@ -110,8 +135,9 @@ internal class LlmTransport(
      * Schickt die Anfrage ab. Meldet der Dienst Überlastung, folgt nach [RETRY_DELAY_MILLIS] genau ein zweiter
      * Versuch; dessen Antwort gilt, wie auch immer sie ausfällt.
      *
-     * Jede Anfrage bekommt eine eigene Verbindung (`Connection: close`). So kann sie nie an einer alten
-     * Verbindung scheitern, die der Dienst inzwischen geschlossen hat.
+     * Jede Anfrage bekommt eine eigene Verbindung: `Connection: close` sagt es dem Dienst, und [client] hebt
+     * keine Verbindung auf. So kann eine Anfrage nie an einer alten Verbindung scheitern, die der Dienst inzwischen
+     * geschlossen hat.
      *
      * @throws IOException wenn keine Antwort zustande kommt.
      */
@@ -128,7 +154,7 @@ internal class LlmTransport(
      * die Coroutine währenddessen abgebrochen, beendet `call.cancel()` den Aufruf sofort.
      */
     private suspend fun execute(request: Request): HttpAnswer {
-        val call = client.newCall(request)
+        val call = (if (request.isHttps) client else directClient).newCall(request)
         return suspendCancellableCoroutine { continuation ->
             continuation.invokeOnCancellation { call.cancel() }
             continuation.resumeWith(

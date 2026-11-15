@@ -13,6 +13,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  *   (kein DNS-Aufruf); darum zählt `127.0.0.1.example.com` nicht als eigenes Gerät.
  * - Abgelehnt werden Adressen mit Benutzerangaben (`name@rechner`), mit Abfrage (`?…`) oder Sprungmarke (`#…`)
  *   und alles, was Leerraum, Steuerzeichen oder einen Rückstrich enthält.
+ * - Abgelehnt werden auch Adressen, die sich nach dem Bereinigen nicht genauso wieder lesen lassen. Was als erlaubt
+ *   gilt, ist dadurch immer auch ansprechbar und hat einen Rechnernamen, siehe [host].
  *
  * Beurteilt wird die Adresse so, wie die Netzbibliothek (OkHttp) sie versteht und später auch anspricht. Dadurch
  * lässt sich die Regel nicht mit trickreichen Schreibweisen umgehen.
@@ -39,7 +41,11 @@ object EndpointPolicy {
         if (url.query != null || url.fragment != null) return null
         if (!url.isHttps && !isOwnNetwork(url.host)) return null
 
-        return url.toString().trimEnd('/')
+        // Die bereinigte Adresse muss sich genauso wieder lesen lassen, denn aus ihr entstehen die Aufrufe. Steht in
+        // einem Namensteil ein Umlaut neben einem Zeichen wie dem Unterstrich (`büro_nas`), schreibt die
+        // Netzbibliothek den Namen in eine Form um, die sie selbst nicht mehr annimmt: Auch das ist nicht erlaubt.
+        val cleaned = url.toString().trimEnd('/')
+        return cleaned.takeIf { it.toHttpUrlOrNull()?.toString()?.trimEnd('/') == it }
     }
 
     /**
