@@ -3,6 +3,10 @@ import { expect, test } from "@playwright/test";
 
 test.use({ serviceWorkers: "allow" });
 
+// Playwright kann Service Worker und „ohne Netz“ nur in Chromium nachstellen; in WebKit bricht schon das Neuladen
+// ohne Netz mit einem internen Fehler ab, bevor der Service Worker antworten kann. Geprüft wird es deshalb in Chromium.
+test.skip(({ browserName }) => browserName !== "chromium", "Service Worker ohne Netz lässt sich nur in Chromium nachstellen");
+
 test("startet nach dem ersten Besuch auch ohne Netz", async ({ page, context }) => {
   await page.goto("./");
   await expect(page.getByRole("heading", { level: 1, name: "Schafkopf Tracker" })).toBeVisible();
