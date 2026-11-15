@@ -1,0 +1,11 @@
+# Erzeugt beim Build (scripts/generate-icons.mjs) – Quelle sind die Vektorgrafiken der Android-App
+public/icons/
+public/apple-touch-icon.png
+public/favicon.png
+# Build- und Testausgaben
+dist/
+dist-e2e/
+test-results/
+playwright-report/
+.vite/
+node_modules/
