@@ -59,6 +59,9 @@ class NewEveningViewModel(
 
     private val selection = MutableStateFlow(Selection())
 
+    /** Schutz gegen doppeltes Antippen von „Abend starten“ (sonst entstünde ein zweiter, leerer Abend). */
+    private var started = false
+
     val state: StateFlow<NewEveningUiState> =
         combine(players.players, evenings.evenings, settings.settings, selection) { allPlayers, allEvenings, appSettings, chosen ->
             val active = allPlayers.filterNot { it.archived }
@@ -147,7 +150,8 @@ class NewEveningViewModel(
     fun start(onStarted: (String) -> Unit) {
         val current = state.value
         val dealer = current.firstDealer
-        if (!current.canStart || dealer == null) return
+        if (started || !current.canStart || dealer == null) return
+        started = true
         viewModelScope.launch {
             val evening = Evening(
                 id = EveningId(idGenerator.newId()),

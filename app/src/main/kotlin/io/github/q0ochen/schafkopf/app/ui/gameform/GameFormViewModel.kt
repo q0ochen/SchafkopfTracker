@@ -78,6 +78,12 @@ class GameFormViewModel(
 
     private val draft = MutableStateFlow<GameDraft?>(null)
 
+    /**
+     * Schutz gegen doppeltes Antippen: Das Formular speichert oder löscht nur einmal. Ohne ihn konnte ein schneller
+     * Doppeltipp auf „Gewonnen“ dasselbe Spiel zweimal eintragen, bevor der Bildschirm zurück zur Liste ging.
+     */
+    private var finished = false
+
     val state: StateFlow<GameFormUiState> =
         combine(evenings.evening(eveningId), players.players, draft) { evening, allPlayers, currentDraft ->
             if (evening == null) return@combine GameFormUiState(loading = false)
@@ -252,7 +258,8 @@ class GameFormViewModel(
         val current = state.value
         val d = current.draft
         val declarer = d.declarer
-        if (!current.canSave || declarer == null) return
+        if (finished || !current.canSave || declarer == null) return
+        finished = true
         viewModelScope.launch {
             editor.update(eveningId) { evening ->
                 val existing = entryId?.let { id -> evening.entries.firstOrNull { it.id == id } as? GameEntry }
@@ -283,6 +290,8 @@ class GameFormViewModel(
 
     fun delete(onDeleted: () -> Unit) {
         val id = entryId ?: return
+        if (finished) return
+        finished = true
         viewModelScope.launch {
             editor.update(eveningId) { it.remove(id) }
             onDeleted()

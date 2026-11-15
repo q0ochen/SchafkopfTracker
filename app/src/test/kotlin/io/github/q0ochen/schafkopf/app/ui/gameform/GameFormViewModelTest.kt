@@ -14,7 +14,9 @@ import io.github.q0ochen.schafkopf.domain.rules.RuleSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -49,11 +51,15 @@ class GameFormViewModelTest {
     @After
     fun resetDispatcher() = Dispatchers.resetMain()
 
-    private fun viewModel(evening: Evening, entryId: EntryId?): GameFormViewModel {
+    private fun viewModel(evening: Evening, entryId: EntryId?): GameFormViewModel = setup(evening, entryId).first
+
+    /** Das ViewModel samt der Ablage der Abende, um zu prüfen, was gespeichert wurde. */
+    private fun setup(evening: Evening, entryId: EntryId?): Pair<GameFormViewModel, InMemoryEveningRepository> {
         val evenings = InMemoryEveningRepository(listOf(evening))
         val players = InMemoryPlayerRepository(seating.mapIndexed { index, id -> Player(id, "Spieler ${index + 1}", colorIndex = index) })
-        val editor = EveningEditor(evenings, Clock.fixed(start, ZoneOffset.UTC)) { "neu" }
-        return GameFormViewModel(evening.id, entryId, evenings, players, editor)
+        var next = 0
+        val editor = EveningEditor(evenings, Clock.fixed(start, ZoneOffset.UTC)) { "neu-${++next}" }
+        return GameFormViewModel(evening.id, entryId, evenings, players, editor) to evenings
     }
 
     private fun evening(vararg games: GameEntry) = Evening(
@@ -76,6 +82,25 @@ class GameFormViewModelTest {
         // Farbsolo ohne Zusätze: 50 Cent, der Alleinspieler bekommt das Dreifache.
         assertEquals(50, state.breakdown?.value)
         assertEquals(150, state.declarerAmount)
+    }
+
+    @Test
+    fun `doppeltes Antippen von Gewonnen traegt das Spiel nur einmal ein`() = runTest(dispatcher) {
+        val (viewModel, evenings) = setup(evening(), null)
+        backgroundScope.launch { viewModel.state.collect {} }
+        withTimeout(5_000) { viewModel.state.first { !it.loading } }
+        viewModel.selectType(GameType.WENZ)
+        viewModel.tapPlayer(b)
+        withTimeout(5_000) { viewModel.state.first { it.canSave } }
+
+        var saved = 0
+        viewModel.save(won = true) { saved++ }
+        viewModel.save(won = true) { saved++ }
+        advanceUntilIdle()
+
+        val games = evenings.evening(EveningId("abend")).first()?.entries.orEmpty()
+        assertEquals(1, games.size)
+        assertEquals(1, saved)
     }
 
     @Test
