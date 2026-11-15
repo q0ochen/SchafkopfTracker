@@ -74,7 +74,7 @@ data/       Reines Kotlin: Sicherung als JSON, CSV, Netzanbindungen + Tests
 database/   Room-Datenbank (SQLite): Tabellen, Abfragen, Repositories + Tests
 app/        Android-App (Jetpack Compose): Oberfläche, ViewModels, Verdrahtung mit Koin
 docs/       Anforderungen und Architektur
-tools/      Hilfsskript: Rechenkern bauen und testen ohne Android-SDK
+tools/      Hilfsskripte: Rechenkern ohne Android-SDK testen, Android-SDK auf einer frischen Maschine einrichten
 .github/    Issue-Vorlagen, Labels, Workflows
 ```
 

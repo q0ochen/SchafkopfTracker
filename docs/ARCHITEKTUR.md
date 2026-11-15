@@ -234,7 +234,8 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
   Pflicht: Preisberechnung aller Spielarten, Potenzen aus Bock und Gelegt, Verteilung der Spielschuld, Nullsumme.
 - `:data`: Sicherung hin und zurück, Import-Prüfungen, CSV, Netzanbindungen gegen einen Testserver.
 - `:database`: Room mit SQLite im Arbeitsspeicher (Robolectric), DAOs, Repositories, Schema-Wächter.
-- `:app`: Bildschirmfotos der wichtigsten Bildschirme (Roborazzi) als Sichtprüfung; eigene UI-Tests sind nicht verlangt.
+- `:app`: Bildschirmfotos der wichtigsten Bildschirme (Roborazzi) als Sichtprüfung; eigene UI-Tests sind nicht
+  verlangt. Dazu Tests einzelner ViewModels ohne Oberfläche, mit Ablagen im Arbeitsspeicher (`GameFormViewModelTest`).
 
 ## 6. Bauen und prüfen
 
@@ -248,3 +249,7 @@ eingebunden ist, kommt `:database:testDebugUnitTest` dazu.
 ```bash
 ./gradlew :app:testFdroidDebugUnitTest :app:assembleFdroidDebug
 ```
+
+Der Build-Cache von Gradle ist ausgeschaltet (`gradle.properties`), weil mit ihm nach Änderungen an öffentlichen
+Schnittstellen Tests unbemerkt wegfielen. Ohne Android-SDK lassen sich `:domain` und `:data` mit
+`tools/jvm-build.sh` bauen und testen; `tools/cloud-setup.sh` richtet das SDK auf einer frischen Linux-Maschine ein.

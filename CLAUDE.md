@@ -113,24 +113,30 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 ./gradlew :app:testFdroidDebugUnitTest :app:assembleFdroidDebug --console=plain
 ```
 
-- `domain` und `data` sind reines Kotlin/JVM und brauchen kein Android-SDK. Fehlt nur das SDK, hilft
-  `-Dorg.gradle.configureondemand=true`.
-- **Cloud von Claude Code (Stand 15.11.2026):** Im Standard-Netz ist `dl.google.com` gesperrt. Damit fehlen das
-  Android-Gradle-Plugin und das SDK, und auch `./gradlew :domain:test` scheitert (das Wurzelprojekt macht das
-  Android-Plugin bekannt). Dafür gibt es das Hilfsskript, das nur `domain` und `data` baut:
+- **Cloud von Claude Code:** Seit dem 15.11.2026 gibt es dafür die Cloud-Umgebung „SchafkopfTracker“ des Nutzers.
+  Sie erlaubt zusätzlich `dl.google.com` (Android-Gradle-Plugin, SDK) und richtet beim Start jeder neuen Sitzung
+  das Android-SDK ein (`/opt/android-sdk`, Plattform 37.0, Build-Tools 36.0.0), schreibt `local.properties` und
+  stellt den Bibliotheks-Abruf auf den Spiegel von Maven Central bei Google um. Das Einrichtungsskript liegt als
+  Kopie in `tools/cloud-setup.sh`. Damit laufen beide Befehle oben unverändert. Am 15.11.2026 lief das Skript in
+  der laufenden Sitzung aus dem Stand durch; dass es auch beim Start einer neuen Sitzung von selbst läuft, ist noch
+  nicht erprobt. Fehlt das SDK doch einmal: `bash SchafkopfTracker/tools/cloud-setup.sh` aus dem Ordner darüber.
+  Neue Cloud-Sitzungen für dieses Repository deshalb in der Umgebung „SchafkopfTracker“ starten.
+- **Andere Umgebung ohne Zugriff auf `dl.google.com`** (zum Beispiel die Standard-Umgebung der Cloud): Dort fehlen
+  Android-Gradle-Plugin und SDK, und auch `./gradlew :domain:test` scheitert, weil das Wurzelprojekt das
+  Android-Plugin bekannt macht. Dann hilft das Hilfsskript, das nur `domain` und `data` baut:
 
   ```bash
   tools/jvm-build.sh :domain:test :data:test :domain:koverVerify --console=plain
   ```
 
-  Für `app` und `database` muss der Nutzer der Cloud-Umgebung den Zugriff auf `dl.google.com` erlauben (dafür gibt
-  es eine Rückfrage mit Bestätigungskarte). Solange das fehlt: an `domain` und `data` arbeiten, nichts an `app`
-  ändern und dem Nutzer sagen, was an der Oberfläche ungeprüft ist.
-- Maven Central drosselt Rechenzentren zeitweise (HTTP 429); Gradle merkt sich eine so verfehlte Bibliothek einen
-  Tag lang als „nicht vorhanden“. Das Hilfsskript nimmt deshalb zuerst den Spiegel von Maven Central bei Google.
-- **Immer die Zahl der Tests ansehen** (`build/test-results/test/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 508, `data` 228. Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin
-  nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
+  In dem Fall nichts an `app` ändern und dem Nutzer sagen, was an der Oberfläche ungeprüft ist. Fehlt nur das SDK
+  (Plugin erreichbar), genügt `-Dorg.gradle.configureondemand=true`.
+- Maven Central drosselt die Rechner der Cloud (HTTP 429, Umleitung auf einen nicht erlaubten Spiegel); Gradle merkt
+  sich eine so verfehlte Bibliothek einen Tag lang als „nicht vorhanden“. Deshalb der Spiegel bei Google, auch für
+  Robolectric (die Bildschirmtests laden ihre Android-Laufzeit selbst nach).
+- **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
+  `domain` 517, `data` 228, `app` 12. Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
+  Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
   `--rerun-tasks` anhängen.
 - `docs/ORIGINAL-PROMPT.md` (die wörtliche Notiz) gibt es nur auf dem Rechner des Nutzers. Maßgeblich sind dann
   `docs/ANFORDERUNGEN.md`, `docs/ARCHITEKTUR.md` und die Issues #1 bis #19.
@@ -151,9 +157,10 @@ Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
   `EveningCalculator`, `SettleUp`, Ports, Zusammenfassung des Abends und die `StatisticEngine` (ein Abend und
   „ewige Tabelle“: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index mit Abzeichen,
   Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner).
-- Schritt 3: 508 Tests in `domain` (99,9 % Zeilenabdeckung, `koverVerify` verlangt 90 %), 228 Tests in `data`;
-  JUnit Jupiter, MockK, Turbine. Von Hand durchgerechnet sind zwei Abende für die Statistik (`RoundEvenings`) sowie
-  58 Fälle und mehrere Abende für die Abrechnung (`HandCalculatedCasesTest`, `HandCalculatedEveningTest`).
+- Schritt 3: 517 Tests in `domain` (99,9 % Zeilenabdeckung, `koverVerify` verlangt 90 %), 228 Tests in `data`,
+  12 Tests in `app` (10 Bildschirmtests, 2 für das Formular); JUnit Jupiter, MockK, Turbine. Von Hand durchgerechnet
+  sind zwei Abende für die Statistik (`RoundEvenings`) sowie 58 Fälle und mehrere Abende für die Abrechnung
+  (`HandCalculatedCasesTest`, `HandCalculatedEveningTest`).
 
 Was die Cloud-Sitzung außerdem geprüft und behoben hat (Einzelheiten in den Commit-Nachrichten):
 
@@ -162,18 +169,17 @@ Was die Cloud-Sitzung außerdem geprüft und behoben hat (Einzelheiten in den Co
 - Durchsicht der KI-Anbindung (`data/llm`) abgeschlossen: fünf Schwachstellen behoben (Proxy bei `http`, offene
   HTTP/2-Verbindungen, verschluckter Abbruch, Adress-Regel, fehlendes Gesamt-Zeitlimit).
 - Der Import einer Sicherung lässt Abende mit Beträgen außerhalb des Rechenbereichs aus.
+- Die Statistik wurde von einem unabhängigen Prüfer von Hand nachgerechnet (jede Kennzahl stimmte); seltene
+  Grenzfälle sind nachgebessert (Führungswechsel, Lieblingspartner nur im Plus).
+- Die App wurde am 15.11.2026 erstmals in der Cloud gebaut: `:app:testFdroidDebugUnitTest`,
+  `:app:assembleFdroidDebug` und `:app:assembleFullDebug` laufen durch. Dabei behoben: Das Formular stürzte ab, wenn
+  ein Spiel geöffnet wurde, dessen Ansager nicht am Tisch sitzt (nur mit beschädigten Daten möglich).
 
-**Nicht geprüft:** Die Oberfläche (`app`) wurde zuletzt am 15.11.2026 auf dem Rechner des Nutzers gebaut (Stand
-`e11fb9b`), in der Cloud noch nie (siehe oben). Seitdem wurde an `app` nichts geändert. `domain` und `data` haben
-keine öffentliche Signatur geändert oder entfernt (neu sind nur Enum-Werte und Funktionen; `app` benutzt
-`domain.stats` nicht); trotzdem vor dem Weiterarbeiten an der Oberfläche einmal
-`:app:testFdroidDebugUnitTest :app:assembleFdroidDebug` laufen lassen.
+**Nicht geprüft:** Das Testpaket wurde gebaut, aber auf keinem Gerät installiert und ausprobiert (in der Cloud gibt
+es kein Gerät). Die Bildschirmtests zeichnen die Bildschirme nur; bedient wird dabei nichts.
 
 Bekannte offene Punkte (noch nicht umgesetzt):
 
-- `app`, `GameFormViewModel.buildState`: `ScoreCalculator.amounts(...).getValue(facts.declarer)` wirft, wenn ein Spiel
-  bearbeitet wird, dessen Ansager nicht am Tisch sitzt (nur mit beschädigten Daten möglich). Beheben, sobald `app`
-  wieder gebaut werden kann.
 - Für Tout und Sie fehlt ein Schalter im Regelwerk (hängt an der offenen Frage, ob die Zusätze bleiben).
 - Das Regelwerk selbst wird nirgends auf Plausibilität geprüft (zum Beispiel Bock-Faktor 0); unsinnige Spielwerte
   werden aber erkannt und nicht gebucht.
