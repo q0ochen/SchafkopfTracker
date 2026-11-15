@@ -33,8 +33,20 @@ dependencies {
     testImplementation(libs.kotlinx.serialization.json)
 }
 
+// Golden-Daten für die Web-App (web/src/core, TypeScript): WebGoldenTest lässt diesen Kern viele feste Eingaben
+// durchrechnen und vergleicht das Ergebnis mit der eingecheckten Datei web/src/core/golden/kotlin-golden.json, gegen
+// die der TypeScript-Port geprüft wird. Rechnet der Kern anders, schlägt der Test fehl, bis die Datei neu erzeugt ist:
+//   tools/jvm-build.sh :domain:test --tests '*WebGoldenTest' -PgoldenWrite=true
+// Der Pfad wird vom Modulordner aus bestimmt, damit es auch mit dem Hilfsbau von tools/jvm-build.sh stimmt.
+val webGoldenFile: File = file("../web/src/core/golden/kotlin-golden.json")
+
 tasks.test {
     useJUnitPlatform()
+    systemProperty("golden.file", webGoldenFile.absolutePath)
+    systemProperty("golden.write", providers.gradleProperty("goldenWrite").getOrElse("false"))
+    // Die Datei ist (optionale) Eingabe des Tests: Ändert sie sich, läuft der Test erneut. Fehlt sie, meldet der Test
+    // das selbst.
+    inputs.files(webGoldenFile).withPropertyName("webGoldenFile").withPathSensitivity(PathSensitivity.NONE).optional()
 }
 
 // Testabdeckung der Fachlogik: `:domain:koverVerify` schlägt fehl, wenn weniger als 90 % der Zeilen von Tests
