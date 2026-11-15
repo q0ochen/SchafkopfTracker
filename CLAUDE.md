@@ -207,8 +207,14 @@ Bekannte offene Punkte (noch nicht umgesetzt):
 - Die Spielerfarben der Web-App (geprüfte Palette) weichen von denen der Android-App ab; die Android-Palette fällt
   bei Rot-Grün-Schwäche durch (Paar 3/4) und sollte beim Statistik-Bildschirm überarbeitet werden.
 
-Als Nächstes: Der Nutzer setzt das Secret, aktiviert GitHub Pages und entscheidet über den Pull Request nach `main`
-(erst dann ist die Web-App online). Danach: Schritt 4 bis 6 und die offenen Fragen unten.
+Erledigt am 15.11.2026 abends: Der Nutzer hat das Secret gesetzt (die F-Droid-Paketquelle ist seit Lauf 4 online,
+geprüft: Unterschrift passt zum Fingerabdruck) und GitHub Pages eingeschaltet. Pull Request #20 nach `main` ist auf
+seinen Wunsch angelegt (Refs, schließt kein Issue); nach dem Zusammenführen ist die Web-App unter
+https://q0ochen.github.io/SchafkopfTracker/ online. „Run workflow“ zeigt GitHub erst, wenn ein Workflow in `main`
+liegt; bis dahin startet Claude Läufe über die API (`workflow_dispatch`).
+
+Als Nächstes: Rückmeldungen der Tester abwarten, abstimmen, welche der Issues #1 bis #19 als erledigt gelten, dann
+Schritt 4 bis 6 und die offenen Fragen unten.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
