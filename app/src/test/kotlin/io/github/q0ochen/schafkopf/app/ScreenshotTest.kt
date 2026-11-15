@@ -100,6 +100,7 @@ class ScreenshotTest {
             ),
             GameEntry(id(), start, GameType.RUFSPIEL, Suit.GRAS, declarer = kathi, partner = hans, declarerWon = false, klopfer = setOf(sepp, vroni)),
             GameEntry(id(), start, GameType.GEIER, declarer = sepp, declarerWon = true),
+            GameEntry(id(), start, GameType.UEBER_KREUZ, declarer = hans, partner = vroni, declarerWon = true, klopfer = setOf(kathi)),
         )
         evenings.save(
             Evening(
@@ -109,7 +110,7 @@ class ScreenshotTest {
                 location = "Wirtshaus zur Post",
                 seating = seating,
                 firstDealer = sepp,
-                rules = RuleSet.sauspiel(),
+                rules = RuleSet.standard(),
                 entries = entries,
             ),
         )
@@ -176,6 +177,16 @@ class ScreenshotTest {
         compose.onAllNodesWithText("Kontra")[1].performClick()
         compose.onNodeWithText("Schneider").performClick()
         capture("06_formular_ausgefuellt")
+    }
+
+    @Test
+    fun ueber_kreuz_eintragen() {
+        seed()
+        show(ThemeMode.DARK) { GameFormScreen(eveningId, null, Navigator()) }
+        compose.onNodeWithText("Über Kreuz").performClick()
+        // Ein Tipp auf Sepp wählt das Paar Sepp und Kathi, die sich gegenübersitzen.
+        compose.onAllNodesWithText("Sepp")[0].performClick()
+        capture("10_formular_ueber_kreuz_dunkel")
     }
 
     @Test

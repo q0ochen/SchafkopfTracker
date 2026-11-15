@@ -56,6 +56,10 @@ import io.github.q0ochen.schafkopf.domain.rules.Suit
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
+/** Bis zu so vielen Spielarten stehen in einer Zeile; sind es mehr, wird umbrochen. */
+private const val MAX_TYPES_IN_ONE_ROW = 4
+private const val TYPES_PER_ROW = 3
+
 /**
  * Ein Spiel eintragen oder ändern. Alles steht auf einem Bildschirm; ein neues Spiel wird mit
  * „Gewonnen“ oder „Verloren“ sofort gespeichert.
@@ -128,14 +132,15 @@ private fun FormContent(state: GameFormUiState, evening: Evening, viewModel: Gam
             .padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         SectionHeading(stringResource(R.string.form_type))
+        val types = GameType.entries.filter { it in rules.enabledTypes || it == draft.type }
         ChoiceRow(
-            options = GameType.entries.filter { it in rules.enabledTypes || it == draft.type },
+            options = types,
             selected = draft.type,
             label = { stringResource(it.labelRes()) },
             onSelect = viewModel::selectType,
             minHeight = 56.dp,
-            // Fünf Spielarten passen nicht lesbar in eine Zeile: drei oben, zwei unten.
-            maxPerRow = 3,
+            // Fünf Spielarten passen nicht lesbar in eine Zeile: dann drei oben und zwei unten.
+            maxPerRow = if (types.size > MAX_TYPES_IN_ONE_ROW) TYPES_PER_ROW else types.size,
         )
 
         SectionHeading(stringResource(R.string.form_players))
