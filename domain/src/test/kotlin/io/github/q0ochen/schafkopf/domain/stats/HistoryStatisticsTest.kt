@@ -88,24 +88,33 @@ class HistoryStatisticsTest {
     fun `Abende und Spiele werden gezaehlt, Abende ohne Spiel nicht`() {
         assertEquals(2, history.eveningCount)
         assertEquals(16, history.gameCount)
-        assertNull(history.statsFor(PlayerId("F")))
+        // Franz saß nur an dem Abend ohne Spiel am Tisch: Er steht in der Tabelle, hat aber keinen Abend gespielt.
+        val franz = checkNotNull(history.statsFor(PlayerId("F")))
+        assertEquals(0, franz.evenings)
+        assertEquals(0, franz.games)
+        assertEquals(0, franz.balance)
+        assertNull(franz.bestEvening)
+        assertNull(history.statsFor(PlayerId("X")))
     }
 
     @Test
     fun `Spieler stehen nach Saldo absteigend`() {
         // A 920 + 40, B −1340 − 60, C 1140 − 140, D −720 (nur erster Abend), E 160 (nur zweiter Abend).
-        // Die 500 aus dem Abend ohne Spiel zählen nicht mit.
-        assertEquals(listOf(c, a, e, d, b), history.playerStats.map { it.player })
-        assertEquals(listOf(1000, 960, 160, -720, -1400), history.playerStats.map { it.balance })
+        // Dazu die freie Buchung vom Abend ohne Spiel: A +500, B −500. Kein gebuchter Betrag geht verloren.
+        val franz = PlayerId("F")
+        assertEquals(listOf(a, c, e, franz, d, b), history.playerStats.map { it.player })
+        assertEquals(listOf(1460, 1000, 160, 0, -720, -1900), history.playerStats.map { it.balance })
+        assertEquals(0, history.playerStats.sumOf { it.balance })
     }
 
     @Test
     fun `Kennzahlen von Anna ueber beide Abende`() {
         val expected = PlayerStats(
             player = a,
+            // Der Abend ohne Spiel zählt nicht als Abend, seine freie Buchung (+500) aber zum Saldo.
             evenings = 2,
             games = 16,
-            balance = 960,
+            balance = 960 + 500,
             // 7 Siege am ersten Abend, 3 am zweiten.
             gamesWon = 10,
             // Erster Abend 3 von 3; zweiter Abend Spiel 1 und 4, beide gewonnen.
@@ -144,7 +153,7 @@ class HistoryStatisticsTest {
             player = b,
             evenings = 2,
             games = 16,
-            balance = -1400,
+            balance = -1400 - 500,
             gamesWon = 5,
             // Zweiter Abend: Spiel 2 angesagt und verloren, Mitspieler in Spiel 4 (gewonnen).
             asDeclarer = RoleRecord(4, 1),
@@ -255,13 +264,13 @@ class HistoryStatisticsTest {
         assertEquals(GameType.entries.associateWith { 0 } + played, history.gameTypeCounts)
         assertEquals(7, history.bockGamesCount)
         assertEquals(2, history.bockTriggerCount)
-        // Das zusammengeworfene Blatt vom Abend ohne Spiel zählt nicht.
-        assertEquals(2, history.thrownInCount)
+        // Auch das zusammengeworfene Blatt vom Abend ohne Spiel zählt mit.
+        assertEquals(3, history.thrownInCount)
         // Am zweiten Abend ist E ab Spiel 3 der erste und einzige alleinige Erste: kein Wechsel.
         assertEquals(3, history.leadChanges)
         assertEquals(ExpensiveGame(first, SampleEvening.g7.id, 7, 320), history.mostExpensiveGame)
-        // Erster Abend 4960; zweiter Abend 40 + 60 + 150 + 80 = 330.
-        assertEquals(5290, history.turnover)
+        // Erster Abend 4960; zweiter Abend 40 + 60 + 150 + 80 = 330; freie Buchung vom Abend ohne Spiel 500.
+        assertEquals(5790, history.turnover)
     }
 
     @Test
@@ -338,8 +347,58 @@ class HistoryStatisticsTest {
     }
 
     @Test
-    fun `nur Abende ohne Spiel ergeben ebenfalls eine leere Statistik`() {
-        assertEquals(HistoryStatistics.compute(emptyList()), HistoryStatistics.compute(listOf(withoutGames)))
+    fun `ein Abend ohne Spiel zaehlt nicht als Abend, seine Buchungen aber schon`() {
+        val stats = HistoryStatistics.compute(listOf(withoutGames))
+
+        assertEquals(0, stats.eveningCount)
+        assertEquals(0, stats.gameCount)
+        assertEquals(emptyList<PartnerRecord>(), stats.partnerRecords)
+        assertEquals(GameType.entries.associateWith { 0 }, stats.gameTypeCounts)
+        assertNull(stats.mostExpensiveGame)
+        assertEquals(0, stats.leadChanges)
+        // Was eingetragen wurde, bleibt sichtbar: das zusammengeworfene Blatt und die freie Buchung.
+        assertEquals(1, stats.thrownInCount)
+        assertEquals(500, stats.turnover)
+        assertEquals(listOf(a, c, PlayerId("F"), b), stats.playerStats.map { it.player })
+        assertEquals(listOf(500, 0, 0, -500), stats.playerStats.map { it.balance })
+        for (player in stats.playerStats) {
+            assertEquals(0, player.evenings)
+            assertEquals(0, player.games)
+            assertEquals(0, player.eveningWins)
+            assertEquals(0, player.eveningLastPlaces)
+            assertNull(player.bestEvening)
+            assertNull(player.worstEvening)
+        }
+        // Dasselbe zeigt die Statistik dieses einen Abends.
+        val single = EveningStatistics.compute(EveningCalculator.compute(withoutGames))
+        assertEquals(single.playerStats.toSet(), stats.playerStats.toSet())
+        assertEquals(single.thrownInCount, stats.thrownInCount)
+        assertEquals(single.turnover, stats.turnover)
+    }
+
+    @Test
+    fun `ein Uebertrag als einzige Buchung eines Abends steht in der ewigen Tabelle`() {
+        // So übernimmt eine Runde alte Kontostände: ein Abend ohne Spiel mit einer freien Buchung.
+        val carryOver = Evening(
+            id = EveningId("uebertrag"),
+            startedAt = Instant.parse("2026-01-01T12:00:00Z"),
+            seating = listOf(a, b, c, d),
+            firstDealer = a,
+            rules = RuleSet.sauspiel(),
+            entries = listOf(
+                ManualEntry(EntryId("u1"), Instant.parse("2026-01-01T12:00:00Z"), mapOf(a to -300, d to 300), "Übertrag"),
+            ),
+        )
+        val stats = HistoryStatistics.compute(listOf(SampleEvening.evening, carryOver))
+
+        assertEquals(1, stats.eveningCount)
+        // Beispielabend: A 920, B −1340, C 1140, D −720.
+        assertEquals(listOf(c, a, d, b), stats.playerStats.map { it.player })
+        assertEquals(listOf(1140, 620, -420, -1340), stats.playerStats.map { it.balance })
+        assertEquals(4960 + 300, stats.turnover)
+        // Als Abend zählt nur der gespielte: Anna hat einen Abend, und der beste ist der Beispielabend.
+        assertEquals(1, checkNotNull(stats.statsFor(a)).evenings)
+        assertEquals(EveningBalance(first, 920), checkNotNull(stats.statsFor(a)).bestEvening)
     }
 
     @Test
@@ -387,19 +446,18 @@ class HistoryStatisticsTest {
                     startedAt = firstDay.plusSeconds(86_400L * index),
                 )
             }
-            val single = evenings
-                .map { EveningStatistics.compute(EveningCalculator.compute(it)) }
-                .filter { it.gamesPlayed > 0 }
+            // Auch Abende ohne Spiel gehören dazu: Sie zählen nicht als Abend, ihre Buchungen aber schon.
+            val single = evenings.map { EveningStatistics.compute(EveningCalculator.compute(it)) }
             val history = HistoryStatistics.compute(evenings.shuffled(random))
 
-            assertEquals(single.size, history.eveningCount)
+            assertEquals(single.count { it.gamesPlayed > 0 }, history.eveningCount)
             assertEquals(single.sumOf { it.gamesPlayed }, history.gameCount)
             assertEquals(single.sumOf { it.turnover }, history.turnover)
             assertEquals(single.sumOf { it.leadChanges }, history.leadChanges)
             assertEquals(single.sumOf { it.bockGamesCount }, history.bockGamesCount)
             assertEquals(single.sumOf { it.bockTriggerCount }, history.bockTriggerCount)
             assertEquals(single.sumOf { it.thrownInCount }, history.thrownInCount)
-            assertEquals(single.maxOfOrNull { it.mostExpensiveGame?.value ?: 0 }, history.mostExpensiveGame?.value)
+            assertEquals(single.mapNotNull { it.mostExpensiveGame?.value }.maxOrNull(), history.mostExpensiveGame?.value)
             for (type in GameType.entries) {
                 assertEquals(single.sumOf { it.gameTypeCounts.getValue(type) }, history.gameTypeCounts.getValue(type))
             }
@@ -415,7 +473,7 @@ class HistoryStatisticsTest {
                 val parts = single.mapNotNull { it.statsFor(player) }
                 val total = checkNotNull(history.statsFor(player))
 
-                assertEquals(parts.size, total.evenings)
+                assertEquals(parts.count { it.evenings > 0 }, total.evenings)
                 assertEquals(parts.sumOf { it.games }, total.games)
                 assertEquals(parts.sumOf { it.balance }, total.balance)
                 assertEquals(parts.sumOf { it.gamesWon }, total.gamesWon)
@@ -449,8 +507,10 @@ class HistoryStatisticsTest {
                 assertEquals(parts.maxOf { it.longestLoseStreak }, total.longestLoseStreak)
                 assertEquals(parts.mapNotNull { it.biggestWin?.amount }.maxOrNull(), total.biggestWin?.amount)
                 assertEquals(parts.mapNotNull { it.biggestLoss?.amount }.minOrNull(), total.biggestLoss?.amount)
-                assertEquals(parts.maxOf { it.balance }, total.bestEvening?.balance)
-                assertEquals(parts.minOf { it.balance }, total.worstEvening?.balance)
+                // Bester und schlechtester Abend gibt es nur unter den Abenden mit mindestens einem Spiel.
+                val played = parts.filter { it.evenings > 0 }
+                assertEquals(played.maxOfOrNull { it.balance }, total.bestEvening?.balance)
+                assertEquals(played.minOfOrNull { it.balance }, total.worstEvening?.balance)
             }
 
             // Jedes Rufspiel hat genau ein Spielerpaar und ein Gegenspielerpaar, genau eines davon gewinnt,

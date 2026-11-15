@@ -160,6 +160,51 @@ class EveningStatisticsTest {
     }
 
     @Test
+    fun `Ueber Kreuz zaehlt in keiner Ansager-Rolle`() {
+        // Der Abend nach dem Regelwerk der Runde (Tabelle in RoundEvenings): Spiel 2 und Spiel 8 sind Über Kreuz.
+        val stats = EveningStatistics.compute(EveningCalculator.compute(RoundEvenings.evening))
+        val players = listOf(RoundEvenings.a, RoundEvenings.b, RoundEvenings.c, RoundEvenings.d)
+        fun <T> each(value: (PlayerStats) -> T): List<T> = players.map { value(checkNotNull(stats.statsFor(it))) }
+
+        assertEquals(listOf(14, 14, 14, 14), each { it.games })
+        assertEquals(listOf(9, 6, 9, 3), each { it.gamesWon })
+        // A sagt 1, 6 (gewonnen) und 13 (verloren) an, ist Mitspieler in 14 und Gegenspieler in 3, 7, 9, 12
+        // (verloren) sowie 4, 5, 10, 11 (gewonnen).
+        // B sagt 3, 9, 12 (gewonnen) und 10 (verloren) an, ist Mitspieler in 1 (gewonnen), 11 und 13 (verloren)
+        // und Gegenspieler in 4, 5 (gewonnen) sowie 6, 7, 14 (verloren).
+        // C sagt 4 (verloren), 7 und 14 (gewonnen) an, ist Mitspieler in 9 und Gegenspieler in 5, 10, 11, 13
+        // (gewonnen) sowie 1, 3, 6, 12 (verloren).
+        // D sagt 5 und 11 an (beide verloren), ist Mitspieler in 4 (verloren) und 6 (gewonnen) und Gegenspieler in
+        // 10 und 13 (gewonnen) sowie 1, 3, 7, 9, 12, 14 (verloren).
+        assertEquals(listOf(RoleRecord(3, 2), RoleRecord(4, 3), RoleRecord(3, 2), RoleRecord(2, 0)), each { it.asDeclarer })
+        assertEquals(listOf(RoleRecord(1, 1), RoleRecord(3, 1), RoleRecord(1, 1), RoleRecord(2, 1)), each { it.asPartner })
+        assertEquals(listOf(RoleRecord(8, 4), RoleRecord(5, 2), RoleRecord(8, 4), RoleRecord(8, 2)), each { it.asOpponent })
+        // Die beiden Über-Kreuz-Spiele fehlen in den Rollen: je Spieler 12 statt 14 Spiele.
+        assertEquals(listOf(12, 12, 12, 12), each { it.asDeclarer.played + it.asPartner.played + it.asOpponent.played })
+        // A und C gewinnen beide Über-Kreuz-Spiele; diese Siege stehen nur in der Gesamtzahl.
+        assertEquals(listOf(7, 6, 7, 3), each { it.asDeclarer.won + it.asPartner.won + it.asOpponent.won })
+        assertEquals(List(4) { RoleRecord(0, 0) }, each { it.declarerByType.getValue(GameType.UEBER_KREUZ) })
+        assertEquals(
+            listOf(RoleRecord(3, 2), RoleRecord(1, 1), RoleRecord(2, 1), RoleRecord(1, 0)),
+            each { it.declarerByType.getValue(GameType.RUFSPIEL) },
+        )
+    }
+
+    @Test
+    fun `ein bei Ueber Kreuz eingetragenes Tout zaehlt nicht als Tout`() {
+        // So etwas lässt die Eingabe nicht zu; aus einer eingelesenen Sicherung kann es trotzdem kommen.
+        val kreuz = GameEntry(
+            id(), now, GameType.UEBER_KREUZ, declarer = a, partner = c, declarerWon = true,
+            announcement = Announcement.TOUT,
+        )
+        val stats = compute(kreuz, solo(a))
+
+        assertEquals(List(4) { RoleRecord(0, 0) }, perPlayer(stats) { it.toutPlayed })
+        assertEquals(RoleRecord(1, 1), stats.of(a).asDeclarer)
+        assertEquals(listOf(2, 2, 2, 2), perPlayer(stats) { it.games })
+    }
+
+    @Test
     fun `Ansager je Spielart`() {
         val none = RoleRecord(0, 0)
 
@@ -561,9 +606,11 @@ class EveningStatisticsTest {
             assertEquals(state.results.sumOf { result -> result.amounts.values.filter { it > 0 }.sum() }, stats.turnover)
             assertEquals(leadChangesInRankSeries(Progression.rankSeries(state)), stats.leadChanges)
 
-            // Jedes Spiel hat genau einen Ansager, jedes Rufspiel genau einen Mitspieler.
-            assertEquals(games.size, seating.sumOf { stats.of(it).asDeclarer.played })
-            assertEquals(entries.count { !it.type.isSolo }, seating.sumOf { stats.of(it).asPartner.played })
+            // Jedes Spiel außer Über Kreuz hat genau einen Ansager, jedes Rufspiel genau einen Mitspieler.
+            // Bei Über Kreuz sagt niemand an: Diese Spiele zählen in keiner der drei Rollen.
+            val ueberKreuz = games.filter { (it.entry as GameEntry).type == GameType.UEBER_KREUZ }
+            assertEquals(games.size - ueberKreuz.size, seating.sumOf { stats.of(it).asDeclarer.played })
+            assertEquals(entries.count { it.type == GameType.RUFSPIEL }, seating.sumOf { stats.of(it).asPartner.played })
 
             val best = state.balances.values.max()
             val worst = state.balances.values.min()
@@ -578,12 +625,17 @@ class EveningStatisticsTest {
                 assertEquals(games.size, own.games)
                 assertEquals(if (games.isEmpty()) 0 else 1, own.evenings)
                 assertEquals(outcomes.count { it }, own.gamesWon)
-                assertEquals(own.games, own.asDeclarer.played + own.asPartner.played + own.asOpponent.played)
-                assertEquals(own.gamesWon, own.asDeclarer.won + own.asPartner.won + own.asOpponent.won)
                 assertEquals(
-                    RoleRecord(entries.count { it.declarer == player }, entries.count { it.declarer == player && it.declarerWon }),
-                    own.asDeclarer,
+                    own.games - ueberKreuz.size,
+                    own.asDeclarer.played + own.asPartner.played + own.asOpponent.played,
                 )
+                assertEquals(
+                    own.gamesWon - ueberKreuz.count { it.amounts.getValue(player) > 0 },
+                    own.asDeclarer.won + own.asPartner.won + own.asOpponent.won,
+                )
+                val declared = entries.filter { it.declarer == player && it.type != GameType.UEBER_KREUZ }
+                assertEquals(RoleRecord(declared.size, declared.count { it.declarerWon }), own.asDeclarer)
+                assertEquals(RoleRecord(0, 0), own.declarerByType.getValue(GameType.UEBER_KREUZ))
                 assertEquals(
                     own.asDeclarer,
                     RoleRecord(own.declarerByType.values.sumOf { it.played }, own.declarerByType.values.sumOf { it.won }),

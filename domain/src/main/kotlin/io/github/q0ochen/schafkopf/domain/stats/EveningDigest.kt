@@ -2,6 +2,8 @@ package io.github.q0ochen.schafkopf.domain.stats
 
 import io.github.q0ochen.schafkopf.domain.evening.BockReason
 import io.github.q0ochen.schafkopf.domain.evening.BockTriggerEntry
+import io.github.q0ochen.schafkopf.domain.evening.EntryResult
+import io.github.q0ochen.schafkopf.domain.evening.EveningCalculator
 import io.github.q0ochen.schafkopf.domain.evening.EveningState
 import io.github.q0ochen.schafkopf.domain.evening.GameEntry
 import io.github.q0ochen.schafkopf.domain.evening.ThrownInEntry
@@ -11,6 +13,8 @@ import io.github.q0ochen.schafkopf.domain.rules.Announcement
 import io.github.q0ochen.schafkopf.domain.rules.GameType
 import io.github.q0ochen.schafkopf.domain.rules.KontraLevel
 import io.github.q0ochen.schafkopf.domain.rules.ResultLevel
+import io.github.q0ochen.schafkopf.domain.rules.RuleSet
+import io.github.q0ochen.schafkopf.domain.rules.ScoreCalculator
 import io.github.q0ochen.schafkopf.domain.rules.ValueBreakdown
 
 /*
@@ -22,6 +26,8 @@ import io.github.q0ochen.schafkopf.domain.rules.ValueBreakdown
  * Ein gespieltes Spiel, das abgerechnet werden konnte, so aufbereitet, wie die Statistik es braucht.
  *
  * @property value Der Spielwert: so viel zahlt ein Verlierer an einen Gewinner.
+ * @param seating Die Sitzordnung des Abends, so wie der Abend sie gespeichert hat.
+ * @param rules Das Regelwerk des Abends.
  */
 internal class PlayedGame(
     val eveningId: EveningId,
@@ -30,18 +36,54 @@ internal class PlayedGame(
     val bockExponent: Int,
     val breakdown: ValueBreakdown,
     private val amounts: Map<PlayerId, Int>,
+    seating: List<PlayerId>,
+    rules: RuleSet,
 ) {
     val value: Int get() = breakdown.value
 
-    /** Der Ansager und, beim Rufspiel, sein Mitspieler. */
-    val declarerSide: Set<PlayerId> = setOfNotNull(entry.declarer, entry.partner.takeIf { !entry.type.isSolo })
+    /** Der Ansager und, beim Rufspiel und bei Über Kreuz, sein Mitspieler. */
+    val declarerSide: Set<PlayerId> = entry.declarerSide
+
+    /** Ob das Spiel als Bockspiel doppelt (oder mehrfach) zählte. */
+    val isBockGame: Boolean get() = bockExponent > 0
+
+    /**
+     * Die Beträge desselben Spiels, hätte einer weniger gelegt; `null`, wenn niemand gelegt hat.
+     * Nachgerechnet mit dem [ScoreCalculator], damit auch die Rest-Cent der Topf-Teilung stimmen.
+     */
+    private val amountsWithOneKlopferLess: Map<PlayerId, Int>? =
+        if (entry.klopfer.isEmpty()) {
+            null
+        } else {
+            val facts = with(EveningCalculator) { entry.toFacts(seating, bockExponent) }
+            ScoreCalculator.amounts(facts.copy(klopferCount = facts.klopferCount - 1), rules)
+        }
 
     /** Ob der Spieler auf der Gewinnerseite stand. */
     fun won(player: PlayerId): Boolean = (player in declarerSide) == entry.declarerWon
 
     /** Betrag des Spielers aus diesem Spiel in Cent. */
     fun amount(player: PlayerId): Int = amounts[player] ?: 0
+
+    /**
+     * Ob der Spieler in diesem Spiel selbst gespielt hat: als Ansager, als Mitspieler oder als Alleinspieler.
+     * Bei Über Kreuz sagt niemand an; dort spielen alle vier.
+     */
+    fun playedBy(player: PlayerId): Boolean = !entry.type.hasDeclarer || player in declarerSide
+
+    /**
+     * Was das eigene Legen den Spieler in diesem Spiel gekostet (negativ) oder ihm gebracht hat (positiv):
+     * der gebuchte Betrag minus der Betrag desselben Spiels ohne den eigenen Leger. 0, wenn er nicht gelegt hat.
+     */
+    fun klopferEffect(player: PlayerId): Int {
+        val without = amountsWithOneKlopferLess ?: return 0
+        if (player !in entry.klopfer) return 0
+        return amount(player) - (without[player] ?: 0)
+    }
 }
+
+/** Ob dieser Eintrag ein gespieltes Spiel ist, das abgerechnet werden konnte. */
+internal fun EntryResult.isPlayedGame(): Boolean = entry is GameEntry && gameNumber != null && breakdown != null
 
 /**
  * Ein durchgerechneter Abend, einmal für die Statistik vorsortiert.
@@ -59,7 +101,16 @@ internal class EveningDigest(val state: EveningState) {
         val entry = result.entry as? GameEntry ?: return@mapNotNull null
         val gameNumber = result.gameNumber ?: return@mapNotNull null
         val breakdown = result.breakdown ?: return@mapNotNull null
-        PlayedGame(eveningId, entry, gameNumber, result.bockExponent, breakdown, result.amounts)
+        PlayedGame(
+            eveningId = eveningId,
+            entry = entry,
+            gameNumber = gameNumber,
+            bockExponent = result.bockExponent,
+            breakdown = breakdown,
+            amounts = result.amounts,
+            seating = state.evening.seating,
+            rules = state.evening.rules,
+        )
     }
 
     val bockTriggers: List<BockTriggerEntry> = state.evening.entries.filterIsInstance<BockTriggerEntry>()
@@ -181,6 +232,8 @@ internal class PlayerAccumulator(private val player: PlayerId) {
         if (won) gamesWon += 1
 
         when {
+            // Bei Über Kreuz sagt niemand an: Dort gibt es weder Ansager noch Mitspieler noch Gegenspieler.
+            !entry.type.hasDeclarer -> Unit
             entry.declarer == player -> {
                 asDeclarer.add(won)
                 declarerByType.getValue(entry.type).add(won)
@@ -193,8 +246,8 @@ internal class PlayerAccumulator(private val player: PlayerId) {
 
         if (player in entry.klopfer) {
             klopferGiven.add(won)
-            // Jeder Klopfer verdoppelt: Ohne den eigenen Klopfer wäre der Betrag halb so groß gewesen.
-            klopferEffect += amount / 2
+            // Exakt nachgerechnet: Mit der Topf-Teilung ist es nicht immer genau die Hälfte des Betrags.
+            klopferEffect += game.klopferEffect(player)
         }
         if (entry.kontra != KontraLevel.NONE && entry.kontraBy == player) kontraGiven.add(won)
         if (entry.kontra == KontraLevel.RETOUR && entry.retourBy == player) retourGiven.add(won)

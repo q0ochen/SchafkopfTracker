@@ -34,23 +34,27 @@ data class EveningBalance(val eveningId: EveningId, val balance: Int)
  *
  * @property evenings Abende, an denen der Spieler am Tisch saß und mindestens ein Spiel gespielt wurde.
  * @property games Gespielte Spiele am Tisch.
- * @property balance Summe aller Beträge, auch aus freien Buchungen.
+ * @property balance Summe aller Beträge, auch aus freien Buchungen und auch von Abenden ohne ein gespieltes Spiel.
  * @property gamesWon Spiele auf der Gewinnerseite.
- * @property asDeclarer Spiele als Ansager (Spieler).
+ * @property asDeclarer Spiele als Ansager (Spieler). Über Kreuz zählt in keiner der drei Rollen, weil dort
+ *   niemand ansagt; deshalb können [asDeclarer], [asPartner] und [asOpponent] zusammen kleiner sein als [games].
  * @property asPartner Rufspiele als Mitspieler des Ansagers.
  * @property asOpponent Spiele als Gegenspieler.
- * @property declarerByType Spiele als Ansager, getrennt nach Spielart. Jede Spielart ist enthalten, notfalls mit 0.
+ * @property declarerByType Spiele als Ansager, getrennt nach Spielart. Jede Spielart ist enthalten, notfalls mit 0;
+ *   Über Kreuz steht immer bei 0.
  * @property klopferGiven Spiele, in denen der Spieler geklopft (gelegt) hat, und wie viele davon er gewann.
  * @property klopferEffect Was das eigene Klopfen gebracht oder gekostet hat: Über alle selbst geklopften Spiele die
- *   Summe aus gebuchtem Betrag minus dem Betrag desselben Spiels ohne den eigenen Klopfer. Weil jeder Klopfer
- *   verdoppelt, ist das genau die Hälfte des gebuchten Betrags.
+ *   Summe aus gebuchtem Betrag minus dem Betrag desselben Spiels ohne den eigenen Klopfer, mit dem Regelwerk des
+ *   Abends exakt nachgerechnet. Mit der Schafkopf-Regel ist das die Hälfte des gebuchten Betrags; mit der
+ *   Topf-Teilung kann es wegen der Rest-Cent um einen Cent davon abweichen.
  * @property kontraGiven Spiele, in denen der Spieler Kontra gegeben hat (nur wenn eingetragen ist, wer es war).
  * @property retourGiven Spiele, in denen der Spieler Retour gegeben hat (nur wenn eingetragen ist, wer es war).
  * @property schneiderWon Spiele mit Schneider auf der Gewinnerseite. Bei Tout und Sie zählt die Stufe nicht.
  * @property schneiderLost Spiele mit Schneider auf der Verliererseite.
  * @property schwarzWon Spiele mit Schwarz auf der Gewinnerseite. Schwarz zählt nicht zusätzlich als Schneider.
  * @property schwarzLost Spiele mit Schwarz auf der Verliererseite.
- * @property toutPlayed Tout und Sie als Ansager.
+ * @property toutPlayed Tout und Sie als Ansager (nur Einzelspiele; ein fälschlich bei Über Kreuz eingetragenes Tout
+ *   zählt nicht).
  * @property biggestWin Höchster Einzelbetrag aus einem Spiel; `null`, wenn es keinen Gewinn gab.
  * @property biggestLoss Niedrigster Einzelbetrag aus einem Spiel; `null`, wenn es keinen Verlust gab.
  * @property longestWinStreak Längste Folge gewonnener Spiele innerhalb eines Abends. Zusammengeworfene Blätter,

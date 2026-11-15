@@ -56,9 +56,9 @@ Paket `domain.rules`: `GameType` (RUFSPIEL, UEBER_KREUZ, FARBSOLO, WENZ, GEIER; 
 Paket `domain.evening`: `EveningEntry` (versiegelt) mit `GameEntry`, `ThrownInEntry`, `BockTriggerEntry`,
 `ManualEntry`; `Evening`; `EveningCalculator.compute(evening): EveningState`; `EveningEditor`; `SettleUp`.
 
-Paket `domain.stats`: `EveningStatistics.compute(state)`, `HistoryStatistics.compute(evenings)`, `Progression`
-(Verlauf von Saldo und Platz), `PlayerStats`; darüber `StatisticEngine` als Einstieg für alle Auswertungen
-(ein Abend oder alle Abende, siehe Abschnitt „Statistik“).
+Paket `domain.stats`: `StatisticEngine` als Einstieg für alle Auswertungen (ein Abend oder alle Abende, siehe
+Abschnitt „Statistik“); darunter `EveningStatistics.compute(state)`, `HistoryStatistics.compute(evenings)`,
+`Progression` (Verlauf von Saldo und Platz eines Abends) und `PlayerStats`.
 
 Paket `domain.summary`: Fakten eines Abends (`SummaryFactsBuilder.build(state, names, formatter[, zone])`),
 Zusammenfassung aus Textbausteinen (`TemplateSummary`), Anfrage an ein Sprachmodell (`SummaryPrompt`, `SummaryService`).
@@ -101,7 +101,7 @@ Referenzfälle für Tests: Rufspiel ohne Zusätze = je ±10. Farbsolo mit 3 Lauf
   Ansager selbst), bekommt eine Nummer, bucht aber nichts und wird als Regelverstoß angezeigt.
 - `SettleUp.transfers` („wer zahlt wem“) wirft nie; `SettleUp.isBalanced` sagt, ob die Salden aufgehen.
 
-### Statistik (Vertrag für `StatisticEngine`; noch umzusetzen, Issues #10 bis #13)
+### Statistik (`StatisticEngine`, Issues #10 bis #13)
 
 ```kotlin
 object StatisticEngine {
@@ -110,36 +110,54 @@ object StatisticEngine {
 }
 ```
 
-`Statistics` enthält (alle Beträge in Cent; Quoten als `Double?`, `null` ohne Fälle; alles deterministisch):
+`Statistics` enthält (alle Beträge in Cent; Quoten als `Double?`, `null` ohne Fälle; alles deterministisch; ein
+doppelt übergebener Abend zählt nur einmal):
 
-- `eveningCount`, `gameCount` (nur abgerechnete Spiele) und `players`: bei einem Abend die Sitzreihenfolge, sonst
-  Saldo absteigend, bei Gleichstand nach Kennung. Alle Listen „je Spieler“ haben diese Reihenfolge.
-- `finance` (Finanz-Übersicht): `standings` (Spieler, Saldo, Platz; Gleichstand teilt den Platz); `balanceSeries`
-  für das Liniendiagramm (Index 0 ist 0, danach der Stand nach jedem abgerechneten Spiel über alle Abende in zeitlicher
-  Reihenfolge; Länge `gameCount + 1`; letzter Punkt = Saldo; freie Buchungen zählen zum nächsten Spiel bzw. zum
-  letzten Punkt; wer an einem Abend nicht am Tisch saß, bleibt waagerecht); `eveningStarts` und `eveningIds`
-  (wo im Verlauf ein Abend beginnt); `turnover`.
-- `gameModes` (Analyse je Spielart, je Spieler): `atTable` und `asPlayer` als `Map<GameType, ModeRecord>` mit
-  `games`, `won`, `balance`, `winRate`, `averageAmount` (kaufmännisch gerundet). `asPlayer` zählt nur selbst
-  gespielte Spiele (Ansager, Mitspieler, Alleinspieler); bei Über Kreuz ist es gleich `atTable`.
-- `gelegt` („Sollte-er-es-lassen?“-Index, je Spieler): `count`, `won`, `winRate`, `netBalance` (Summe der eigenen
-  Beträge aus Spielen, in denen er gelegt hat), `effect` (was das eigene Legen gekostet oder gebracht hat, exakt
-  nachgerechnet), `badge` und `shouldLeaveIt`. Abzeichen: `count == 0` STREICHHOLZ_SPARER; `count < 3` NOCH_OFFEN;
-  `winRate >= 0.6` und `netBalance >= 0` SICHERE_BANK; `winRate <= 0.4` und `netBalance < 0` BRANDSTIFTER
-  (nur dann `shouldLeaveIt`); sonst bei `netBalance > 0` GLUECKSRITTER; sonst WACKELKANDIDAT.
-- `bock` (Bock-König): je Spieler `games`, `won`, `balance` aus Bockspielen; `king` = höchster Saldo, nur wenn über 0.
-- `solo` (Solo-Spezialist und Mauerblümchen): je Spieler `solos`, `calls` (Rufspiele als Ansager), `soloShare`;
-  `specialist` = meiste Einzelspiele (mindestens 1); `wallflower` = kleinster Solo-Anteil unter den Spielern mit
-  mindestens 3 angesagten Spielen, nur wenn höchstens 0,2 und nicht der Spezialist.
-- `partners` (Lieblingspartner): alle Zweiergespanne aus Rufspiel und Über Kreuz, die auf derselben Seite standen
-  (auch als Gegenspielerpaar), mit `games`, `won`, `winRate`, `balance`; sortiert nach Saldo, dann Quote, dann
-  Kennungen; `favorite` = das erste Gespann mit mindestens 3 gemeinsamen Spielen.
-- `history`: die bisherigen Kennzahlen (`HistoryStats`).
+- `eveningCount` (Abende mit mindestens einem abgerechneten Spiel), `gameCount` (nur abgerechnete Spiele) und
+  `players` (alle, die an einem der Abende am Tisch saßen): bei `forEvening` in Sitzreihenfolge, bei `forEvenings`
+  Saldo absteigend und bei Gleichstand nach Kennung, auch wenn die Liste nur einen Abend enthält. Alle Listen
+  „je Spieler“ haben diese Reihenfolge; wo unten „weiter vorn“ steht, ist diese Reihenfolge gemeint.
+- `finance: FinanceOverview` (Finanz-Übersicht): `standings` (`Standing` mit `player`, `balance`, `rank`; Gleichstand
+  teilt den Platz); `balanceSeries: Map<PlayerId, List<Int>>` für das Liniendiagramm (Index 0 ist 0, danach der Stand
+  nach jedem abgerechneten Spiel über alle Abende in zeitlicher Reihenfolge; Länge `gameCount + 1`; letzter Punkt =
+  Saldo; wer an einem Abend nicht am Tisch saß, bleibt waagerecht); `eveningStarts` und `eveningIds` (wo im Verlauf ein
+  Abend beginnt: der Index des Punktes vor seinem ersten Spiel; nur Abende mit abgerechnetem Spiel); `turnover`.
+  Freie Buchungen zählen zum nächsten Spiel desselben Abends, hinter dem letzten Spiel zu dessen Punkt. Buchungen
+  eines Abends ohne Spiel zählen zum nächsten Spiel eines späteren Abends, sonst zum letzten Punkt (ohne ein
+  einziges Spiel ist das der einzige Punkt der Reihe).
+- `gameModes: List<PlayerGameModes>` (Analyse je Spielart, je Spieler): `atTable` und `asPlayer` als
+  `Map<GameType, ModeRecord>` (jede Spielart enthalten) mit `games`, `won`, `balance`, `winRate` und `averageAmount`
+  (`Int?`, kaufmännisch gerundet, `null` ohne Spiel). `asPlayer` zählt nur selbst gespielte Spiele (Ansager,
+  Mitspieler, Alleinspieler); bei Über Kreuz ist es gleich `atTable`.
+- `gelegt: List<GelegtRecord>` („Sollte-er-es-lassen?“-Index, je Spieler): `count`, `won`, `winRate`, `netBalance`
+  (Summe der eigenen Beträge aus Spielen, in denen er gelegt hat), `effect` (was das eigene Legen gekostet oder
+  gebracht hat, exakt nachgerechnet), `badge` und `shouldLeaveIt`. Abzeichen (`GelegtBadge.of`, Quoten ganzzahlig
+  verglichen): `count == 0` STREICHHOLZ_SPARER; `count < 3` NOCH_OFFEN; `winRate >= 0.6` und `netBalance >= 0`
+  SICHERE_BANK; `winRate <= 0.4` und `netBalance < 0` BRANDSTIFTER (nur dann `shouldLeaveIt`); sonst bei
+  `netBalance > 0` GLUECKSRITTER; sonst WACKELKANDIDAT.
+- `bock: BockOverview` (Bock-König): `records` (`BockRecord` je Spieler mit `games`, `won`, `balance` aus
+  Bockspielen); `king` = höchster Saldo, nur wenn über 0; bei Gleichstand der weiter vorn Stehende.
+- `solo: SoloOverview` (Solo-Spezialist und Mauerblümchen): `records` (`SoloRecord` je Spieler mit `solos`, `calls` =
+  Rufspiele als Ansager, `announced`, `soloShare`); `specialist` = meiste Einzelspiele (mindestens 1; bei Gleichstand
+  der weiter vorn Stehende); `wallflower` = kleinster Solo-Anteil unter den Spielern mit mindestens 3 angesagten
+  Spielen ohne den Spezialisten, nur wenn höchstens 0,2 (bei gleichem Anteil der mit mehr angesagten Spielen, dann
+  der weiter vorn Stehende).
+- `partners: PartnerOverview` (Lieblingspartner): `pairs` (`PartnerPair` mit `first`, `second`, `games`, `won`,
+  `winRate`, `balance`): alle Zweiergespanne aus Rufspiel und Über Kreuz, die auf derselben Seite standen (auch als
+  Gegenspielerpaar); sortiert nach Saldo, dann Quote, dann Kennungen; `favorite` = das erste Gespann mit mindestens
+  3 gemeinsamen Spielen.
+- `history: HistoryStats`: die übrigen Kennzahlen (Rollen, Serien, Schneider, teuerstes Spiel und so weiter).
 
-Dazu an der vorhandenen Statistik nachzubessern: `klopferEffect` exakt nachrechnen statt halbieren (mit der
-Topf-Teilung stimmt die Hälfte nicht auf den Cent); Über Kreuz zählt nicht in `asDeclarer`, `asPartner`,
-`asOpponent`, `declarerByType` und `toutPlayed`; freie Buchungen von Abenden ohne Spiel gehen in den Saldo der
-ewigen Tabelle ein.
+Für die gesamte Statistik (`EveningStatistics`, `HistoryStatistics`, `StatisticEngine`) gilt:
+
+- `klopferEffect` bzw. `effect` wird exakt nachgerechnet (`ScoreCalculator.amounts` mit einem Leger weniger), nicht
+  halbiert: Mit der Topf-Teilung stimmt die Hälfte nicht auf den Cent.
+- Über Kreuz kennt keinen Ansager und zählt deshalb nicht in `asDeclarer`, `asPartner`, `asOpponent`,
+  `declarerByType` und `toutPlayed`.
+- Ein Abend ohne abgerechnetes Spiel zählt nicht als gespielter Abend (`eveningCount`, `evenings`, Abendsiege, bester
+  und schlechtester Abend). Was dort eingetragen wurde, zählt aber mit, damit kein gebuchter Betrag verloren geht:
+  freie Buchungen (Saldo und Umsatz), zusammengeworfene Blätter und ausgelöste Bockrunden. So lässt sich auch ein
+  alter Kontostand als Abend mit einer einzigen freien Buchung übernehmen.
 
 ## 3. Datenhaltung
 
