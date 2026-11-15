@@ -1,6 +1,7 @@
 # Einheitliche Zeilenenden, damit Builds unter Windows und Linux dieselben Dateien sehen.
 * text=auto eol=lf
-*.bat text eol=crlf
+# Windows-Skripte bleiben Byte für Byte so, wie sie sind (mit Windows-Zeilenenden).
+*.bat -text
 *.png binary
 *.jar binary
 *.keystore binary

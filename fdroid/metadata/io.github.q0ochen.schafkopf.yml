@@ -1,0 +1,10 @@
+# Angaben für die eigene F-Droid-Paketquelle. Name, Kurz- und Langbeschreibung sowie das Symbol kommen aus
+# fastlane/metadata/android/ (dieselben Texte nutzt später auch das offizielle F-Droid).
+# Anti-Features gibt es derzeit keine: Die App braucht kein Internet und hat keine Werbung und kein Tracking.
+Categories:
+  - Games
+License: CC0-1.0
+AuthorName: Schafkopf Tracker
+WebSite: https://q0ochen.github.io/SchafkopfTracker/
+SourceCode: https://github.com/q0ochen/SchafkopfTracker
+IssueTracker: https://github.com/q0ochen/SchafkopfTracker/issues

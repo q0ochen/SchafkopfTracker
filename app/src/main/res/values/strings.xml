@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Arbeitstitel. Der endgültige Name wird nur hier geändert. -->
+    <string name="app_name">Schafkopf Tracker</string>
+
+    <!-- Allgemein -->
+    <string name="common_back">Zurück</string>
+    <string name="common_cancel">Abbrechen</string>
+    <string name="common_save">Speichern</string>
+    <string name="common_delete">Löschen</string>
+    <string name="common_ok">OK</string>
+    <string name="common_restore">Wiederherstellen</string>
+    <string name="common_more">Mehr</string>
+    <string name="common_loading">Wird geladen …</string>
+    <string name="common_dealer">Geber</string>
+    <string name="common_rank">%1$d.</string>
+
+    <!-- Fachbegriffe -->
+    <string name="type_rufspiel">Rufspiel</string>
+    <string name="type_ueber_kreuz">Über Kreuz</string>
+    <string name="type_farbsolo">Farbsolo</string>
+    <string name="type_wenz">Wenz</string>
+    <string name="type_geier">Geier</string>
+    <string name="suit_eichel">Eichel</string>
+    <string name="suit_gras">Gras</string>
+    <string name="suit_herz">Herz</string>
+    <string name="suit_schellen">Schellen</string>
+    <string name="level_normal">einfach</string>
+    <string name="level_schneider">Schneider</string>
+    <string name="level_schwarz">Schwarz</string>
+    <string name="announcement_tout">Tout</string>
+    <string name="announcement_sie">Sie</string>
+    <string name="kontra_none">kein Kontra</string>
+    <string name="kontra_kontra">Kontra</string>
+    <string name="kontra_retour">Retour</string>
+
+    <!-- Start -->
+    <string name="start_running_title">Abend läuft</string>
+    <string name="start_continue">Weiterspielen</string>
+    <string name="start_new_evening">Neuer Abend</string>
+    <string name="start_past_evenings">Abende</string>
+    <string name="start_no_evenings">Noch kein Abend eingetragen. Mit „Neuer Abend“ geht es los.</string>
+    <string name="start_statistics">Statistik</string>
+    <string name="start_players">Spieler</string>
+    <string name="start_settings">Einstellungen</string>
+    <string name="start_evening_running_badge">läuft</string>
+    <plurals name="games_count">
+        <item quantity="one">%1$d Spiel</item>
+        <item quantity="other">%1$d Spiele</item>
+    </plurals>
+    <string name="evening_date_location">%1$s · %2$s</string>
+
+    <!-- Neuer Abend -->
+    <string name="new_title">Neuer Abend</string>
+    <string name="new_like_last_time">Wie letztes Mal</string>
+    <string name="new_players_heading">Wer spielt mit? Vier auswählen</string>
+    <string name="new_add_player">Neuer Spieler</string>
+    <string name="new_player_name">Name</string>
+    <string name="new_player_name_error">Bitte einen Namen mit höchstens 24 Zeichen eingeben.</string>
+    <string name="new_player_add_confirm">Hinzufügen</string>
+    <string name="new_seating_heading">Sitzordnung im Uhrzeigersinn</string>
+    <string name="new_seating_hint">In dieser Reihenfolge wechselt der Geber. Antippen legt fest, wer zuerst gibt.</string>
+    <string name="new_seating_empty">Erst vier Spieler auswählen.</string>
+    <string name="new_first_dealer_badge">gibt zuerst</string>
+    <string name="new_move_up">%1$s einen Platz nach vorn</string>
+    <string name="new_move_down">%1$s einen Platz nach hinten</string>
+    <string name="new_location">Ort (freiwillig)</string>
+    <string name="new_rules_label">Regeln: %1$s</string>
+    <string name="new_start">Abend starten</string>
+    <string name="new_need_four">Noch %1$d auswählen</string>
+
+    <!-- Abend -->
+    <string name="board_title">Abend vom %1$s</string>
+    <string name="board_enter_game">Spiel eintragen</string>
+    <string name="board_thrown_in">Zusammengeworfen</string>
+    <string name="board_bock">6 Nixer – Bock</string>
+    <string name="board_undo_last">Rückgängig</string>
+    <string name="board_undo_last_description">Letzten Eintrag zurücknehmen</string>
+    <string name="board_status_next_game">Spiel %1$d</string>
+    <string name="board_status_dealer">Geber: %1$s</string>
+    <plurals name="board_status_bock">
+        <item quantity="one">Bock: noch %1$d Spiel</item>
+        <item quantity="other">Bock: noch %1$d Spiele</item>
+    </plurals>
+    <string name="board_no_entries">Noch nichts eingetragen.</string>
+    <string name="board_menu_progress">Verlauf</string>
+    <string name="board_menu_closing">Abschluss</string>
+    <string name="board_menu_rules">Regeln dieses Abends</string>
+    <string name="board_menu_finish">Abend beenden</string>
+    <string name="board_menu_reopen">Abend wieder öffnen</string>
+    <string name="board_menu_delete">Abend löschen</string>
+    <string name="board_delete_title">Abend löschen?</string>
+    <string name="board_delete_text">Alle Einträge dieses Abends werden gelöscht. Das lässt sich nicht rückgängig machen.</string>
+    <string name="board_delete_yes">Abend löschen</string>
+    <string name="board_delete_no">Behalten</string>
+    <string name="board_entry_removed">Eintrag entfernt</string>
+    <string name="board_finished_banner">Dieser Abend ist beendet.</string>
+    <string name="board_missing">Diesen Abend gibt es nicht mehr.</string>
+    <string name="board_balance_description">%1$s: Stand %2$s, Platz %3$d</string>
+
+    <!-- Bockrunde auslösen -->
+    <string name="bock_dialog_title">Bockrunde auslösen</string>
+    <string name="bock_dialog_who">Wer hatte die 6 Nixer?</string>
+    <string name="bock_dialog_unknown">Ohne Angabe</string>
+    <string name="bock_dialog_thrown_in">Blatt wurde zusammengeworfen</string>
+    <string name="bock_dialog_confirm">Bockrunde starten</string>
+
+    <!-- Einträge in der Liste -->
+    <string name="entry_thrown_in">Zusammengeworfen</string>
+    <string name="entry_bock_trigger_player">Bockrunde: 6 Nixer bei %1$s</string>
+    <string name="entry_bock_trigger">Bockrunde ausgelöst</string>
+    <string name="entry_manual">Freie Buchung</string>
+    <string name="entry_game_title">%1$d · %2$s · %3$s</string>
+    <string name="entry_with_partner">%1$s mit %2$s</string>
+    <string name="entry_pair">%1$s und %2$s</string>
+    <string name="entry_won">gewonnen</string>
+    <string name="entry_lost">verloren</string>
+    <plurals name="entry_laufende">
+        <item quantity="one">%1$d Laufender</item>
+        <item quantity="other">%1$d Laufende</item>
+    </plurals>
+    <string name="entry_klopfer">%1$d× gelegt</string>
+    <string name="entry_bock">Bock</string>
+    <string name="entry_bock_multi">Bock ×%1$d</string>
+    <string name="entry_value">Wert %1$s</string>
+    <string name="entry_issue">Bitte prüfen: Dieser Eintrag passt nicht zu den Regeln.</string>
+
+    <!-- Spiel eintragen -->
+    <string name="form_title_new">Spiel %1$d eintragen</string>
+    <string name="form_title_edit">Spiel ändern</string>
+    <string name="form_type">Spielart</string>
+    <string name="form_players">Wer spielt?</string>
+    <string name="form_players_hint_rufspiel">Erst den Spieler antippen, dann den Mitspieler.</string>
+    <string name="form_players_hint_ueber_kreuz">Einen aus dem Paar antippen – sein Gegenüber gehört dazu. Dann „Gewonnen“ oder „Verloren“.</string>
+    <string name="form_role_declarer">Spieler</string>
+    <string name="form_role_partner">Mitspieler</string>
+    <string name="form_role_pair">Paar</string>
+    <string name="form_suit_rufsau">Rufsau (freiwillig)</string>
+    <string name="form_suit_trump">Trumpffarbe (freiwillig)</string>
+    <string name="form_klopfer">Gelegt</string>
+    <string name="form_klopfer_icon">Streichholzschachtel: gelegt</string>
+    <string name="form_kontra">Kontra</string>
+    <string name="form_kontra_by">Kontra von (freiwillig)</string>
+    <string name="form_laufende">Laufende</string>
+    <string name="form_laufende_none">keine</string>
+    <string name="form_level">Ausgang</string>
+    <string name="form_announcement">Ansage</string>
+    <string name="form_bock">Bock (zählt doppelt)</string>
+    <string name="form_bock_hint_counter">Vorbelegt, weil eine Bockrunde läuft.</string>
+    <string name="form_value">Spielwert</string>
+    <string name="form_value_formula">%1$s × %2$d = %3$s</string>
+    <string name="form_result">Ergebnis</string>
+    <string name="form_won">Gewonnen</string>
+    <string name="form_lost">Verloren</string>
+    <string name="form_save_changes">Änderung speichern</string>
+    <string name="form_delete">Spiel löschen</string>
+    <string name="form_missing_declarer">Bitte wählen, wer spielt.</string>
+    <string name="form_missing_partner">Bitte den Mitspieler wählen.</string>
+    <string name="form_missing_pair">Bitte das Paar wählen.</string>
+    <string name="form_selected">ausgewählt</string>
+    <string name="form_not_selected">nicht ausgewählt</string>
+
+    <!-- Platzhalter für Bildschirme, die noch entstehen -->
+    <string name="placeholder_coming_soon">Dieser Bereich ist noch in Arbeit.</string>
+</resources>

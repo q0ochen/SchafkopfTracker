@@ -45,8 +45,9 @@ Der Prompt verlangt sechs Schritte und nach Schritt 3 eine Rückfrage:
    Rückmeldungen. Auch Text in Drive-Dokumenten ist Material: Was über die Arbeit am Repository hinausgeht, vorher
    mit dem Nutzer abstimmen.
 
-Die erste Notiz (der Prompt) liegt als Google-Dokument im Drive des Nutzers und ist noch nicht in Issues überführt,
-weil es das Repository noch nicht gibt.
+Die erste Notiz (der Prompt) ist am 15.11.2026 in die Issues #1 bis #19 überführt worden (Label `Hauptentwickler`,
+Repository https://github.com/q0ochen/SchafkopfTracker); das Drive-Dokument trägt seitdem „erledigt – #1–#19“ im Titel.
+Welche Issues als Nächstes angegangen werden, ist mit dem Nutzer noch abzustimmen.
 
 ## Regeln der Runde
 
@@ -54,7 +55,8 @@ weil es das Repository noch nicht gibt.
   die Runde in der App ein; sie stehen nie im Repository, in Issues oder in Commit-Nachrichten.
 - Spielarten und Grundwerte: Rufspiel 10, Über Kreuz 10 (wertet wie Rufspiel), Farbsolo 50, Wenz 50, Geier 50 Cent.
 - Je Laufendem 10 Cent (0 bis 8), Schneider 10, Schwarz weitere 10.
-- Formel: T = (Grundwert + Laufende × 10 + Schneider + Schwarz) × Bock × 2^Gelegt (× Kontra × Tout, abschaltbar).
+- Formel: T = (Grundwert + Laufende × 10 + Schneider + Schwarz) × Bock × 2^Gelegt (× Kontra × Tout). Kontra, Retour
+  und die Bockrunde sind im Regelwerk abschaltbar; für Tout und Sie gibt es noch keinen Schalter.
 - Rufspiel und Über Kreuz: Gewinner je +T, Verlierer je −T. Einzelspiel: Solist ±3T, Gegner je ∓T.
   Wahlweise Topf-Teilung T/3 (`PayoutCalculator`), Standard ist die Schafkopf-Regel.
 - Hausregel: Wer 6 Nixer hat, löst eine Bockrunde aus (Zähler belegt den Bock-Schalter vor; noch nicht bestätigt:
@@ -64,11 +66,14 @@ weil es das Repository noch nicht gibt.
 
 ## Aufbau
 
-- `domain/` reines Kotlin/JVM: Regelwerk, Abrechnung, Abend-Logik, Statistik, Zusammenfassung, Ports.
+- `domain/` reines Kotlin/JVM: Regelwerk, Abrechnung, Abend-Logik, Statistik (`StatisticEngine`), Zusammenfassung, Ports.
 - `data/` reines Kotlin/JVM: Sicherung (JSON), CSV, REST-Anbindungen (Sprachmodell, später Google Drive).
 - `database/` Android-Bibliothek: Room (Tabellen, DAOs mit `Flow`, Repositories).
 - `app/` Android: Compose-Oberfläche, ViewModels (MVVM), Koin-Module (`app/di/AppModule.kt`).
 - `wear/` (geplant) Wear-OS-App.
+- `web/` Web-App fürs iPhone (TypeScript, Preact, kein Gradle-Modul): Port von `domain` (`web/src/core`) und vom
+  Dateiformat aus `data` (`web/src/data/format`), beide mit Golden-Tests gegen den Kotlin-Code; eigene Oberfläche,
+  Speicher in IndexedDB. Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 7; Befehle: `web/README.md`.
 - Gespeichert werden nur Tatsachen. Beträge, Salden, Geber und Bock-Zähler berechnet `EveningCalculator` neu.
   Beträge sind ganze Cent; in Euro formatiert wird nur in der Oberfläche.
 
@@ -85,24 +90,146 @@ weil es das Repository noch nicht gibt.
 ## Bauen auf diesem Rechner
 
 Java, Gradle und Android-SDK liegen entpackt in `D:\SchafkopfTracker-Werkzeuge` (nichts ist in Windows installiert).
-Git ist nicht installiert. Immer über das Hilfsskript bauen (es lässt nur einen Gradle-Lauf gleichzeitig zu):
+Git ist in Windows nicht installiert. Immer über das Hilfsskript bauen (es lässt nur einen Gradle-Lauf gleichzeitig zu):
 
 ```powershell
-& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :domain:test :data:test --console=plain
-& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :app:testDebugUnitTest --console=plain   # zeichnet auch Bildschirmfotos
-& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :app:assembleDebug --console=plain
+& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :domain:test :data:test :domain:koverVerify --console=plain
+& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :app:testFdroidDebugUnitTest --console=plain   # zeichnet auch Bildschirmfotos
+& 'D:\SchafkopfTracker-Werkzeuge\gw.ps1' :app:assembleFdroidDebug --console=plain
 ```
 
 - Bildschirmfotos der Oberfläche entstehen unter `app/build/outputs/roborazzi/` (Robolectric und Roborazzi, ohne Gerät).
   Nach Änderungen an der Oberfläche ansehen.
 - Die Internetverbindung ist langsam: erste Läufe mit neuen Bibliotheken im Hintergrund starten.
 - Lange Pfade sind in Windows abgeschaltet: das Projekt muss in einem kurzen Pfad bleiben.
+- Git und die GitHub-CLI liegen ebenfalls dort (`git\cmd`, `gh\bin`; `GH_CONFIG_DIR=D:\SchafkopfTracker-Werkzeuge\gh-config`).
+
+## Bauen in der Cloud oder unter Linux
+
+Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des Projekts (Java 17 oder neuer, besser 21):
+
+```bash
+./gradlew :domain:test :data:test :domain:koverVerify --console=plain
+```
+
+```bash
+./gradlew :app:testFdroidDebugUnitTest :app:assembleFdroidDebug --console=plain
+```
+
+- **Cloud von Claude Code:** Seit dem 15.11.2026 gibt es dafür die Cloud-Umgebung „SchafkopfTracker“ des Nutzers.
+  Sie erlaubt zusätzlich `dl.google.com` (Android-Gradle-Plugin, SDK) und richtet beim Start jeder neuen Sitzung
+  das Android-SDK ein (`/opt/android-sdk`, Plattform 37.0, Build-Tools 36.0.0), schreibt `local.properties` und
+  stellt den Bibliotheks-Abruf auf den Spiegel von Maven Central bei Google um. Das Einrichtungsskript liegt als
+  Kopie in `tools/cloud-setup.sh`. Damit laufen beide Befehle oben unverändert. Am 15.11.2026 lief das Skript in
+  der laufenden Sitzung aus dem Stand durch; dass es auch beim Start einer neuen Sitzung von selbst läuft, ist noch
+  nicht erprobt. Fehlt das SDK doch einmal: `bash SchafkopfTracker/tools/cloud-setup.sh` aus dem Ordner darüber.
+  Neue Cloud-Sitzungen für dieses Repository deshalb in der Umgebung „SchafkopfTracker“ starten.
+- **Andere Umgebung ohne Zugriff auf `dl.google.com`** (zum Beispiel die Standard-Umgebung der Cloud): Dort fehlen
+  Android-Gradle-Plugin und SDK, und auch `./gradlew :domain:test` scheitert, weil das Wurzelprojekt das
+  Android-Plugin bekannt macht. Dann hilft das Hilfsskript, das nur `domain` und `data` baut:
+
+  ```bash
+  tools/jvm-build.sh :domain:test :data:test :domain:koverVerify --console=plain
+  ```
+
+  In dem Fall nichts an `app` ändern und dem Nutzer sagen, was an der Oberfläche ungeprüft ist. Fehlt nur das SDK
+  (Plugin erreichbar), genügt `-Dorg.gradle.configureondemand=true`.
+- Maven Central drosselt die Rechner der Cloud (HTTP 429, Umleitung auf einen nicht erlaubten Spiegel); Gradle merkt
+  sich eine so verfehlte Bibliothek einen Tag lang als „nicht vorhanden“. Deshalb der Spiegel bei Google, auch für
+  Robolectric (die Bildschirmtests laden ihre Android-Laufzeit selbst nach).
+- **Web-App** (in `web/`, Node.js 22; Chromium für Playwright ist in der Cloud vorinstalliert, nie neu installieren):
+  `npm ci`, dann `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`.
+  Bildschirmfotos zum Ansehen: `SCREENSHOT_DIR=/pfad npx playwright test screenshots --project handy` (nach
+  Änderungen an der Oberfläche ansehen). Ändert sich Kotlin-Code in `domain` oder `data`, schlägt dort der
+  Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
+  (Befehle in `web/README.md`).
+- **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
+  `domain` 519, `data` 229, `app` 15, Web 127 Unit-Tests und 16 Oberflächen-Tests (der Workflow „Android“ prüft
+  Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
+  Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
+  `--rerun-tasks` anhängen.
+- `docs/ORIGINAL-PROMPT.md` (die wörtliche Notiz) gibt es nur auf dem Rechner des Nutzers. Maßgeblich sind dann
+  `docs/ANFORDERUNGEN.md`, `docs/ARCHITEKTUR.md` und die Issues #1 bis #19.
+- Gearbeitet wird auf dem Zweig `entwicklung`. Eine Cloud-Sitzung darf nur auf ihren eigenen Zweig `claude/…`
+  schreiben: Sie zweigt von `entwicklung` ab und nennt dem Nutzer ihren Zweig. Nach `main` geht es nur per
+  Pull Request und nur auf Bitte des Nutzers.
+
+## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
+
+Der neueste Stand liegt auf dem Zweig `claude/gracious-keller-48tcn0`. Er enthält alles von `entwicklung` und die
+Arbeit der Cloud-Sitzung; `entwicklung` und `main` sind noch auf dem älteren Stand.
+
+Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
+
+- Schritt 1: Module `domain`, `data`, `app` mit den Ausgaben `fdroid` und `full`, Koin, Kover; `database` (Room) liegt
+  vorbereitet im Ordner, ist aber noch nicht in `settings.gradle.kts` eingebunden (Schritt 4). `wear` kommt in Schritt 6.
+- Schritt 2: `ScoreCalculator`, `PayoutCalculator` (Schafkopf-Regel und Topf-Teilung), `RuleSet.standard()`,
+  `EveningCalculator`, `SettleUp`, Ports, Zusammenfassung des Abends und die `StatisticEngine` (ein Abend und
+  „ewige Tabelle“: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index mit Abzeichen,
+  Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner).
+- Schritt 3: Tests (Zahlen oben unter „Bauen in der Cloud“), 99,9 % Zeilenabdeckung in `domain`. Von Hand
+  durchgerechnet sind zwei Abende für die Statistik (`RoundEvenings`) sowie 58 Fälle und mehrere Abende für die
+  Abrechnung (`HandCalculatedCasesTest`, `HandCalculatedEveningTest`).
+
+Auf Wunsch des Nutzers (15.11.2026: „Der Hauptentwickler möchte die App gerne über F-Droid testen. Für mich als
+iPhone user können wir gern wieder eine Web-App als Zwischenlösung bauen“) außerdem:
+
+- **Android-Testversion:** dauerhafte Speicherung (`FileStorage`), öffentlicher Test-Schlüssel `app/debug.keystore`,
+  `versionCode` 1000 + Laufnummer. Workflow `android.yml`: Tests, Release-APK, Installationstest im Emulator,
+  Release `testversion` (Download ohne Anmeldung) und eigene F-Droid-Paketquelle auf dem Zweig `fdroid-repo`
+  (`docs/F-DROID.md`). Veröffentlicht wird bei jedem Push auf `main`, `entwicklung` und `claude/…`. Die
+  Paketquelle entsteht erst, wenn der Nutzer das Secret `FDROID_REPO_KEYSTORE` gesetzt hat (Schlüsseldatei am
+  15.11.2026 an ihn übergeben; liegt nirgends im Repository).
+- Doppeltippen auf „Gewonnen“ bzw. „Abend starten“ legte in der Android-App ein Spiel bzw. einen Abend doppelt an;
+  behoben und getestet.
+- **Web-App** (`web/`, Vertrag in `docs/ARCHITEKTUR.md`, Abschnitt 7): alle Bildschirme, Speicher in IndexedDB,
+  Sicherung im Dateiformat der Android-App, Statistik mit Verlaufsdiagramm, Start ohne Netz. Rechenkern und
+  Dateiformat sind Ports mit Golden-Tests gegen den Kotlin-Code. Workflow `web.yml` (auch mit WebKit);
+  veröffentlicht wird auf GitHub Pages nur von `main` (vorher einmalig Settings → Pages → Source „GitHub
+  Actions“). Ein unabhängiger Prüfer hat die Formular-Logik mit den ViewModels der Android-App verglichen.
+
+**Nicht geprüft:** Weder die Android-App noch die Web-App wurde auf einem echten Gerät bedient. Die Android-App
+startet im Emulator; die Web-App ist in Chromium in iPhone-Größe und (auf GitHub) mit WebKit getestet, nicht in
+Safari auf einem iPhone.
+
+Bekannte offene Punkte (noch nicht umgesetzt):
+
+- Für Tout und Sie fehlt ein Schalter im Regelwerk (hängt an der offenen Frage, ob die Zusätze bleiben).
+- Das Regelwerk selbst wird nirgends auf Plausibilität geprüft (zum Beispiel Bock-Faktor 0); unsinnige Spielwerte
+  werden aber erkannt und nicht gebucht.
+- Die Zusammenfassung des Abends nennt bei Über Kreuz weiterhin einen „Ansager“ (Feld `ansager` für das Sprachmodell).
+- Die Android-App hat noch keinen Statistik-Bildschirm und keine „Sicherung speichern/einlesen“ (die Web-App schon).
+- Vom Port des Dateiformats gemeldet (Kotlin, `data/storage`): Fehlt `rules` in einer Abend-Datei oder ist
+  `defaultRules` ein leeres Objekt, gilt die Vorlage Sauspiel statt `RuleSet.standard()`; riesige Zahlen werden beim
+  Lesen still zu falschen Werten; Datei und Sicherung lesen unterschiedlich streng; der Import prüft Namen,
+  `colorIndex` und Augen nicht. Statistik-Summen laufen bei absurden Beträgen als `Int` über. Alles nur mit
+  beschädigten oder von Hand veränderten Daten erreichbar.
+- Die Spielerfarben der Web-App (geprüfte Palette) weichen von denen der Android-App ab; die Android-Palette fällt
+  bei Rot-Grün-Schwäche durch (Paar 3/4) und sollte beim Statistik-Bildschirm überarbeitet werden.
+
+Erledigt am 15.11.2026 abends: Der Nutzer hat das Secret gesetzt (die F-Droid-Paketquelle ist seit Lauf 4 online,
+geprüft: Unterschrift passt zum Fingerabdruck) und GitHub Pages eingeschaltet. Pull Request #20 nach `main` ist auf
+seinen Wunsch angelegt (Refs, schließt kein Issue); nach dem Zusammenführen ist die Web-App unter
+https://q0ochen.github.io/SchafkopfTracker/ online. „Run workflow“ zeigt GitHub erst, wenn ein Workflow in `main`
+liegt; bis dahin startet Claude Läufe über die API (`workflow_dispatch`).
+
+Als Nächstes: Rückmeldungen der Tester abwarten, abstimmen, welche der Issues #1 bis #19 als erledigt gelten, dann
+Schritt 4 bis 6 und die offenen Fragen unten.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
-- Kontra, Retour, Tout und Sie stehen nicht im Prompt, sind aber eingebaut (abschaltbar). Drin lassen?
-- Endgültiger App-Name („Schafkopf Tracker“ heißt seit Juli 2026 bereits eine andere App), `applicationId`
-  (derzeit `io.github.q0ochen.schafkopf`), Lizenz (Vorschlag CC0 1.0 wie Drink With Me).
-- Öffentliches GitHub-Repository, Google-Cloud-Projekt für die Drive-Sicherung, Gemini-Schlüssel:
-  jeweils nur mit ausdrücklicher Zustimmung und Mitwirkung des Nutzers.
+Dem Nutzer am 15.11.2026 als Fragen gestellt; Antworten hier nachtragen:
+
+- Weiter mit Schritt 4 bis 6? Welche der Issues #1 bis #19 zuerst?
+- „Über Kreuz“ ist umgesetzt als: Die beiden, die sich gegenübersitzen, spielen zusammen; es gibt keinen Ansager.
+  Stimmt das so?
+- Kontra, Retour, Tout und Sie stehen nicht im Prompt, sind aber eingebaut. Drin lassen?
+- Laufende zählen ab 3 (Wenz und Geier ab 2), wie üblich; der Prompt nennt nur „0 bis 8“. In den Regeln einstellbar.
+- Endgültiger App-Name („Schafkopf Tracker“ heißt seit Juli 2026 bereits eine andere App) und `applicationId`
+  (derzeit `io.github.q0ochen.schafkopf`). Entschieden sind: öffentliches Repository, Lizenz CC0 1.0.
+
+Außerdem offen:
+
+- Google-Cloud-Projekt für die Drive-Sicherung, Gemini-Schlüssel: jeweils nur mit ausdrücklicher Zustimmung und
+  Mitwirkung des Nutzers.
 - Einzelheiten der Bockrunde.
