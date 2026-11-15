@@ -39,11 +39,18 @@ test("ein Abend am Tisch: eintragen, zurücknehmen, ändern, Bock, Abschluss", a
   await expect(standing(page, "Bert")).toContainText("−2,20");
   await expect(standing(page, "Anna")).toContainText("+0,80");
 
-  // Zurücknehmen und wiederherstellen.
+  // Zweimal zurücknehmen und beides wiederherstellen (in der richtigen Reihenfolge).
   await page.getByRole("button", { name: "Letzten Eintrag zurücknehmen" }).click();
+  await expect(standing(page, "Bert")).toContainText("−0,10");
+  await page.getByRole("button", { name: "Letzten Eintrag zurücknehmen" }).click();
+  await expect(page.getByText("2 Einträge entfernt")).toBeVisible();
+  await expect(page.getByText("Noch nichts eingetragen.")).toBeVisible();
+  await page.getByRole("button", { name: "Wiederherstellen" }).click();
   await expect(standing(page, "Bert")).toContainText("−0,10");
   await page.getByRole("button", { name: "Wiederherstellen" }).click();
   await expect(standing(page, "Bert")).toContainText("−2,20");
+  await expect(page.getByRole("button", { name: "Wiederherstellen" })).toBeHidden();
+  await expect(page.getByRole("list", { name: "Einträge" }).getByRole("listitem").first()).toContainText("1 · Rufspiel");
 
   // Das erste Spiel war doch verloren.
   await page.getByRole("button", { name: /^1 · Rufspiel · Anna mit Cilli/ }).click();

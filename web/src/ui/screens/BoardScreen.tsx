@@ -12,7 +12,8 @@ import { useAppState, useColors, useNames, useServices } from "../context";
 import { entryText } from "../entryText";
 import { formatAmount, formatDate, plural } from "../format";
 
-const UNDO_SECONDS = 8;
+/** So lange bleibt „Wiederherstellen“ sichtbar (wie die lange Meldung der Android-App). */
+const UNDO_SECONDS = 10;
 
 function PlayerHeader({
   computed,
@@ -167,7 +168,8 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
   const computed = useMemo(() => (evening ? EveningCalculator.compute(evening) : null), [evening]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [bockDialog, setBockDialog] = useState(false);
-  const [removed, setRemoved] = useState<RemovedEntry | null>(null);
+  // Zurückgenommene Einträge, der zuletzt zurückgenommene am Ende. Jeder lässt sich wiederherstellen.
+  const [removed, setRemoved] = useState<readonly RemovedEntry[]>([]);
   const running = evening ? isRunning(evening) : false;
   const resultCount = computed?.results.length ?? 0;
 
@@ -182,10 +184,10 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
     window.scrollTo({ top: document.documentElement.scrollHeight });
   }, [resultCount]);
 
-  // „Wiederherstellen“ wird nach einigen Sekunden ausgeblendet.
+  // „Wiederherstellen“ wird einige Sekunden nach dem letzten Antippen ausgeblendet.
   useEffect(() => {
-    if (!removed) return;
-    const timer = setTimeout(() => setRemoved(null), UNDO_SECONDS * 1000);
+    if (removed.length === 0) return;
+    const timer = setTimeout(() => setRemoved([]), UNDO_SECONDS * 1000);
     return () => clearTimeout(timer);
   }, [removed]);
 
@@ -207,7 +209,15 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
     const result = removeLast(evening);
     if (!result) return;
     void store.saveEvening(result.evening);
-    setRemoved(result.removed);
+    setRemoved((before) => [...before, result.removed]);
+  };
+
+  // Der zuletzt zurückgenommene Eintrag kommt zuerst wieder an seine Stelle; so stimmt die Reihenfolge.
+  const restoreLast = () => {
+    const entry = removed[removed.length - 1];
+    if (!entry) return;
+    setRemoved(removed.slice(0, -1));
+    update((it) => restore(it, entry));
   };
 
   const menuItems = [
@@ -288,15 +298,11 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
         </div>
       ) : null}
 
-      {removed ? (
+      {removed.length > 0 ? (
         <Snackbar
-          message="Eintrag entfernt"
+          message={removed.length === 1 ? "Eintrag entfernt" : `${removed.length} Einträge entfernt`}
           actionLabel="Wiederherstellen"
-          onAction={() => {
-            const entry = removed;
-            setRemoved(null);
-            update((it) => restore(it, entry));
-          }}
+          onAction={restoreLast}
         />
       ) : null}
 

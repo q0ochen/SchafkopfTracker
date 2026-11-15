@@ -98,7 +98,7 @@ export function StartScreen() {
         >
           Neuer Abend
         </button>
-        <nav class="row" aria-label="Bereiche">
+        <nav class="row nav-row" aria-label="Bereiche">
           <button type="button" class="button" onClick={() => router.open({ name: "statistics", eveningId: null })}>
             Statistik
           </button>

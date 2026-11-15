@@ -302,6 +302,12 @@ textarea {
   flex: none;
 }
 
+/* Drei Knöpfe nebeneinander: etwas kleinere Schrift, damit „Einstellungen“ auch auf schmalen iPhones passt. */
+.nav-row .button {
+  padding: 8px 4px;
+  font-size: 15px;
+}
+
 .plain-fieldset {
   margin: 0;
   padding: 0;

@@ -144,7 +144,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 517, `data` 228, `app` 12. Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
+  `domain` 519, `data` 229, `app` 15, Web 127 Unit-Tests und 16 Oberflächen-Tests (der Workflow „Android“ prüft
+  Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
   Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
   `--rerun-tasks` anhängen.
 - `docs/ORIGINAL-PROMPT.md` (die wörtliche Notiz) gibt es nur auf dem Rechner des Nutzers. Maßgeblich sind dann
@@ -153,7 +154,7 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   schreiben: Sie zweigt von `entwicklung` ab und nennt dem Nutzer ihren Zweig. Nach `main` geht es nur per
   Pull Request und nur auf Bitte des Nutzers.
 
-## Stand am 15.11.2026 (abends, nach der ersten Cloud-Sitzung)
+## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
 Der neueste Stand liegt auf dem Zweig `claude/gracious-keller-48tcn0`. Er enthält alles von `entwicklung` und die
 Arbeit der Cloud-Sitzung; `entwicklung` und `main` sind noch auf dem älteren Stand.
@@ -166,26 +167,30 @@ Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
   `EveningCalculator`, `SettleUp`, Ports, Zusammenfassung des Abends und die `StatisticEngine` (ein Abend und
   „ewige Tabelle“: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index mit Abzeichen,
   Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner).
-- Schritt 3: 517 Tests in `domain` (99,9 % Zeilenabdeckung, `koverVerify` verlangt 90 %), 228 Tests in `data`,
-  12 Tests in `app` (10 Bildschirmtests, 2 für das Formular); JUnit Jupiter, MockK, Turbine. Von Hand durchgerechnet
-  sind zwei Abende für die Statistik (`RoundEvenings`) sowie 58 Fälle und mehrere Abende für die Abrechnung
-  (`HandCalculatedCasesTest`, `HandCalculatedEveningTest`).
+- Schritt 3: Tests (Zahlen oben unter „Bauen in der Cloud“), 99,9 % Zeilenabdeckung in `domain`. Von Hand
+  durchgerechnet sind zwei Abende für die Statistik (`RoundEvenings`) sowie 58 Fälle und mehrere Abende für die
+  Abrechnung (`HandCalculatedCasesTest`, `HandCalculatedEveningTest`).
 
-Was die Cloud-Sitzung außerdem geprüft und behoben hat (Einzelheiten in den Commit-Nachrichten):
+Auf Wunsch des Nutzers (15.11.2026: „Der Hauptentwickler möchte die App gerne über F-Droid testen. Für mich als
+iPhone user können wir gern wieder eine Web-App als Zwischenlösung bauen“) außerdem:
 
-- Unabhängige Gegenprüfung des Rechenkerns: Für gültige Eingaben stimmte alles. Bei beschädigten Daten gab es Fehler
-  (Absturz bei leerer Sitzordnung, Buchungen, die nicht aufgingen, Überläufe); sie sind behoben.
-- Durchsicht der KI-Anbindung (`data/llm`) abgeschlossen: fünf Schwachstellen behoben (Proxy bei `http`, offene
-  HTTP/2-Verbindungen, verschluckter Abbruch, Adress-Regel, fehlendes Gesamt-Zeitlimit).
-- Der Import einer Sicherung lässt Abende mit Beträgen außerhalb des Rechenbereichs aus.
-- Die Statistik wurde von einem unabhängigen Prüfer von Hand nachgerechnet (jede Kennzahl stimmte); seltene
-  Grenzfälle sind nachgebessert (Führungswechsel, Lieblingspartner nur im Plus).
-- Die App wurde am 15.11.2026 erstmals in der Cloud gebaut: `:app:testFdroidDebugUnitTest`,
-  `:app:assembleFdroidDebug` und `:app:assembleFullDebug` laufen durch. Dabei behoben: Das Formular stürzte ab, wenn
-  ein Spiel geöffnet wurde, dessen Ansager nicht am Tisch sitzt (nur mit beschädigten Daten möglich).
+- **Android-Testversion:** dauerhafte Speicherung (`FileStorage`), öffentlicher Test-Schlüssel `app/debug.keystore`,
+  `versionCode` 1000 + Laufnummer. Workflow `android.yml`: Tests, Release-APK, Installationstest im Emulator,
+  Release `testversion` (Download ohne Anmeldung) und eigene F-Droid-Paketquelle auf dem Zweig `fdroid-repo`
+  (`docs/F-DROID.md`). Veröffentlicht wird bei jedem Push auf `main`, `entwicklung` und `claude/…`. Die
+  Paketquelle entsteht erst, wenn der Nutzer das Secret `FDROID_REPO_KEYSTORE` gesetzt hat (Schlüsseldatei am
+  15.11.2026 an ihn übergeben; liegt nirgends im Repository).
+- Doppeltippen auf „Gewonnen“ bzw. „Abend starten“ legte in der Android-App ein Spiel bzw. einen Abend doppelt an;
+  behoben und getestet.
+- **Web-App** (`web/`, Vertrag in `docs/ARCHITEKTUR.md`, Abschnitt 7): alle Bildschirme, Speicher in IndexedDB,
+  Sicherung im Dateiformat der Android-App, Statistik mit Verlaufsdiagramm, Start ohne Netz. Rechenkern und
+  Dateiformat sind Ports mit Golden-Tests gegen den Kotlin-Code. Workflow `web.yml` (auch mit WebKit);
+  veröffentlicht wird auf GitHub Pages nur von `main` (vorher einmalig Settings → Pages → Source „GitHub
+  Actions“). Ein unabhängiger Prüfer hat die Formular-Logik mit den ViewModels der Android-App verglichen.
 
-**Nicht geprüft:** Das Testpaket wurde gebaut, aber auf keinem Gerät installiert und ausprobiert (in der Cloud gibt
-es kein Gerät). Die Bildschirmtests zeichnen die Bildschirme nur; bedient wird dabei nichts.
+**Nicht geprüft:** Weder die Android-App noch die Web-App wurde auf einem echten Gerät bedient. Die Android-App
+startet im Emulator; die Web-App ist in Chromium in iPhone-Größe und (auf GitHub) mit WebKit getestet, nicht in
+Safari auf einem iPhone.
 
 Bekannte offene Punkte (noch nicht umgesetzt):
 
@@ -193,10 +198,17 @@ Bekannte offene Punkte (noch nicht umgesetzt):
 - Das Regelwerk selbst wird nirgends auf Plausibilität geprüft (zum Beispiel Bock-Faktor 0); unsinnige Spielwerte
   werden aber erkannt und nicht gebucht.
 - Die Zusammenfassung des Abends nennt bei Über Kreuz weiterhin einen „Ansager“ (Feld `ansager` für das Sprachmodell).
-- Der Statistik-Bildschirm mit Diagrammen fehlt noch (Schritt 5); das Rechenwerk dafür ist fertig.
+- Die Android-App hat noch keinen Statistik-Bildschirm und keine „Sicherung speichern/einlesen“ (die Web-App schon).
+- Vom Port des Dateiformats gemeldet (Kotlin, `data/storage`): Fehlt `rules` in einer Abend-Datei oder ist
+  `defaultRules` ein leeres Objekt, gilt die Vorlage Sauspiel statt `RuleSet.standard()`; riesige Zahlen werden beim
+  Lesen still zu falschen Werten; Datei und Sicherung lesen unterschiedlich streng; der Import prüft Namen,
+  `colorIndex` und Augen nicht. Statistik-Summen laufen bei absurden Beträgen als `Int` über. Alles nur mit
+  beschädigten oder von Hand veränderten Daten erreichbar.
+- Die Spielerfarben der Web-App (geprüfte Palette) weichen von denen der Android-App ab; die Android-Palette fällt
+  bei Rot-Grün-Schwäche durch (Paar 3/4) und sollte beim Statistik-Bildschirm überarbeitet werden.
 
-Als Nächstes: Der Nutzer entscheidet, ob es mit Schritt 4 bis 6 weitergeht (so verlangt es der Prompt), und
-beantwortet die offenen Fragen unten.
+Als Nächstes: Der Nutzer setzt das Secret, aktiviert GitHub Pages und entscheidet über den Pull Request nach `main`
+(erst dann ist die Web-App online). Danach: Schritt 4 bis 6 und die offenen Fragen unten.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
