@@ -1,0 +1,54 @@
+name: Fehler melden
+description: Etwas funktioniert nicht wie erwartet.
+title: "[Fehler] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Achtung, öffentlich:** Dieses Repository kann jeder lesen. Auf Bildschirmfotos bitte Namen und
+        E-Mail-Adressen schwärzen. Keine Passwörter oder Schlüssel eintragen.
+  - type: dropdown
+    id: wo
+    attributes:
+      label: Wo ist der Fehler aufgetreten?
+      options:
+        - Spiel eintragen
+        - Abrechnung und Stände
+        - Statistik und Verlauf
+        - Sicherung
+        - Uhr (Wear OS)
+        - Installation
+        - Anderes
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Steht in der App unter Einstellungen ganz unten.
+  - type: input
+    id: geraet
+    attributes:
+      label: Gerät und System
+      placeholder: z. B. Pixel 11 Pro, Android 17 · Pixel Watch 4
+  - type: textarea
+    id: passiert
+    attributes:
+      label: Was ist passiert?
+      description: Die Fehlermeldung bitte genau abschreiben oder ein Bildschirmfoto anhängen (hineinziehen, einfügen oder unten im Feld antippen).
+    validations:
+      required: true
+  - type: textarea
+    id: erwartet
+    attributes:
+      label: Was hätte passieren sollen?
+  - type: textarea
+    id: schritte
+    attributes:
+      label: Wie kommt man dahin?
+      description: Schritt für Schritt, damit sich der Fehler nachstellen lässt.
+      value: |
+        1.
+        2.
+        3.

@@ -1,0 +1,6 @@
+# Einheitliche Zeilenenden, damit Builds unter Windows und Linux dieselben Dateien sehen.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.png binary
+*.jar binary
+*.keystore binary

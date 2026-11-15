@@ -1,0 +1,27 @@
+# Gradle und Build
+.gradle/
+build/
+local.properties
+.kotlin/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Geheimnisse gehören nie ins Repository
+*.jks
+*.keystore
+!app/debug.keystore
+*.p12
+keystore.properties
+
+# Die wörtliche Keep-Notiz des Hauptentwicklers bleibt in Drive und auf dem Rechner des Projektinhabers.
+# Ins Repository kommen nur die sachlichen Anforderungen (docs/ANFORDERUNGEN.md und Issues).
+docs/ORIGINAL-PROMPT.md
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
