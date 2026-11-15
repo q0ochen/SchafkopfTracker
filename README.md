@@ -74,6 +74,7 @@ data/       Reines Kotlin: Sicherung als JSON, CSV, Netzanbindungen + Tests
 database/   Room-Datenbank (SQLite): Tabellen, Abfragen, Repositories + Tests
 app/        Android-App (Jetpack Compose): Oberfläche, ViewModels, Verdrahtung mit Koin
 docs/       Anforderungen und Architektur
+tools/      Hilfsskript: Rechenkern bauen und testen ohne Android-SDK
 .github/    Issue-Vorlagen, Labels, Workflows
 ```
 
@@ -86,12 +87,15 @@ docs/       Anforderungen und Architektur
 Benötigt werden JDK 21 und das Android-SDK (Plattform 37).
 
 ```bash
-./gradlew :domain:test :data:test
+./gradlew :domain:test :data:test :domain:koverVerify
 ```
 
 ```bash
 ./gradlew :app:assembleFdroidDebug
 ```
+
+Ohne Android-SDK (oder ohne Zugriff auf Googles Maven-Server) lassen sich die beiden reinen Kotlin-Module mit
+`tools/jvm-build.sh :domain:test :data:test :domain:koverVerify` bauen und testen.
 
 Die Ausgabe `fdroid` enthält ausschließlich freie Software. Die Ausgabe `full` bindet zusätzlich die Wear-OS-Uhr
 über die Google Play Services an.
