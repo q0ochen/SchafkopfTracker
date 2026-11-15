@@ -13,7 +13,8 @@ rechnet aus, wer wie viel bekommt oder zahlt. Am Ende des Abends stehen Gewinner
 | Abrechnung in ganzen Cent, jedes Spiel ein Nullsummenspiel, jede Eingabe nachträglich änderbar | fertig, getestet |
 | Abend-Liste mit laufendem Stand, Plätzen, Geber und Bock-Zähler | fertig |
 | Dunkles Design als Standard, große Tippflächen, Bedienung mit Screenreader | fertig |
-| Statistik, Verlauf als Diagramm, Teilen als Text und Bild | geplant |
+| Statistik für einen Abend und über alle Abende: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index, Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner | Rechenwerk fertig, getestet |
+| Statistik-Bildschirm mit Diagrammen, Teilen als Text und Bild | geplant |
 | Sicherung (Datei, Google Drive), Stammtisch-Zusammenfassung, Wear-OS-App | geplant |
 
 Alles liegt nur auf dem Gerät. Kein Konto, kein Server, keine Werbung, keine Auswertung des Nutzungsverhaltens.
