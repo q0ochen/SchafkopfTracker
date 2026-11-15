@@ -6,6 +6,12 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Testversionen aus der CI (-PciBuildNumber=<Laufnummer>, siehe .github/workflows/android.yml) bekommen eine
+// steigende Versionsnummer, damit Android, F-Droid und Obtainium jede als Update erkennen: versionCode
+// 1000 + Laufnummer, versionName „0.1.0-test.<Laufnummer>“. Sie werden als Release gebaut (flüssiger als ein
+// Debug-Build) und mit dem öffentlichen Test-Schlüssel signiert. Lokale Builds bleiben bei den festen Werten unten.
+val ciBuildNumber: Int? = providers.gradleProperty("ciBuildNumber").orNull?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+
 android {
     namespace = "io.github.q0ochen.schafkopf"
     compileSdk = 37
@@ -19,9 +25,24 @@ android {
         versionName = "0.1.0"
     }
 
+    // Fester, öffentlicher Test-Schlüssel (kein Geheimnis, liegt bewusst im Repository): Alle Debug-Builds und alle
+    // Testversionen haben dieselbe Signatur und lassen sich als Update über eine installierte Version installieren,
+    // ohne dass Daten verloren gehen. Für echte Veröffentlichungen ist er tabu (siehe docs/F-DROID.md).
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Nur Testversionen aus der CI werden signiert; ein normaler Release-Build bleibt unsigniert (so baut
+            // auch F-Droid und signiert dann selbst).
+            if (ciBuildNumber != null) signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -69,6 +90,19 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
+// Versionsnummer der Testversionen (siehe oben). Die festen Werte in defaultConfig bleiben stehen, weil F-Droid sie
+// später per Textsuche aus dieser Datei liest.
+androidComponents {
+    onVariants { variant ->
+        val build = ciBuildNumber ?: return@onVariants
+        val baseName = android.defaultConfig.versionName ?: "0.0.0"
+        variant.outputs.forEach { output ->
+            output.versionCode.set(1000 + build)
+            output.versionName.set("$baseName-test.$build")
+        }
     }
 }
 

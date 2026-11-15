@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        Die App braucht derzeit kein Internet: Alles bleibt auf dem Gerät. Die Netzbibliothek (OkHttp, für die spätere
+        KI-Zusammenfassung im Modul data) bringt die Berechtigung von selbst mit; sie wird hier wieder entfernt.
+        Erst wenn Abend-Kommentator oder Drive-Sicherung in die App kommen, diese Zeile löschen.
+    -->
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove" />
 
     <application
         android:name=".app.SchafkopfApp"
