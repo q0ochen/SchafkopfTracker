@@ -1,0 +1,15 @@
+<p><b>For Schafkopf evenings at the pub.</b> After every game one player records what was played, and the app works out to the cent who receives or pays how much. The app is in German.</p>
+
+<ul>
+<li><b>Game types:</b> Rufspiel, Über Kreuz, Farbsolo, Wenz and Geier, with Laufende, Schneider, Schwarz, Tout and Sie, Kontra and Retour.</li>
+<li><b>Doubling:</b> every player who knocked doubles the value (matchbox symbol); “6 Nixer” start a Bock round in which games count double.</li>
+<li><b>Evening:</b> running totals with places, dealer and Bock counter; every game can be edited or deleted later and everything is recalculated at once.</li>
+<li><b>Configurable rules:</b> tariffs, Laufende, Bock round, pot split for solo games; every evening keeps its own rules.</li>
+<li><b>Made for dimly lit pubs:</b> dark design, large buttons, works with a screen reader.</li>
+</ul>
+
+<p><b>Privacy:</b> everything stays on the device. No internet, no account, no ads, no tracking.</p>
+
+<p><b>Test version:</b> statistics, backup and the watch app are still to come. For the iPhone there is a web app with the same calculations.</p>
+
+<p>Free software (CC0 1.0). Source code: <a href="https://github.com/q0ochen/SchafkopfTracker">github.com/q0ochen/SchafkopfTracker</a></p>

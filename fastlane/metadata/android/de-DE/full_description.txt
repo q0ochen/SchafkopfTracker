@@ -1,0 +1,15 @@
+<p><b>Für den Schafkopf-Abend im Wirtshaus.</b> Nach jedem Spiel trägt einer ein, was gespielt wurde, und die App rechnet auf den Cent genau aus, wer wie viel bekommt oder zahlt.</p>
+
+<ul>
+<li><b>Spielarten:</b> Rufspiel, Über Kreuz, Farbsolo, Wenz und Geier, mit Laufenden, Schneider, Schwarz, Tout und Sie, Kontra und Retour.</li>
+<li><b>Gelegt und Bock:</b> Jeder, der gelegt hat, verdoppelt (Streichholzschachtel-Symbol); „6 Nixer“ lösen eine Bockrunde aus, deren Spiele doppelt zählen.</li>
+<li><b>Abend:</b> laufender Stand mit Plätzen, wer gibt, Bock-Zähler; jedes Spiel lässt sich nachträglich ändern oder löschen, alles rechnet sich sofort neu.</li>
+<li><b>Regeln einstellbar:</b> Tarife, Laufende, Bockrunde, Topf-Teilung beim Einzelspiel; jeder Abend behält seine Regeln.</li>
+<li><b>Gemacht für schummrige Wirtshäuser:</b> dunkles Design, große Tasten, Bedienung mit Screenreader.</li>
+</ul>
+
+<p><b>Datenschutz:</b> Alles bleibt auf dem Gerät. Die App braucht kein Internet, kein Konto und hat keine Werbung und kein Tracking.</p>
+
+<p><b>Testversion:</b> Statistik, Sicherung und die Uhr-App kommen noch. Fürs iPhone gibt es eine Web-App mit denselben Rechnungen.</p>
+
+<p>Freie Software (CC0 1.0). Quellcode: <a href="https://github.com/q0ochen/SchafkopfTracker">github.com/q0ochen/SchafkopfTracker</a></p>
