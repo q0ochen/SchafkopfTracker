@@ -63,8 +63,15 @@ einzige lange Zeile Text). Er liegt nirgends im Repository.
 2. **Name:** `FDROID_REPO_KEYSTORE`
 3. **Secret:** den ganzen Inhalt der Datei einfügen (eine lange Zeile; Leerzeichen und Zeilenumbrüche, die beim
    Kopieren am Handy entstehen, stören nicht).
-4. **Add secret** → dann **Actions → Android → Run workflow** → Branch wählen (den Zweig mit dem neuesten Stand) →
-   **Run workflow**. Nach etwa 20 Minuten steht die Paketquelle bereit.
+4. **Add secret**. Danach die Paketquelle einmal bauen lassen:
+   - Liegt der Workflow schon in `main`: **Actions → Android → Run workflow** → Branch wählen (den Zweig mit dem
+     neuesten Stand) → **Run workflow**.
+   - Solange er nur auf einem Arbeitszweig liegt, zeigt GitHub den Knopf „Run workflow“ **nicht** an (er erscheint
+     erst, wenn der Workflow im Hauptzweig `main` liegt). Dann Claude bitten, den Lauf zu starten, oder den neuesten
+     Lauf von „Android“ öffnen und **Re-run all jobs** antippen (am Handy hinter „…“).
+
+   Nach etwa 15 Minuten steht die Paketquelle bereit. Am 15.11.2026 hat Claude den ersten Lauf mit Schlüssel
+   gestartet (Lauf 4 auf dem Zweig `claude/gracious-keller-48tcn0`).
 
 Danach baut jede neue Testversion die Paketquelle automatisch neu. Fehlt das Secret, überspringt der Workflow nur
 diesen Teil; Tests, Installationstest und die Testversion zum Herunterladen laufen trotzdem.
