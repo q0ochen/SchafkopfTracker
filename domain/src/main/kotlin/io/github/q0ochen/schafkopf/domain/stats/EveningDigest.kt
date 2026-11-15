@@ -120,7 +120,23 @@ internal class EveningDigest(val state: EveningState) {
     /** Summe aller positiven Beträge aller Einträge, auch der freien Buchungen. */
     val turnover: Int = state.results.sumOf { result -> result.amounts.values.filter { it > 0 }.sum() }
 
-    val leadChanges: Int = countLeadChanges(Progression.balancePoints(state))
+    /**
+     * Die Salden aller Spieler am Start und nach jedem abgerechneten Spiel. Freie Buchungen zählen zum nächsten
+     * abgerechneten Spiel; stehen sie hinter dem letzten, zählen sie zu dessen Punkt. Ohne ein einziges Spiel gibt
+     * es nur einen Punkt, den Stand des Abends.
+     *
+     * Anders als im Verlauf des Abend-Bildschirms ([Progression]) hat ein Spiel, das sich nicht abrechnen ließ, hier
+     * keinen eigenen Punkt: Die Statistik zählt solche Spiele nirgends mit.
+     */
+    val balancePoints: List<Map<PlayerId, Int>> = buildList {
+        add(state.evening.seating.associateWith { 0 })
+        for (result in state.results) {
+            if (result.isPlayedGame()) add(result.balances)
+        }
+        set(lastIndex, state.balances)
+    }
+
+    val leadChanges: Int = countLeadChanges(balancePoints)
 
     val highestBalance: Int = state.balances.values.maxOrNull() ?: 0
 

@@ -86,14 +86,18 @@ data class HistoryStats(
  * Berechnet die Statistik über viele Abende. Reine Funktion; nichts wird gespeichert.
  *
  * Jeder Abend wird mit [EveningCalculator] neu durchgerechnet. Die Reihenfolge der übergebenen Abende spielt keine
- * Rolle: Ausgewertet wird in zeitlicher Reihenfolge, damit bei Gleichstand immer das frühere Ereignis gewinnt.
- * Ein doppelt übergebener Abend (gleiche Kennung) zählt nur einmal.
+ * Rolle: Ausgewertet wird in zeitlicher Reihenfolge (bei gleichem Beginn nach der Kennung), damit bei Gleichstand
+ * immer das frühere Ereignis gewinnt.
+ *
+ * Jede Kennung darf nur einen Abend bezeichnen. Derselbe Abend doppelt in der Liste zählt nur einmal. Stehen unter
+ * einer Kennung zwei verschiedene Fassungen in der Liste (das lässt die Datenhaltung nicht zu), zählt die zuerst
+ * übergebene; nur in diesem Fall kommt es auf die Reihenfolge an.
  */
 object HistoryStatistics {
 
     fun compute(evenings: List<Evening>): HistoryStats = fromDigests(digests(evenings))
 
-    /** Rechnet jeden Abend genau einmal durch: ohne Dubletten und in zeitlicher Reihenfolge. */
+    /** Rechnet jeden Abend genau einmal durch: ohne Dubletten (die erste Fassung zählt) und in zeitlicher Reihenfolge. */
     internal fun digests(evenings: List<Evening>): List<EveningDigest> =
         evenings
             .distinctBy { it.id }

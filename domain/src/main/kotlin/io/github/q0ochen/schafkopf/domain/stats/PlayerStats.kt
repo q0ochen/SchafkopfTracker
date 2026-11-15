@@ -53,8 +53,8 @@ data class EveningBalance(val eveningId: EveningId, val balance: Int)
  * @property schneiderLost Spiele mit Schneider auf der Verliererseite.
  * @property schwarzWon Spiele mit Schwarz auf der Gewinnerseite. Schwarz zählt nicht zusätzlich als Schneider.
  * @property schwarzLost Spiele mit Schwarz auf der Verliererseite.
- * @property toutPlayed Tout und Sie als Ansager (nur Einzelspiele; ein fälschlich bei Über Kreuz eingetragenes Tout
- *   zählt nicht).
+ * @property toutPlayed Tout und Sie als Ansager. Gezählt wird, was eingetragen und abgerechnet wurde, auch ein
+ *   regelwidrig beim Rufspiel eingetragenes Tout. Nur bei Über Kreuz zählt es nicht, weil dort niemand ansagt.
  * @property biggestWin Höchster Einzelbetrag aus einem Spiel; `null`, wenn es keinen Gewinn gab.
  * @property biggestLoss Niedrigster Einzelbetrag aus einem Spiel; `null`, wenn es keinen Verlust gab.
  * @property longestWinStreak Längste Folge gewonnener Spiele innerhalb eines Abends. Zusammengeworfene Blätter,

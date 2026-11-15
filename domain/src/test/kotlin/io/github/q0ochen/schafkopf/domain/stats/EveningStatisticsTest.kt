@@ -191,6 +191,24 @@ class EveningStatisticsTest {
     }
 
     @Test
+    fun `ein regelwidrig beim Rufspiel eingetragenes Tout zaehlt wie gebucht beim Ansager`() {
+        // Tout gibt es nur im Einzelspiel. Steht es trotzdem bei einem Rufspiel, wird es angezeigt und mit dem
+        // Tout-Faktor gebucht (20 × 2 = 40); die Statistik zählt dann, was gebucht wurde.
+        val rufspielTout = GameEntry(
+            id(), now, GameType.RUFSPIEL, declarer = a, partner = b, declarerWon = true,
+            announcement = Announcement.TOUT,
+        )
+        val state = EveningCalculator.compute(
+            Evening(EveningId("klein"), now, seating = seating, firstDealer = a, rules = RuleSet.sauspiel(), entries = listOf(rufspielTout)),
+        )
+        val stats = EveningStatistics.compute(state)
+
+        assertEquals(listOf(40, 40, -40, -40), seating.map { state.balances.getValue(it) })
+        assertEquals(RoleRecord(1, 1), stats.of(a).toutPlayed)
+        assertEquals(RoleRecord(0, 0), stats.of(b).toutPlayed)
+    }
+
+    @Test
     fun `ein bei Ueber Kreuz eingetragenes Tout zaehlt nicht als Tout`() {
         // So etwas lässt die Eingabe nicht zu; aus einer eingelesenen Sicherung kann es trotzdem kommen.
         val kreuz = GameEntry(

@@ -26,7 +26,8 @@ data class Standing(val player: PlayerId, val balance: Int, val rank: Int)
  *   Freie Buchungen zählen zum nächsten Spiel desselben Abends; stehen sie hinter dem letzten Spiel des Abends,
  *   zählen sie zu dessen Punkt. Buchungen eines Abends ohne abgerechnetes Spiel zählen zum nächsten Spiel eines
  *   späteren Abends und, wenn keines mehr folgt, zum letzten Punkt (ohne ein einziges Spiel ist das der einzige
- *   Punkt der Reihe). Wer an einem Abend nicht am Tisch saß, bleibt dort waagerecht.
+ *   Punkt der Reihe). Wer an einem Abend nicht am Tisch saß, bleibt dort waagerecht; einzige Ausnahme ist eine
+ *   solche Buchung von einem Abend ohne Spiel, die im Punkt eines anderen Abends erscheint.
  * @property eveningStarts Wo im Verlauf ein Abend beginnt: der Index des Punktes vor seinem ersten Spiel. Die Spiele
  *   des Abends sind die Punkte dahinter bis einschließlich des nächsten Eintrags dieser Liste (oder bis zum Ende).
  *   Abende ohne abgerechnetes Spiel fehlen.
@@ -224,8 +225,9 @@ data class PartnerPair(val first: PlayerId, val second: PlayerId, val games: Int
  *
  * @property pairs Alle Gespanne mit mindestens einem gemeinsamen Spiel: höchster gemeinsamer Saldo zuerst, bei
  *   Gleichstand die höhere Gewinnquote, danach nach den Kennungen.
- * @property favorite Die Lieblingspartner: das erste Gespann in [pairs] mit mindestens
- *   [StatisticEngine.MIN_PAIR_GAMES] gemeinsamen Spielen; `null`, wenn es keines gibt.
+ * @property favorite Die Lieblingspartner, das erfolgreichste Gespann: das erste Gespann in [pairs] mit mindestens
+ *   [StatisticEngine.MIN_PAIR_GAMES] gemeinsamen Spielen, aber nur, wenn sein gemeinsamer Saldo über 0 liegt;
+ *   sonst `null`. (Mit wechselnder Besetzung kann das einzige Gespann mit genug Spielen eines im Minus sein.)
  */
 data class PartnerOverview(val pairs: List<PartnerPair>, val favorite: PartnerPair?) {
     /** Die Bilanz zweier Spieler als Gespann; `null`, wenn sie nie zusammen auf einer Seite standen. */
@@ -243,14 +245,15 @@ data class PartnerOverview(val pairs: List<PartnerPair>, val favorite: PartnerPa
  * @property gameCount Abgerechnete Spiele über alle Abende.
  * @property players Alle Spieler, die an mindestens einem der Abende am Tisch saßen. Für einen einzelnen Abend
  *   ([StatisticEngine.forEvening]) in Sitzreihenfolge, sonst höchster Saldo zuerst und bei Gleichstand nach Kennung.
- *   Alle Listen „je Spieler“ haben diese Reihenfolge.
+ *   Alle Listen „je Spieler“ haben diese Reihenfolge; nur `history.playerStats` steht immer nach Saldo.
  * @property finance Finanz-Übersicht: Kontostände und Vermögensverlauf.
  * @property gameModes Spielart-Analyse je Spieler.
  * @property gelegt „Sollte-er-es-lassen?“-Index je Spieler.
  * @property bock Bilanz der Bockspiele und der Bock-König.
  * @property solo Solo-Spezialist und Mauerblümchen.
  * @property partners Die Zweiergespanne und die Lieblingspartner.
- * @property history Die übrigen Kennzahlen (Rollen, Serien, Schneider, teuerstes Spiel und so weiter).
+ * @property history Die übrigen Kennzahlen (Rollen, Serien, Schneider, teuerstes Spiel und so weiter). Ihre
+ *   Spielerliste steht immer nach Saldo absteigend, auch für einen einzelnen Abend.
  */
 data class Statistics(
     val eveningCount: Int,
@@ -296,8 +299,10 @@ object StatisticEngine {
 
     /**
      * Die Auswertung über viele Abende. Die Reihenfolge der Liste spielt keine Rolle (ausgewertet wird zeitlich
-     * geordnet), ein doppelt übergebener Abend zählt nur einmal. Die Spieler stehen nach Saldo absteigend, bei
-     * Gleichstand nach Kennung; das gilt auch, wenn die Liste nur einen Abend enthält.
+     * geordnet, bei gleichem Beginn nach der Kennung), derselbe Abend doppelt zählt nur einmal. Jede Kennung darf
+     * nur einen Abend bezeichnen; von zwei verschiedenen Fassungen unter einer Kennung zählt die zuerst übergebene.
+     * Die Spieler stehen nach Saldo absteigend, bei Gleichstand nach Kennung; das gilt auch, wenn die Liste nur
+     * einen Abend enthält.
      */
     fun forEvenings(evenings: List<Evening>): Statistics {
         val digests = HistoryStatistics.digests(evenings)
@@ -461,7 +466,8 @@ object StatisticEngine {
         val pairs = tallies
             .map { (pair, tally) -> PartnerPair(pair.first, pair.second, tally.games, tally.won, tally.balance) }
             .sortedWith(PAIR_ORDER)
-        return PartnerOverview(pairs, favorite = pairs.firstOrNull { it.games >= MIN_PAIR_GAMES })
+        // Die Liste steht nach Saldo: Ist das erste Gespann mit genug Spielen nicht im Plus, ist es keines.
+        return PartnerOverview(pairs, favorite = pairs.firstOrNull { it.games >= MIN_PAIR_GAMES }?.takeIf { it.balance > 0 })
     }
 
     private class PairTally {

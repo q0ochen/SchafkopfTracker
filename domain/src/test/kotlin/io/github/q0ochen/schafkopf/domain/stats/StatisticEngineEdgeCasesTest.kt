@@ -12,6 +12,7 @@ import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.rules.Announcement
 import io.github.q0ochen.schafkopf.domain.rules.GameType
+import io.github.q0ochen.schafkopf.domain.rules.KontraLevel
 import io.github.q0ochen.schafkopf.domain.rules.PayoutRule
 import io.github.q0ochen.schafkopf.domain.rules.RuleSet
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -463,7 +464,8 @@ class StatisticEngineEdgeCasesTest {
         assertEquals(a, alone.solo.specialist?.player)
         assertNull(alone.solo.wallflower)
 
-        // Ruft B dreimal, ist er das Mauerblümchen, obwohl A den kleineren Solo-Anteil unter den Solisten hat.
+        // Ruft B dreimal, ist er das Mauerblümchen (er hat nie allein gespielt). Den Fall, dass der Spezialist den
+        // kleinsten Solo-Anteil von allen hat, prüft `StatisticEngineReviewTest`.
         val other = StatisticEngine.forEvening(evening("anderer", *solos(a, 1), *calls(a, c, 9), *calls(b, d, 3)))
         assertEquals(a, other.solo.specialist?.player)
         assertEquals(SoloRecord(b, solos = 0, calls = 3), other.solo.wallflower)
@@ -704,12 +706,22 @@ class StatisticEngineEdgeCasesTest {
     fun `Tout und Kontra gehen mit ihren gebuchten Betraegen in die Auswertung ein`() {
         // Wenz-Tout von A, gewonnen: 50 × 2 = 100, A bekommt 300.
         val tout = GameEntry(id(), firstDay, GameType.WENZ, declarer = a, declarerWon = true, announcement = Announcement.TOUT)
-        val stats = StatisticEngine.forEvening(evening("tout", tout))
+        // Rufspiel C mit D, gewonnen, mit Kontra von A: 10 × 2 = 20.
+        val kontra = GameEntry(
+            id(), firstDay, GameType.RUFSPIEL, declarer = c, partner = d, declarerWon = true,
+            kontra = KontraLevel.KONTRA, kontraBy = a,
+        )
+        val stats = StatisticEngine.forEvening(evening("tout", tout, kontra))
 
         assertEquals(ModeRecord(1, 1, 300), stats.gameModesOf(a)?.asPlayer?.getValue(GameType.WENZ))
         assertEquals(ModeRecord(1, 0, -100), stats.gameModesOf(b)?.atTable?.getValue(GameType.WENZ))
         assertEquals(SoloRecord(a, solos = 1, calls = 0), stats.solo.specialist)
         assertEquals(RoleRecord(1, 1), stats.history.statsFor(a)?.toutPlayed)
+        assertEquals(ModeRecord(1, 1, 20), stats.gameModesOf(c)?.asPlayer?.getValue(GameType.RUFSPIEL))
+        assertEquals(ModeRecord(1, 0, -20), stats.gameModesOf(a)?.atTable?.getValue(GameType.RUFSPIEL))
+        assertEquals(RoleRecord(1, 0), stats.history.statsFor(a)?.kontraGiven)
+        // A 300 − 20, B −100 − 20, C −100 + 20, D −100 + 20.
+        assertEquals(listOf(280, -120, -80, -80), stats.finance.standings.map { it.balance })
     }
 
     @Test

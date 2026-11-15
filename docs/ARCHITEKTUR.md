@@ -129,13 +129,16 @@ object StatisticEngine {
 }
 ```
 
-`Statistics` enthält (alle Beträge in Cent; Quoten als `Double?`, `null` ohne Fälle; alles deterministisch; ein
-doppelt übergebener Abend zählt nur einmal):
+`Statistics` enthält (alle Beträge in Cent; Quoten als `Double?`, `null` ohne Fälle; alles deterministisch).
+Ausgewertet wird in zeitlicher Reihenfolge, bei gleichem Beginn nach der Kennung. Derselbe Abend doppelt in der
+Liste zählt nur einmal; jede Kennung darf nur einen Abend bezeichnen (von zwei verschiedenen Fassungen unter einer
+Kennung zählt die zuerst übergebene).
 
 - `eveningCount` (Abende mit mindestens einem abgerechneten Spiel), `gameCount` (nur abgerechnete Spiele) und
   `players` (alle, die an einem der Abende am Tisch saßen): bei `forEvening` in Sitzreihenfolge, bei `forEvenings`
   Saldo absteigend und bei Gleichstand nach Kennung, auch wenn die Liste nur einen Abend enthält. Alle Listen
-  „je Spieler“ haben diese Reihenfolge; wo unten „weiter vorn“ steht, ist diese Reihenfolge gemeint.
+  „je Spieler“ haben diese Reihenfolge (nur `history.playerStats` steht immer nach Saldo); wo unten „weiter vorn“
+  steht, ist diese Reihenfolge gemeint.
 - `finance: FinanceOverview` (Finanz-Übersicht): `standings` (`Standing` mit `player`, `balance`, `rank`; Gleichstand
   teilt den Platz); `balanceSeries: Map<PlayerId, List<Int>>` für das Liniendiagramm (Index 0 ist 0, danach der Stand
   nach jedem abgerechneten Spiel über alle Abende in zeitlicher Reihenfolge; Länge `gameCount + 1`; letzter Punkt =
@@ -143,7 +146,8 @@ doppelt übergebener Abend zählt nur einmal):
   Abend beginnt: der Index des Punktes vor seinem ersten Spiel; nur Abende mit abgerechnetem Spiel); `turnover`.
   Freie Buchungen zählen zum nächsten Spiel desselben Abends, hinter dem letzten Spiel zu dessen Punkt. Buchungen
   eines Abends ohne Spiel zählen zum nächsten Spiel eines späteren Abends, sonst zum letzten Punkt (ohne ein
-  einziges Spiel ist das der einzige Punkt der Reihe).
+  einziges Spiel ist das der einzige Punkt der Reihe); nur dadurch kann sich die Linie eines Spielers an einem
+  Abend bewegen, an dem er nicht am Tisch saß.
 - `gameModes: List<PlayerGameModes>` (Analyse je Spielart, je Spieler): `atTable` und `asPlayer` als
   `Map<GameType, ModeRecord>` (jede Spielart enthalten) mit `games`, `won`, `balance`, `winRate` und `averageAmount`
   (`Int?`, kaufmännisch gerundet, `null` ohne Spiel). `asPlayer` zählt nur selbst gespielte Spiele (Ansager,
@@ -164,7 +168,7 @@ doppelt übergebener Abend zählt nur einmal):
 - `partners: PartnerOverview` (Lieblingspartner): `pairs` (`PartnerPair` mit `first`, `second`, `games`, `won`,
   `winRate`, `balance`): alle Zweiergespanne aus Rufspiel und Über Kreuz, die auf derselben Seite standen (auch als
   Gegenspielerpaar); sortiert nach Saldo, dann Quote, dann Kennungen; `favorite` = das erste Gespann mit mindestens
-  3 gemeinsamen Spielen.
+  3 gemeinsamen Spielen, nur wenn sein Saldo über 0 liegt („erfolgreichstes Zweiergespann“).
 - `history: HistoryStats`: die übrigen Kennzahlen (Rollen, Serien, Schneider, teuerstes Spiel und so weiter).
 
 Für die gesamte Statistik (`EveningStatistics`, `HistoryStatistics`, `StatisticEngine`) gilt:
@@ -173,6 +177,8 @@ Für die gesamte Statistik (`EveningStatistics`, `HistoryStatistics`, `Statistic
   halbiert: Mit der Topf-Teilung stimmt die Hälfte nicht auf den Cent.
 - Über Kreuz kennt keinen Ansager und zählt deshalb nicht in `asDeclarer`, `asPartner`, `asOpponent`,
   `declarerByType` und `toutPlayed`.
+- Ein Spiel, das sich nicht abrechnen ließ, zählt nirgends mit, auch nicht bei den Führungswechseln. (Der Verlauf
+  des Abend-Bildschirms, `Progression`, folgt dagegen den Spielnummern und hat für ein solches Spiel einen Punkt.)
 - Ein Abend ohne abgerechnetes Spiel zählt nicht als gespielter Abend (`eveningCount`, `evenings`, Abendsiege, bester
   und schlechtester Abend). Was dort eingetragen wurde, zählt aber mit, damit kein gebuchter Betrag verloren geht:
   freie Buchungen (Saldo und Umsatz), zusammengeworfene Blätter und ausgelöste Bockrunden. So lässt sich auch ein

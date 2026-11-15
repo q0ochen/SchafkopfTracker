@@ -23,9 +23,9 @@ data class ExpensiveGame(val eveningId: EveningId, val entryId: EntryId, val gam
  * @property bockTriggerCount Wie oft eine Bockrunde ausgelöst wurde. Gezählt wird jeder solche Eintrag, auch wenn er
  *   nach dem Regelwerk des Abends ohne Wirkung blieb (Bockrunde abgeschaltet oder Regel „ignorieren“).
  * @property thrownInCount Wie oft das Blatt zusammengeworfen wurde, weil alle „weiter“ gesagt haben.
- * @property leadChanges Führungswechsel: wie oft nach einem gespielten Spiel ein anderer Spieler alleiniger Erster
+ * @property leadChanges Führungswechsel: wie oft nach einem abgerechneten Spiel ein anderer Spieler alleiniger Erster
  *   war als der letzte alleinige Erste davor. Der erste alleinige Erste des Abends ist noch kein Wechsel.
- *   Freie Buchungen zählen wie im Verlauf ([Progression]) zum nächsten Spiel, hinter dem letzten Spiel zu diesem.
+ *   Freie Buchungen zählen zum nächsten abgerechneten Spiel, hinter dem letzten Spiel zu diesem.
  * @property mostExpensiveGame Das Spiel mit dem höchsten Spielwert, bei Gleichstand das frühere; `null` ohne Spiel.
  * @property turnover Umsatz: die Summe aller positiven Beträge aller Einträge, auch der freien Buchungen.
  */

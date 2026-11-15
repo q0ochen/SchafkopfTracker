@@ -11,6 +11,10 @@ import io.github.q0ochen.schafkopf.domain.model.PlayerId
  * Freie Buchungen zählen zum nächsten gespielten Spiel. Stehen sie hinter dem letzten Spiel, zählen sie zum letzten
  * Punkt. Der letzte Punkt ist deshalb immer der aktuelle Stand des Abends; ohne ein einziges Spiel steht eine
  * freie Buchung im einzigen Punkt der Reihe.
+ *
+ * Die Punkte folgen den Spielnummern des Abends. Auch ein Spiel, das sich nicht abrechnen ließ, trägt eine Nummer
+ * und hat deshalb hier seinen Punkt (der Stand bleibt dort stehen). Die Statistik ([StatisticEngine]) zählt solche
+ * Spiele dagegen nicht mit; ihr Verlauf hat dann entsprechend weniger Punkte.
  */
 object Progression {
 

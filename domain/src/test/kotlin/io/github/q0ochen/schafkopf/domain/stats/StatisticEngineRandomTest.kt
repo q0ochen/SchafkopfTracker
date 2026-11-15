@@ -253,7 +253,10 @@ class StatisticEngineRandomTest {
         // Zweiergespanne
         val expectedPairs = reference.pairs()
         assertEquals(expectedPairs, stats.partners.pairs)
-        assertEquals(expectedPairs.firstOrNull { it.games >= 3 }, stats.partners.favorite)
+        // Das beste Gespann mit mindestens drei gemeinsamen Spielen, aber nur, wenn es im Plus steht.
+        val bestWithEnoughGames = expectedPairs.filter { it.games >= 3 }.maxByOrNull { it.balance }
+        assertEquals(bestWithEnoughGames?.balance?.takeIf { it > 0 }, stats.partners.favorite?.balance)
+        assertEquals(expectedPairs.firstOrNull { it.games >= 3 && it.balance > 0 }, stats.partners.favorite)
         assertEquals(0, stats.partners.pairs.sumOf { it.balance })
     }
 

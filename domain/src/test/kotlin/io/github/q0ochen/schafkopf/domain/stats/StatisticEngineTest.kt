@@ -182,7 +182,8 @@ class StatisticEngineTest {
         assertEquals(expected, first.finance.balanceSeries)
         assertEquals(listOf(0), first.finance.eveningStarts)
         assertEquals(listOf(RoundEvenings.id), first.finance.eveningIds)
-        // Für einen einzelnen Abend ist das derselbe Verlauf, den der Abend-Bildschirm zeichnet.
+        // Für einen einzelnen Abend ist das derselbe Verlauf, den der Abend-Bildschirm zeichnet (solange sich, wie
+        // hier, jedes Spiel abrechnen lässt).
         assertEquals(Progression.balanceSeries(firstState), first.finance.balanceSeries)
     }
 
