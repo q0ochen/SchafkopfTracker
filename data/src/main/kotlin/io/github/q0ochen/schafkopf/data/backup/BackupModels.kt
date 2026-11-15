@@ -56,6 +56,12 @@ enum class EveningProblem {
      */
     GAME_NOT_ZERO_SUM,
 
+    /**
+     * Ein Spielwert oder ein Saldo liegt außerhalb des Bereichs, mit dem die App rechnen kann (negativ oder
+     * unsinnig groß). Der Eintrag bucht dann nichts und fehlte stillschweigend in den Salden des Abends.
+     */
+    AMOUNT_OUT_OF_RANGE,
+
     /** Zwei Einträge des Abends tragen dieselbe Kennung; jeder Eintrag braucht seine eigene. */
     DUPLICATE_ENTRY_ID,
 }

@@ -10,6 +10,8 @@ import io.github.q0ochen.schafkopf.data.storage.UnreadableDataException
 import io.github.q0ochen.schafkopf.data.storage.parseInstant
 import io.github.q0ochen.schafkopf.data.storage.toDto
 import io.github.q0ochen.schafkopf.domain.evening.BockTriggerEntry
+import io.github.q0ochen.schafkopf.domain.evening.EntryIssue
+import io.github.q0ochen.schafkopf.domain.evening.EntryResult
 import io.github.q0ochen.schafkopf.domain.evening.Evening
 import io.github.q0ochen.schafkopf.domain.evening.EveningCalculator
 import io.github.q0ochen.schafkopf.domain.evening.EveningEntry
@@ -20,8 +22,9 @@ import io.github.q0ochen.schafkopf.domain.model.EntryId
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
-import io.github.q0ochen.schafkopf.domain.rules.ScoreCalculator
 import io.github.q0ochen.schafkopf.domain.rules.RuleSet
+import io.github.q0ochen.schafkopf.domain.rules.RuleViolation
+import io.github.q0ochen.schafkopf.domain.rules.ScoreCalculator
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -243,7 +246,8 @@ internal object BackupFormat {
 /**
  * Prüft, ob ein Abend in sich stimmig ist: genau vier verschiedene Spieler am Tisch, jeder mit einer Kennung, der
  * erste Geber sitzt am Tisch, in den Einträgen kommen nur Spieler vom Tisch vor, jede freie Buchung und jedes Spiel
- * geht auf null auf und kein Eintrag trägt die Kennung eines anderen.
+ * geht auf null auf, kein Betrag sprengt den Bereich, mit dem die App rechnet, und kein Eintrag trägt die Kennung
+ * eines anderen.
  */
 internal object EveningCheck {
 
@@ -291,8 +295,18 @@ internal object EveningCheck {
                     "Im Spiel im Eintrag Nr. $number ist der Ansager als sein eigener Mitspieler eingetragen.",
                 )
             }
+            // Ein Spiel, mit dessen Wert die App nicht rechnen kann, und ein Eintrag, der einen Saldo aus dem
+            // Zahlenbereich triebe, buchen nichts: Sie fehlten sonst stillschweigend in den Salden des Abends.
+            val result = results.getOrNull(index)
+            if (result != null && isOutOfRange(evening, entry, result)) {
+                return EveningFinding(
+                    EveningProblem.AMOUNT_OUT_OF_RANGE,
+                    "Der Eintrag Nr. $number lässt sich nicht abrechnen: Ein Betrag liegt außerhalb des Bereichs, " +
+                        "mit dem die App rechnen kann.",
+                )
+            }
             // Jedes Spiel ist ein Nullsummenspiel; die Salden des Abends stimmten sonst nicht mehr.
-            val amounts = results.getOrNull(index)?.amounts.orEmpty()
+            val amounts = result?.amounts.orEmpty()
             if (entry is GameEntry && amounts.values.sumOf { it.toLong() } != 0L) {
                 return EveningFinding(
                     EveningProblem.GAME_NOT_ZERO_SUM,
@@ -308,6 +322,17 @@ internal object EveningCheck {
             }
         }
         return null
+    }
+
+    /**
+     * Ob der Eintrag nichts gebucht hat, weil ein Betrag nicht in den Bereich passt, mit dem die App rechnet: ein
+     * Spielwert unter 0 oder über [ScoreCalculator.MAX_VALUE] oder ein Saldo jenseits des Zahlenbereichs.
+     */
+    private fun isOutOfRange(evening: Evening, entry: EveningEntry, result: EntryResult): Boolean {
+        if (EntryIssue.BALANCE_OUT_OF_RANGE in result.issues) return true
+        if (entry !is GameEntry) return false
+        val facts = with(EveningCalculator) { entry.toFacts(evening.seating, result.bockExponent) }
+        return RuleViolation.VALUE_OUT_OF_RANGE in ScoreCalculator.validate(facts, evening.rules)
     }
 
     /** Alle Spieler, die ein Eintrag nennt. */

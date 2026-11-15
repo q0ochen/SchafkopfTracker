@@ -23,6 +23,7 @@ import io.github.q0ochen.schafkopf.domain.ports.InMemorySettingsRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.rules.GameType
 import io.github.q0ochen.schafkopf.domain.rules.RuleSet
+import io.github.q0ochen.schafkopf.domain.rules.ScoreCalculator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -478,6 +479,20 @@ class BackupServiceTest {
                     "Unsinn",
                 ),
             ) to EveningProblem.MANUAL_NOT_ZERO_SUM,
+            // Ein Grundwert, mit dem sich nicht rechnen lässt: Das Spiel würde nichts buchen.
+            good.copy(rules = good.rules.copy(prices = good.rules.prices + (GameType.RUFSPIEL to Int.MAX_VALUE))) to
+                EveningProblem.AMOUNT_OUT_OF_RANGE,
+            good.copy(rules = good.rules.copy(prices = good.rules.prices + (GameType.RUFSPIEL to -20))) to
+                EveningProblem.AMOUNT_OUT_OF_RANGE,
+            // Jede der beiden Buchungen geht für sich auf, zusammen passt der Saldo aber nicht mehr in 32 Bit:
+            // 2 000 000 000 + 2 000 000 000 ist mehr als 2 147 483 647.
+            good.copy(
+                entries = listOf(
+                    game,
+                    ManualEntry(EntryId("frei-1"), TestData.start, mapOf(TestData.a to 2_000_000_000, TestData.b to -2_000_000_000), "Unsinn"),
+                    ManualEntry(EntryId("frei-2"), TestData.start, mapOf(TestData.a to 2_000_000_000, TestData.b to -2_000_000_000), "Unsinn"),
+                ),
+            ) to EveningProblem.AMOUNT_OUT_OF_RANGE,
         )
         for ((evening, problem) in cases) {
             val finding = EveningCheck.firstProblem(evening)
@@ -492,6 +507,18 @@ class BackupServiceTest {
         assertEquals(
             "Im Eintrag Nr. 2 kommt ein Spieler vor, der nicht am Tisch sitzt.",
             EveningCheck.firstProblem(withEntry(game.copy(declarer = stranger)))?.reason,
+        )
+        assertEquals(
+            "Der Eintrag Nr. 1 lässt sich nicht abrechnen: Ein Betrag liegt außerhalb des Bereichs, mit dem die App rechnen kann.",
+            EveningCheck.firstProblem(
+                good.copy(rules = good.rules.copy(prices = good.rules.prices + (GameType.RUFSPIEL to -20))),
+            )?.reason,
+        )
+        // Der größte Spielwert, mit dem die App noch rechnet, ist kein Befund.
+        assertNull(
+            EveningCheck.firstProblem(
+                good.copy(rules = good.rules.copy(prices = good.rules.prices + (GameType.RUFSPIEL to ScoreCalculator.MAX_VALUE))),
+            ),
         )
 
         // Stimmige Abende haben keinen Befund, auch der mit jeder Eintragsart nicht.

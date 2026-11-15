@@ -78,7 +78,7 @@ Spielwert T = (Grundwert + Laufende × Einheit + Schneider + Schwarz) × Bock ×
 | Laufende | 0 bis 8 (Wenz und Geier bis 4); gezählt ab 3 bzw. ab 2 bei Wenz und Geier |
 | Bock | Faktor 2 |
 | Gelegt | jeder der 0 bis 4 Spieler, die gelegt haben, verdoppelt |
-| Kontra, Ansage | Kontra ×2, Retour ×4, Tout ×2 (ohne Schneider und Schwarz); abschaltbar |
+| Kontra, Ansage | Kontra ×2, Retour ×4 (beide im Regelwerk abschaltbar); Tout ×2 und Sie (ohne Schneider und Schwarz; ein eigener Schalter fehlt noch) |
 
 Verteilung (`PayoutCalculator`):
 
@@ -86,7 +86,18 @@ Verteilung (`PayoutCalculator`):
 - `PotSplitPayout`: einer gegen drei: Solist ±T, die drei Gegner teilen sich T (Rest-Cent an die vorderen Plätze).
 
 Referenzfälle für Tests: Rufspiel ohne Zusätze = je ±10. Farbsolo mit 3 Laufenden, schwarz, zweimal gelegt
-= (50 + 30 + 20) × 4 = 400 je Gegner, 1200 für den Solisten.
+= (50 + 30 + 20) × 4 = 400 je Gegner, 1200 für den Solisten. Weitere von Hand gerechnete Fälle stehen in
+`HandCalculatedCasesTest` und `HandCalculatedEveningTest`.
+
+Beschädigte Daten (zum Beispiel aus einer verfälschten Datei) bringen die Abrechnung weder zum Absturz noch zu
+falschen Summen:
+
+- Der Spielwert wird ohne Überlauf gerechnet. Liegt er unter 0 oder über `ScoreCalculator.MAX_VALUE` (ein Drittel
+  des größten `Int`, damit auch der dreifache Betrag des Solisten passt), meldet `ScoreCalculator.validate`
+  `RuleViolation.VALUE_OUT_OF_RANGE`, und `ScoreCalculator.amounts` verteilt nichts.
+- Jede Verteilung ist ein Nullsummenspiel. Wo sich nichts sinnvoll verteilen lässt (keine Gegenseite, ein Spieler
+  doppelt genannt), bekommen alle 0. Geht eine Summe nicht auf (nur bei falscher Spielerzahl möglich), wird der Rest
+  vorn beginnend centweise verteilt.
 
 ### Abend
 
@@ -98,8 +109,16 @@ Referenzfälle für Tests: Rufspiel ohne Zusätze = je ±10. Farbsolo mit 3 Lauf
 - Über Kreuz kennt keinen Ansager (`GameType.hasDeclarer` ist `false`): `declarer` und `partner` bezeichnen dort nur
   das eine der beiden Paare, `declarerWon` sagt, ob dieses Paar gewonnen hat.
 - Ein Spiel, bei dem nicht feststeht, wer auf welcher Seite stand (Ansager unbekannt, Mitspieler fehlt oder ist der
-  Ansager selbst), bekommt eine Nummer, bucht aber nichts und wird als Regelverstoß angezeigt.
-- `SettleUp.transfers` („wer zahlt wem“) wirft nie; `SettleUp.isBalanced` sagt, ob die Salden aufgehen.
+  Ansager selbst), bekommt eine Nummer, bucht aber nichts und wird als Regelverstoß angezeigt. Dasselbe gilt, wenn
+  jemand doppelt am Tisch sitzt oder der Spielwert außerhalb des Bereichs liegt (`VALUE_OUT_OF_RANGE`).
+- `EveningCalculator.compute` wirft nie, auch nicht bei leerer oder falscher Sitzordnung; ohne Sitzordnung gilt
+  `firstDealer` als Geber. Jeder Eintrag bucht entweder ein Nullsummenspiel oder nichts; was nichts bucht, ist
+  markiert (`EntryResult.issues`). Nur eine als fehlerhaft markierte freie Buchung kann von der Nullsumme abweichen.
+- `EntryIssue`: `RULE_VIOLATION`, `AMOUNTS_NOT_ZERO_SUM`, `UNKNOWN_PLAYER` (freie Buchung an jemanden oder gelegt von
+  jemandem, der nicht am Tisch sitzt) und `BALANCE_OUT_OF_RANGE` (mit dem Eintrag verließe ein Saldo den
+  Zahlenbereich; er wird dann nicht gebucht).
+- `SettleUp.transfers` („wer zahlt wem“) wirft nie und rechnet ohne Überlauf; `SettleUp.isBalanced` sagt, ob die
+  Salden aufgehen.
 
 ### Statistik (`StatisticEngine`, Issues #10 bis #13)
 
@@ -171,8 +190,29 @@ Schemas. Das Schema jeder Version liegt unter `database/schemas/`; jede Änderun
 ### Sicherung (`:data`)
 
 Eine UTF-8-JSON-Datei mit Kopf (`format`, `schemaVersion`, `appVersion`, `exportedAt`), festen Schlüsseln und
-Beträgen in Cent. Der Import führt zusammen und löscht nichts. Dieselbe Datei wird auf Google Drive gesichert
+Beträgen in Cent. Der Import führt zusammen und löscht nichts; ein Abend, der in sich nicht stimmig ist (falsche
+Sitzordnung, unbekannte Spieler, Buchungen, die nicht aufgehen, Beträge außerhalb des Bereichs, mit dem die App
+rechnet), wird mit Begründung ausgelassen (`EveningCheck`, `EveningProblem`). Dieselbe Datei wird auf Google Drive gesichert
 (Hintergrundarbeit mit `WorkManager`, ohne Empfang nachgeholt). Schlüssel und Anmeldedaten stehen nie in der Sicherung.
+
+### Sprachmodell (`:data`, Paket `data.llm`)
+
+`GeminiTextGenerator` und `OpenAiCompatibleTextGenerator` setzen den Port `TextGenerator` über REST um (OkHttp, ohne
+Bibliothek eines Anbieters); die gemeinsame Netzanbindung ist `LlmTransport`. Zugesagt und mit Tests belegt:
+
+- Der Schlüssel reist nur in einer Kopfzeile, nie in der Adresse. Er steht in keinem Fehler, keinem `toString` und
+  keinem Protokoll; als Zusatz zu einem Fehler dient nur ein kurzes Kürzel wie „HTTP 429 RESOURCE_EXHAUSTED“.
+- Gesendet wird nur an Adressen, die die `EndpointPolicy` erlaubt: `https` überall, `http` nur zum eigenen Gerät und
+  ins eigene Netz (als Zahlenadresse). Weiterleitungen werden nie befolgt, und unverschlüsselte Aufrufe laufen nie
+  über einen Proxy.
+- Aus jedem Fehler wird ein `LlmResult.Failure`, nie eine Ausnahme; nur ein echter Abbruch der Coroutine wird
+  durchgereicht. Bei Überlastung (HTTP 429, 500, 502, 503, 504) folgt genau ein zweiter Versuch.
+- Antworten über 8 MiB werden verworfen. Jede Verbindung wird nach ihrem Aufruf geschlossen, auch über HTTP/2.
+- Zeitlimits (`defaultHttpClient`): 10 Sekunden Verbindungsaufbau, 60 Sekunden je Lesevorgang, 3 Minuten für einen
+  Aufruf insgesamt.
+
+Wichtig für später: An dem gemeinsamen Client darf nie ein Baustein hängen, der Anfragen mitschreibt (die
+Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 
 ## 4. App (`:app`)
 

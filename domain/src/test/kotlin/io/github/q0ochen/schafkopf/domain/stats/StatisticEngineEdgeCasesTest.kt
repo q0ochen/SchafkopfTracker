@@ -262,6 +262,69 @@ class StatisticEngineEdgeCasesTest {
         assertEquals(listOf(PartnerPair(a, b, 1, 1, 20), PartnerPair(c, d, 1, 0, -20)), stats.partners.pairs)
     }
 
+    @Test
+    fun `beschaedigte Abende bringen die Auswertung nicht zum Absturz`() {
+        // Ohne Sitzordnung gibt es keine Spieler; die Einträge lassen sich niemandem zuordnen und buchen nichts.
+        val noSeating = Evening(
+            id = EveningId("ohne-tisch"),
+            startedAt = firstDay,
+            seating = emptyList(),
+            firstDealer = a,
+            rules = RuleSet.standard(),
+            entries = listOf(rufspiel(a, b), booking(a to 10, b to -10)),
+        )
+        val empty = StatisticEngine.forEvening(noSeating)
+        assertEquals(emptyList<PlayerId>(), empty.players)
+        assertEquals(0, empty.eveningCount)
+        assertEquals(0, empty.gameCount)
+        assertEquals(emptyList<Standing>(), empty.finance.standings)
+        assertEquals(emptyMap<PlayerId, List<Int>>(), empty.finance.balanceSeries)
+        assertEquals(0, empty.finance.turnover)
+        assertEquals(emptyList<PartnerPair>(), empty.partners.pairs)
+
+        // Sitzt jemand doppelt am Tisch, wird kein Spiel abgerechnet; jeder Spieler steht nur einmal in der Liste.
+        val doubleSeat = evening("doppelt", rufspiel(a, b), solo(c), seating = listOf(a, a, b, c))
+        val doubled = StatisticEngine.forEvening(doubleSeat)
+        assertEquals(listOf(a, b, c), doubled.players)
+        assertEquals(0, doubled.gameCount)
+        assertEquals(listOf(a, b, c).map { Standing(it, balance = 0, rank = 1) }, doubled.finance.standings)
+
+        // Zusammen mit einem gesunden Abend zählt nur dieser.
+        val healthy = evening("gesund", rufspiel(a, b), day = 1)
+        val table = StatisticEngine.forEvenings(listOf(noSeating, doubleSeat, healthy))
+        assertEquals(1, table.eveningCount)
+        assertEquals(1, table.gameCount)
+        assertEquals(listOf(a, b, c, d), table.players)
+        assertEquals(listOf(10, 10, -10, -10), table.finance.standings.map { it.balance })
+        assertEquals(listOf(EveningId("gesund")), table.finance.eveningIds)
+    }
+
+    @Test
+    fun `ein Eintrag, der einen Saldo sprengen wuerde, bucht nichts und zaehlt nicht mit`() {
+        // Die zweite Buchung über zwei Milliarden passte nicht mehr in den Zahlenbereich; ebenso das Farbsolo danach,
+        // dessen Grundwert das Regelwerk dieses Abends auf 700 Millionen setzt (A bekäme das Dreifache).
+        val absurd = RuleSet.standard().let { it.copy(prices = it.prices + (GameType.FARBSOLO to 700_000_000)) }
+        val stats = StatisticEngine.forEvening(
+            evening(
+                "riesig",
+                rufspiel(a, b),
+                booking(a to 2_000_000_000, b to -2_000_000_000),
+                booking(a to 2_000_000_000, b to -2_000_000_000),
+                solo(a),
+                rules = absurd,
+            ),
+        )
+
+        assertEquals(1, stats.gameCount)
+        assertEquals(
+            listOf(Standing(a, 2_000_000_010, 1), Standing(b, -1_999_999_990, 4), Standing(c, -10, 2), Standing(d, -10, 2)),
+            stats.finance.standings,
+        )
+        assertEquals(listOf(0, 2_000_000_010), stats.finance.balanceSeries[a])
+        assertEquals(SoloRecord(a, solos = 0, calls = 1), stats.solo.recordOf(a))
+        assertEquals(0, stats.gameModesOf(a)?.atTable?.getValue(GameType.FARBSOLO)?.games)
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // Gleichstände
     // ---------------------------------------------------------------------------------------------------------------

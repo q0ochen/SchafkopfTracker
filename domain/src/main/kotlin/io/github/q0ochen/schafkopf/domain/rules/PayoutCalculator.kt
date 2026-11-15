@@ -13,7 +13,8 @@ enum class PayoutRule {
 
 /**
  * Verteilt den Spielwert T eines Spiels auf die Spieler. Jede Umsetzung muss ein Nullsummenspiel liefern:
- * Die Beträge aller Spieler summieren sich zu 0.
+ * Die Beträge aller Spieler summieren sich zu 0 – auch bei unsinnigen Eingaben (beschädigte Daten). Lässt sich
+ * nichts sinnvoll verteilen, bekommen alle 0.
  */
 fun interface PayoutCalculator {
     /**
@@ -39,18 +40,9 @@ fun interface PayoutCalculator {
  * Einer gegen drei: Jeder der drei zahlt bzw. bekommt T, der Einzelne bekommt bzw. zahlt 3 T.
  */
 object SchafkopfPayout : PayoutCalculator {
-    override fun payout(value: Int, winners: List<PlayerId>, losers: List<PlayerId>): Map<PlayerId, Int> {
-        // Ohne Gegenseite gibt es nichts zu verteilen.
-        if (winners.isEmpty() || losers.isEmpty()) return (winners + losers).associateWith { 0 }
-
+    override fun payout(value: Int, winners: List<PlayerId>, losers: List<PlayerId>): Map<PlayerId, Int> =
         // Die größere Seite rechnet pro Kopf mit T; die kleinere Seite teilt sich deren Summe.
-        val (perWinner, perLoser) = if (winners.size <= losers.size) {
-            value * losers.size / winners.size to value
-        } else {
-            value to value * winners.size / losers.size
-        }
-        return winners.associateWith { perWinner } + losers.associateWith { -perLoser }
-    }
+        distribute(value, winners, losers, winnersPerHead = winners.size > losers.size)
 }
 
 /**
@@ -59,19 +51,46 @@ object SchafkopfPayout : PayoutCalculator {
  * damit kein Cent verloren geht. Zwei gegen zwei wird wie bei der Schafkopf-Regel abgerechnet.
  */
 object PotSplitPayout : PayoutCalculator {
-    override fun payout(value: Int, winners: List<PlayerId>, losers: List<PlayerId>): Map<PlayerId, Int> {
-        if (winners.size == losers.size || winners.isEmpty() || losers.isEmpty()) {
-            return SchafkopfPayout.payout(value, winners, losers)
-        }
-        val (small, big, smallSign) = if (winners.size < losers.size) Triple(winners, losers, 1) else Triple(losers, winners, -1)
-        val pot = value * small.size
-        return small.associateWith { smallSign * value } + big.zip(splitEvenly(pot, big.size)).associate { (player, share) -> player to -smallSign * share }
-    }
+    override fun payout(value: Int, winners: List<PlayerId>, losers: List<PlayerId>): Map<PlayerId, Int> =
+        // Die kleinere Seite rechnet pro Kopf mit T; die größere Seite teilt sich deren Summe.
+        distribute(value, winners, losers, winnersPerHead = winners.size < losers.size)
+}
 
-    /** Teilt [total] Cent auf [parts] Teile auf; ein Rest wird vorn beginnend centweise verteilt. */
-    private fun splitEvenly(total: Int, parts: Int): List<Int> {
-        val base = total / parts
-        val remainder = total % parts
-        return List(parts) { index -> if (index < remainder) base + 1 else base }
-    }
+/**
+ * Gemeinsamer Kern beider Regeln: Die eine Seite rechnet pro Kopf mit T ab, die andere teilt sich deren Summe.
+ * Geht die Summe nicht auf, wird der Rest vorn beginnend centweise verteilt. So ist das Ergebnis immer ein
+ * Nullsummenspiel; bei zwei gegen zwei und einem gegen drei mit der Schafkopf-Regel bleibt nie ein Rest.
+ *
+ * Wo sich nichts sinnvoll verteilen lässt, bekommen alle 0: ohne Gegenseite, wenn ein Spieler doppelt genannt ist,
+ * bei negativem Spielwert und wenn die Summe nicht mehr in einen `Int` passt.
+ *
+ * @param winnersPerHead `true`: Jeder Gewinner bekommt T, die Verlierer teilen sich die Summe.
+ *   `false`: Jeder Verlierer zahlt T, die Gewinner teilen sich die Summe.
+ */
+private fun distribute(
+    value: Int,
+    winners: List<PlayerId>,
+    losers: List<PlayerId>,
+    winnersPerHead: Boolean,
+): Map<PlayerId, Int> {
+    val nothing = (winners + losers).associateWith { 0 }
+    val perHead = if (winnersPerHead) winners else losers
+    val sharing = if (winnersPerHead) losers else winners
+    // Als Long gerechnet, damit ein riesiger Spielwert nicht überläuft.
+    val total = value.toLong() * perHead.size
+    val everyoneOnce = nothing.size == winners.size + losers.size
+    if (winners.isEmpty() || losers.isEmpty() || !everyoneOnce || total !in 0..Int.MAX_VALUE) return nothing
+
+    // Gewinner bekommen (+), Verlierer zahlen (−).
+    val perHeadSign = if (winnersPerHead) 1 else -1
+    val shares = splitEvenly(total.toInt(), sharing.size)
+    return perHead.associateWith { perHeadSign * value } +
+        sharing.zip(shares).associate { (player, share) -> player to -perHeadSign * share }
+}
+
+/** Teilt [total] Cent (nie negativ) auf [parts] Teile auf; ein Rest wird vorn beginnend centweise verteilt. */
+private fun splitEvenly(total: Int, parts: Int): List<Int> {
+    val base = total / parts
+    val remainder = total % parts
+    return List(parts) { index -> if (index < remainder) base + 1 else base }
 }

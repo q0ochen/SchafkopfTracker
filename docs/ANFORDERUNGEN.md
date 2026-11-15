@@ -41,9 +41,9 @@ Spielwert T = (Grundwert + Laufende × 10 Cent + Schneider + Schwarz) × Bock ×
   Standard ist die Schafkopf-Regel.
 - Gerechnet wird in ganzen Cent. Jedes Spiel ist ein Nullsummenspiel.
 
-Zusätze aus den Angaben des Projektinhabers (im Regelwerk abschaltbar): Kontra und Retour sowie Tout und Sie
-wie bei sauspiel.de; „6 Nixer“ lösen eine Bockrunde aus, deren Zähler den Bock-Schalter vorbelegt;
-„zusammengeworfen“ als eigener Eintrag ohne Zahlung.
+Zusätze aus den Angaben des Projektinhabers: Kontra und Retour (im Regelwerk abschaltbar) sowie Tout und Sie
+wie bei sauspiel.de (ein eigener Schalter dafür fehlt noch); „6 Nixer“ lösen eine Bockrunde aus (abschaltbar),
+deren Zähler den Bock-Schalter vorbelegt; „zusammengeworfen“ als eigener Eintrag ohne Zahlung.
 
 ## 4. Bedienung und Gestaltung
 
