@@ -70,3 +70,38 @@ object ChartMath {
         return ((x - plotLeft) / plotWidth * last).roundToInt().coerceIn(0, last)
     }
 }
+
+/**
+ * Waagerechte Skala der Balken einer Spielart im Spielarten-Diagramm: die Null in der Mitte, nach beiden Seiten so
+ * weit wie der größte Betrag [max] in Cent. Jede Spielart hat ihre eigene Skala, damit sich die Spieler innerhalb
+ * einer Spielart gut vergleichen lassen (Soli bringen ein Vielfaches eines Rufspiels); die Beträge stehen als Zahl
+ * daneben.
+ */
+data class BarScale(val max: Long) {
+    init {
+        require(max >= 0) { "Der größte Betrag kann nicht negativ sein: $max" }
+    }
+
+    /** Wo die Null über die Breite [width] liegt: immer in der Mitte. */
+    fun zero(width: Float): Float = width / 2f
+
+    /**
+     * Anfang und Ende des Balkens für [value] über die Breite [width]: von der Null nach rechts (Gewinn) oder links
+     * (Verlust), beim größten Betrag bis an den Rand. Ein Wert ungleich 0 bekommt mindestens die Länge [minLength],
+     * damit auch ein kleiner Gewinn oder Verlust zu sehen ist, höchstens aber die halbe Breite. Bei 0 liegen Anfang
+     * und Ende auf der Null.
+     */
+    fun span(value: Int, width: Float, minLength: Float): ClosedFloatingPointRange<Float> {
+        val zero = zero(width)
+        if (value == 0 || max == 0L) return zero..zero
+        val half = width / 2f
+        val share = (abs(value.toLong()).toDouble() / max).coerceAtMost(1.0)
+        val length = maxOf((share * half).toFloat(), minLength).coerceAtMost(half)
+        return if (value > 0) zero..zero + length else zero - length..zero
+    }
+
+    companion object {
+        /** Die Skala für [values]: so weit wie der größte Betrag, egal ob Gewinn oder Verlust. */
+        fun of(values: Iterable<Int>): BarScale = BarScale(values.maxOfOrNull { abs(it.toLong()) } ?: 0L)
+    }
+}

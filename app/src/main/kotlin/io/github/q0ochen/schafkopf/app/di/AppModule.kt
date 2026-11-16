@@ -132,6 +132,7 @@ val appModule = module {
             initial = params.get<String>(0).takeIf { it.isNotEmpty() }?.let(::EveningId),
             evenings = get(),
             players = get(),
+            commentator = get(),
         )
     }
     viewModel { SettingsViewModel(get()) }

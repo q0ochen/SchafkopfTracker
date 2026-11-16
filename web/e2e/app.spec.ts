@@ -89,6 +89,9 @@ test("ein Abend am Tisch: eintragen, zurücknehmen, ändern, Bock, Abschluss", a
   await page.getByRole("button", { name: "Statistik dieses Abends" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Vermögensverlauf" })).toBeVisible();
   await expect(page.getByRole("group", { name: /Vermögensverlauf/ })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Spielarten: selbst gespielt" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Ø je Spiel" })).toBeVisible();
+  await expect(page.getByRole("rowheader", { name: /Wenz · 1 Spiel/ })).toBeVisible();
   await expectAccessible(page);
 
   // Nach dem Neuladen ist alles noch da.

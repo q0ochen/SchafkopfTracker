@@ -8,7 +8,7 @@
 <li><b>Abschluss und Statistik:</b> Endstand und wer wem wie viel zahlt; Statistik für einen Abend oder alle Abende mit Vermögensverlauf, Spielarten, „Sollte er es lassen?“ beim Legen, Bock-König, Solo-Spezialist und Lieblingspartner.</li>
 <li><b>Teilen:</b> Abschluss und Statistik als Text oder als Bild, zum Beispiel an Signal oder Telegram.</li>
 <li><b>Sicherung:</b> als Datei speichern und einlesen (auch mit der Web-App fürs iPhone austauschbar) und auf Wunsch nach jeder Änderung automatisch, direkt in Google Drive oder in eine Datei, die man einmal wählt.</li>
-<li><b>Abend-Kommentator:</b> eine witzige, leicht stichelnde Zusammenfassung des Abends auf Bairisch, aus Textbausteinen oder auf Wunsch von einem Sprachmodell (Google Gemini mit eigenem Schlüssel).</li>
+<li><b>Abend-Kommentator:</b> eine witzige, leicht stichelnde Zusammenfassung des Abends oder eine Bilanz über alle Abende auf Bairisch, aus Textbausteinen oder auf Wunsch von einem Sprachmodell (Google Gemini mit eigenem Schlüssel).</li>
 <li><b>Gemacht für schummrige Wirtshäuser:</b> dunkles Design, große Tasten, Bedienung mit Screenreader.</li>
 </ul>
 

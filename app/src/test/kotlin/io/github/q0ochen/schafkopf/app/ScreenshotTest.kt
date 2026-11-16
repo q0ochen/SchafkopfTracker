@@ -1,6 +1,8 @@
 package io.github.q0ochen.schafkopf.app
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -20,7 +22,10 @@ import io.github.q0ochen.schafkopf.app.ui.ai.AiSettingsScreen
 import io.github.q0ochen.schafkopf.app.ui.backup.BackupScreen
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
 import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
+import io.github.q0ochen.schafkopf.app.ui.common.labelRes
+import io.github.q0ochen.schafkopf.app.ui.statistics.GameModeChart
 import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsScreen
+import io.github.q0ochen.schafkopf.app.ui.statistics.modeChartGroups
 import io.github.q0ochen.schafkopf.app.ui.waitForText
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormScreen
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
@@ -47,6 +52,8 @@ import io.github.q0ochen.schafkopf.app.ui.settings.SettingsScreen
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
+import io.github.q0ochen.schafkopf.domain.stats.StatisticEngine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
@@ -260,10 +267,52 @@ class ScreenshotTest {
         show(ThemeMode.DARK, ready = "Kontostand") { StatisticsScreen(null, Navigator()) }
         capture("15_statistik_alle_dunkel")
         compose.onNodeWithText("Verlauf als Tabelle zeigen").performScrollTo().performClick()
-        compose.onNodeWithText("Selbst gespielt: gewonnen von gespielt").performScrollTo()
+        compose.onNodeWithText("Spielarten: selbst gespielt").performScrollTo()
         capture("16_statistik_tabelle_dunkel")
         compose.onNodeWithText("Rekorde je Spieler").performScrollTo()
         capture("17_statistik_rekorde_dunkel")
+    }
+
+    /** Ganz unten in der Statistik aller Abende: die Bilanz des Kommentators (ohne Sprachmodell aus Textbausteinen). */
+    @Test
+    fun statistik_bilanz_dunkel() {
+        seed(secondEvening = true)
+        show(ThemeMode.DARK, ready = "Kontostand") { StatisticsScreen(null, Navigator()) }
+        compose.onNodeWithText("Kommentar schreiben lassen").performScrollTo().performClick()
+        compose.waitForText("Kommentar teilen")
+        compose.onNodeWithText("Kommentar teilen").performScrollTo()
+        capture("24_statistik_bilanz_dunkel")
+    }
+
+    /** Das Spielarten-Diagramm aller Abende für sich, in einem hohen Fenster, damit es ganz aufs Bild passt. */
+    @Test
+    @Config(qualifiers = "w411dp-h1300dp-normal-long-notround-any-420dpi-keyshidden-nonav")
+    fun statistik_spielarten_dunkel() {
+        seed(secondEvening = true)
+        showModeChart(ThemeMode.DARK)
+        capture("22_statistik_spielarten_dunkel")
+    }
+
+    /** Dasselbe auf einem schmalen Handy (360 dp) und hell. */
+    @Test
+    @Config(qualifiers = "w360dp-h1300dp-normal-long-notround-any-420dpi-keyshidden-nonav")
+    fun statistik_spielarten_schmal_hell() {
+        seed(secondEvening = true)
+        showModeChart(ThemeMode.LIGHT)
+        capture("23_statistik_spielarten_schmal_hell")
+    }
+
+    private fun showModeChart(themeMode: ThemeMode) {
+        val context = ApplicationProvider.getApplicationContext<TestSchafkopfApp>()
+        val names = mapOf(sepp to "Sepp", hans to "Hans", kathi to "Kathi", vroni to "Vroni")
+        val evenings = runBlocking { GlobalContext.get().get<EveningRepository>().evenings.first() }
+        val groups = modeChartGroups(
+            stats = StatisticEngine.forEvenings(evenings),
+            typeLabel = { context.getString(it.labelRes()) },
+            name = { names.getValue(it) },
+            colorIndex = { seating.indexOf(it) },
+        )
+        show(themeMode) { GameModeChart(groups, asMoney = true, modifier = Modifier.padding(16.dp)) }
     }
 
     @Test

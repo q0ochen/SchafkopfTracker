@@ -11,17 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -37,14 +32,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.q0ochen.schafkopf.R
-import io.github.q0ochen.schafkopf.app.ai.CommentarySource
-import io.github.q0ochen.schafkopf.app.ai.messageRes
+import io.github.q0ochen.schafkopf.app.ui.ai.CommentaryConsentDialog
+import io.github.q0ochen.schafkopf.app.ui.ai.CommentarySection
+import io.github.q0ochen.schafkopf.app.ui.ai.CommentaryUi
 import io.github.q0ochen.schafkopf.app.ui.common.AmountText
 import io.github.q0ochen.schafkopf.app.ui.common.Money
 import io.github.q0ochen.schafkopf.app.ui.common.PlayerName
 import io.github.q0ochen.schafkopf.app.ui.common.SectionHeading
 import io.github.q0ochen.schafkopf.app.ui.common.ShareButtons
-import io.github.q0ochen.schafkopf.app.ui.common.Sharing
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
 import io.github.q0ochen.schafkopf.app.ui.common.captureInto
 import io.github.q0ochen.schafkopf.app.ui.common.formatDate
@@ -123,94 +118,14 @@ fun ClosingScreen(eveningId: String, navigator: Navigator) {
                     commentary = state.commentary,
                     onWrite = viewModel::writeCommentary,
                     onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
+                    shareSubject = stringResource(R.string.commentary_share_subject),
                 )
             }
         }
     }
 
     (state.commentary as? CommentaryUi.NeedsConsent)?.let { consent ->
-        AlertDialog(
-            onDismissRequest = viewModel::declineConsent,
-            title = { Text(stringResource(R.string.ai_consent_title, consent.host)) },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.ai_consent_text,
-                        consent.host,
-                        stringResource(if (consent.realNames) R.string.ai_consent_names_on else R.string.ai_consent_names_off),
-                    ),
-                )
-            },
-            confirmButton = { Button(onClick = { viewModel.consent(consent.host) }) { Text(stringResource(R.string.ai_consent_yes)) } },
-            dismissButton = { TextButton(onClick = viewModel::declineConsent) { Text(stringResource(R.string.ai_consent_no)) } },
-        )
-    }
-}
-
-/** Der Abend-Kommentator: Kommentar schreiben lassen, lesen und teilen. */
-@Composable
-private fun CommentarySection(commentary: CommentaryUi, onWrite: () -> Unit, onMessage: (String) -> Unit) {
-    val context = LocalContext.current
-    val chooser = stringResource(R.string.share_chooser)
-    val subject = stringResource(R.string.commentary_share_subject)
-    val noApp = stringResource(R.string.share_no_app)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 16.dp)) {
-        SectionHeading(stringResource(R.string.commentary_heading))
-        val ready = commentary as? CommentaryUi.Ready
-        if (ready != null) {
-            ready.error?.let { error ->
-                Text(
-                    stringResource(R.string.commentary_failed, stringResource(error.messageRes())),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = ready.commentary.text,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(16.dp),
-                )
-            }
-            Text(
-                text = if (ready.commentary.source == CommentarySource.AI) {
-                    stringResource(R.string.commentary_ai_note, ready.commentary.model.ifBlank { "?" })
-                } else {
-                    stringResource(R.string.commentary_template_note)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = { if (!Sharing.shareText(context, chooser, subject, ready.commentary.text)) onMessage(noApp) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp),
-            ) { Text(stringResource(R.string.commentary_share), style = MaterialTheme.typography.titleMedium) }
-        }
-        val writing = commentary == CommentaryUi.Writing
-        OutlinedButton(
-            enabled = !writing,
-            onClick = onWrite,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp),
-        ) {
-            Text(
-                stringResource(
-                    when {
-                        writing -> R.string.commentary_writing
-                        ready != null -> R.string.commentary_again
-                        else -> R.string.commentary_write
-                    },
-                ),
-                style = MaterialTheme.typography.titleMedium,
-            )
-        }
+        CommentaryConsentDialog(consent, allEvenings = false, onConsent = viewModel::consent, onDecline = viewModel::declineConsent)
     }
 }
 

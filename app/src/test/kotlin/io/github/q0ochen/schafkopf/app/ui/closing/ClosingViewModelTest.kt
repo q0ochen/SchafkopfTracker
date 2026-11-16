@@ -5,6 +5,7 @@ import io.github.q0ochen.schafkopf.app.ai.CommentarySource
 import io.github.q0ochen.schafkopf.app.ai.Commentator
 import io.github.q0ochen.schafkopf.app.ai.FakeGeneratorFactory
 import io.github.q0ochen.schafkopf.app.ui.TestEvenings
+import io.github.q0ochen.schafkopf.app.ui.ai.CommentaryUi
 import io.github.q0ochen.schafkopf.app.ui.awaitFirst
 import io.github.q0ochen.schafkopf.domain.model.AiSettings
 import io.github.q0ochen.schafkopf.domain.model.AppSettings

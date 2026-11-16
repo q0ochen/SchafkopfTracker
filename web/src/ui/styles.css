@@ -1043,6 +1043,111 @@ button.card {
   color: var(--on-surface-variant);
 }
 
+/* Spielarten als Balkendiagramm: eine Tabelle, je Spielart ein Abschnitt, alle Balken auf einer Skala. */
+.mode-chart {
+  table-layout: fixed;
+}
+
+.mode-col-player {
+  width: 6.5em;
+}
+
+.mode-col-rate {
+  width: 5em;
+}
+
+.mode-chart th,
+.mode-chart td {
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.mode-chart thead th {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.mode-group th {
+  padding-top: 14px;
+  padding-bottom: 2px;
+  text-align: left;
+  font-weight: 700;
+}
+
+.mode-group-games {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--on-surface-variant);
+}
+
+.mode-average-inner {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode-track {
+  position: relative;
+  flex: 1;
+  height: 44px;
+  margin: 0 4px;
+}
+
+/* Die Null in der Mitte: Gewinn wächst nach rechts, Verlust nach links; rund nur am Ende des Wertes. */
+.mode-bar {
+  position: absolute;
+  top: 50%;
+  height: 12px;
+  min-width: 3px;
+  max-width: 50%;
+  margin-top: -6px;
+  background: currentColor;
+}
+
+.mode-bar.gain {
+  left: 50%;
+  border-radius: 0 4px 4px 0;
+}
+
+.mode-bar.loss {
+  right: 50%;
+  border-radius: 4px 0 0 4px;
+}
+
+.mode-zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
+  background: var(--outline);
+}
+
+.mode-value {
+  flex: none;
+  width: 4.6em;
+  text-align: right;
+}
+
+.mode-rate-value,
+.mode-count {
+  display: block;
+}
+
+.mode-count {
+  font-size: 13px;
+  color: var(--on-surface-variant);
+}
+
+@media (forced-colors: active) {
+  .mode-bar,
+  .mode-zero {
+    background: CanvasText;
+  }
+}
+
 .chart {
   margin: 8px 0;
 }

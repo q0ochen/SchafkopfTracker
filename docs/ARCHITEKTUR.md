@@ -250,10 +250,14 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 - MVVM: je Bildschirm ein ViewModel mit `StateFlow` als Zustand; die Oberfläche liest nur diesen Zustand.
 - Navigation: eigener Stapel aus `Screen`-Werten (`Navigator`), je Eintrag ein eigener ViewModel-Speicher.
 - Bildschirme: Start, Neuer Abend, Abend, Spiel eintragen, Abschluss, Statistik (ein Abend oder alle Abende, oben
-  wählbar; Vermögensverlauf als selbst gezeichnetes Liniendiagramm mit Tabelle als Alternative), Spieler,
-  Einstellungen, Regelwerk, Sicherung, Abend-Kommentator.
+  wählbar; Vermögensverlauf als selbst gezeichnetes Liniendiagramm mit Tabelle als Alternative; Spielarten als
+  Balkendiagramm `GameModeChart` mit eigenem Maßstab je Spielart, `BarScale`), Spieler, Einstellungen, Regelwerk,
+  Sicherung, Abend-Kommentator.
 - Abend-Kommentator (`app/ai`): `Commentator` mit `SummaryService` und `TemplateSummary`; Zustimmung je Dienst
-  (`AiSettings.consentHost`), Platzhalter statt Namen als Standard, Standardmodell `gemini-flash-latest`.
+  (`AiSettings.consentHost`), Platzhalter statt Namen als Standard, Standardmodell `gemini-flash-latest`. Für einen
+  Abend `SummaryFactsBuilder` und `SummaryPrompt.SYSTEM_PROMPT`, für alle Abende `HistoryFactsBuilder` (auf der
+  `StatisticEngine`) und `SummaryPrompt.HISTORY_SYSTEM_PROMPT`. Abschluss und Statistik teilen sich den Ablauf
+  (`ui/ai/Commentary.kt`: `CommentaryFlow`, `CommentarySection`, Zustimmungsdialog).
 - Teilen: Abschluss und Statistik als Text (`ACTION_SEND`) und als Bild (Compose-Ansicht über `GraphicsLayer` als PNG
   im Cache, weitergegeben über `FileProvider`, nur der Ordner `cache/geteilt`).
 - Texte der Oberfläche stehen in `res/values/strings*.xml`; Beträge formatiert ausschließlich `:app`.

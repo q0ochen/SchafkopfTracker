@@ -38,6 +38,7 @@
     <!-- Zustimmung vor dem ersten Senden -->
     <string name="ai_consent_title">Daten an %1$s senden?</string>
     <string name="ai_consent_text">Für den Kommentar gehen Spielstände, Spielarten und besondere Spiele dieses Abends an %1$s. %2$s Im kostenlosen Tarif von Google dürfen die Texte zur Verbesserung der Dienste verwendet werden.</string>
+    <string name="ai_consent_text_all">Für die Bilanz gehen Spielstände, Auszeichnungen und besondere Spiele aller Abende an %1$s. %2$s Im kostenlosen Tarif von Google dürfen die Texte zur Verbesserung der Dienste verwendet werden.</string>
     <string name="ai_consent_names_on">Die echten Namen werden mitgeschickt.</string>
     <string name="ai_consent_names_off">Statt der Namen gehen Platzhalter mit.</string>
     <string name="ai_consent_yes">Senden</string>
@@ -53,6 +54,7 @@
     <string name="commentary_failed">%1$s Hier stattdessen die Zusammenfassung aus Textbausteinen.</string>
     <string name="commentary_share">Kommentar teilen</string>
     <string name="commentary_share_subject">Schafkopf-Abend: der Kommentar</string>
+    <string name="commentary_share_subject_all">Schafkopf: die Bilanz aller Abende</string>
 
     <!-- Fehler des Sprachmodells -->
     <string name="llm_error_invalid_key">Der Schlüssel fehlt oder wird nicht anerkannt (Einstellungen → Abend-Kommentator).</string>
