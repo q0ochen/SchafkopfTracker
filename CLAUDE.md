@@ -146,7 +146,7 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 525, `data` 233, `database` 16, `app` 59, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow
+  `domain` 525, `data` 233, `database` 16, `app` 61, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow
   „Android“ prüft Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
   Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
   `--rerun-tasks` anhängen.
@@ -235,6 +235,13 @@ alles auf dem Zweig `claude/gracious-keller-48tcn0` (Pull Request nach `main` nu
   Testversionen übernimmt die App beim ersten Start einmalig (`LegacyFileImport`); der alte Ordner heißt danach
   `daten-uebernommen` und bleibt liegen.
 - Noch nicht auf einem echten Gerät bedient; die Übernahme der alten Daten ist nur mit Robolectric getestet.
+- Eine unabhängige Durchsicht (16.11.2026) fand fünf Fehler, alle behoben und mit Tests belegt: Meldungen auf dem
+  Sicherungs-Bildschirm verschwanden sofort; Wiederholungen der automatischen Sicherung begannen bei jedem Start der
+  App von vorn (jetzt `KEEP`); eine gelöschte Zieldatei galt als vorübergehender Fehler; nach einer gescheiterten
+  Übernahme belegten die Platzhalter die Kennungen der echten Spieler; die Kontostand-Tabelle war für 360 dp zu breit.
+- Bekannte Grenze: Die automatische Sicherung überschreibt ihre Datei an Ort und Stelle. Bricht das Schreiben
+  mittendrin ab (App beendet, Speicher voll), ist die Datei bis zur nächsten erfolgreichen Sicherung unvollständig.
+  Die Daten in der App selbst sind davon nicht betroffen.
 
 Als Nächstes: Rückmeldungen der Tester, Entscheidungen zu Schritt 6 (unten), dann abstimmen, welche der Issues #1
 bis #19 als erledigt gelten.

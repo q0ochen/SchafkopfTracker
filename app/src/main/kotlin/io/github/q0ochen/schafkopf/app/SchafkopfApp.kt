@@ -31,8 +31,9 @@ class SchafkopfApp : Application() {
             androidContext(this@SchafkopfApp)
             modules(appModule)
         }
-        importLegacyFiles()
-        applicationScope.launch { ensureDefaultPlayers(get()) }
+        // Die Platzhalter der festen Runde nur, wenn die alten Daten drin sind: Sonst belegten sie die Kennungen
+        // spieler-1 bis spieler-4, und die echten Namen kämen beim nächsten Versuch nicht mehr an.
+        if (importLegacyFiles()) applicationScope.launch { ensureDefaultPlayers(get()) }
         startAutoBackup()
     }
 
@@ -41,24 +42,26 @@ class SchafkopfApp : Application() {
      * irgendein Bildschirm sie liest. Das dauert nur einen Augenblick und geschieht nur, solange der alte Ordner
      * noch da ist. Geht es schief, bleibt der Ordner liegen und der nächste Start versucht es wieder.
      */
-    private fun importLegacyFiles() {
-        try {
-            runBlocking(Dispatchers.IO) {
-                LegacyFileImport.runIfNeeded(filesDir.toPath().resolve(LegacyFileImport.FOLDER), get())
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Übernahme der alten Daten fehlgeschlagen; nächster Versuch beim nächsten Start", e)
+    private fun importLegacyFiles(): Boolean = try {
+        runBlocking(Dispatchers.IO) {
+            LegacyFileImport.runIfNeeded(filesDir.toPath().resolve(LegacyFileImport.FOLDER), get())
         }
+        true
+    } catch (e: Exception) {
+        Log.e(TAG, "Übernahme der alten Daten fehlgeschlagen; nächster Versuch beim nächsten Start", e)
+        false
     }
 
     /**
      * Automatische Sicherung: Jede Änderung stößt eine Sicherung an. Ging der letzte Versuch schief (zum Beispiel
-     * weil die Versuche im Hintergrund ausgeschöpft waren), gibt es beim Start der App einen neuen.
+     * weil die Versuche im Hintergrund ausgeschöpft waren), gibt es beim Start der App einen neuen. Wartet noch ein
+     * Wiederholungsversuch, bleibt er stehen: Android startet die App auch für ihn, und ein Ersetzen finge die
+     * Zählung der Versuche immer wieder von vorn an.
      */
     private fun startAutoBackup() {
         val scheduler: AutoBackupScheduler = get()
         scheduler.watch(applicationScope, AutoBackupScheduler.changesOf(get(), get(), get()))
-        if (get<AutoBackupStore>().status.value.lastError == AutoBackupError.WRITE_FAILED) scheduler.request()
+        if (get<AutoBackupStore>().status.value.lastError == AutoBackupError.WRITE_FAILED) scheduler.request(replace = false)
     }
 
     companion object {

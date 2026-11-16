@@ -64,6 +64,7 @@ class ShareTest {
             }
         }
         compose.waitForIdle()
+        compose.waitForText("Wer zahlt wem")
     }
 
     /** Die Absicht hinter dem Teilen-Menü, das zuletzt geöffnet wurde. */

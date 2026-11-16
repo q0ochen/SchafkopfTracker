@@ -99,4 +99,8 @@
     <string name="share_stats_awards_heading">Auszeichnungen:</string>
     <string name="share_stats_gelegt_heading">Sollte er es lassen?</string>
     <string name="share_stats_line">%1$s: %2$s</string>
+    <string name="share_stats_gelegt_line">%1$s – %2$s</string>
+    <string name="share_award_bock_king">%1$s (%2$s in %3$s)</string>
+    <string name="share_award_solo">%1$s (%2$d von %3$d angesagten Spielen allein)</string>
+    <string name="share_award_partners">%1$s und %2$s (%3$d von %4$s gewonnen, %5$s)</string>
 </resources>

@@ -31,6 +31,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import java.io.FileNotFoundException
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -148,6 +149,10 @@ class AutoBackupRunner(
         } catch (_: SecurityException) {
             store.recordFailure(AutoBackupError.ACCESS_LOST, clock.instant())
             AutoBackupOutcome.ACCESS_LOST
+        } catch (_: FileNotFoundException) {
+            // Die Datei gibt es nicht mehr (gelöscht oder verschoben): Warten hilft nicht, sie muss neu gewählt werden.
+            store.recordFailure(AutoBackupError.ACCESS_LOST, clock.instant())
+            AutoBackupOutcome.ACCESS_LOST
         } catch (_: Exception) {
             store.recordFailure(AutoBackupError.WRITE_FAILED, clock.instant())
             AutoBackupOutcome.FAILED
@@ -164,14 +169,21 @@ class AutoBackupRunner(
  */
 class AutoBackupScheduler(private val workManager: () -> WorkManager, private val store: AutoBackupStore) {
 
-    fun request(delay: Duration = DEBOUNCE) {
+    /**
+     * Stößt eine Sicherung an.
+     *
+     * @param replace `true`: ersetzt einen noch wartenden Auftrag, denn gesichert wird ohnehin immer der neueste
+     *   Stand. `false`: Ein wartender Auftrag (etwa ein Wiederholungsversuch) bleibt, wie er ist, samt seiner Zahl
+     *   an Versuchen; nur wenn keiner wartet, kommt ein neuer dazu.
+     */
+    fun request(delay: Duration = DEBOUNCE, replace: Boolean = true) {
         if (!store.status.value.enabled) return
         val request = OneTimeWorkRequestBuilder<AutoBackupWorker>()
             .setInitialDelay(delay.toMillis(), TimeUnit.MILLISECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_SECONDS, TimeUnit.SECONDS)
             .build()
-        // Ersetzt einen noch wartenden Auftrag: Gesichert wird ohnehin immer der neueste Stand.
-        workManager().enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request)
+        val policy = if (replace) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
+        workManager().enqueueUniqueWork(WORK_NAME, policy, request)
     }
 
     fun cancel() {

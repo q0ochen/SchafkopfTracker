@@ -25,9 +25,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicLong
 
-/** Eine Meldung für die Leiste unten: ein Text aus den Ressourcen oder ein fertiger Satz. */
-data class BackupMessage(@StringRes val res: Int = 0, val text: String? = null)
+/**
+ * Eine Meldung für die Leiste unten: ein Text aus den Ressourcen oder ein fertiger Satz.
+ *
+ * @property id Unterscheidet zwei gleichlautende Meldungen nacheinander, damit auch die zweite erscheint.
+ */
+data class BackupMessage(@StringRes val res: Int = 0, val text: String? = null, val id: Long = 0)
 
 /** Eine gelesene Sicherung, die auf „Einlesen“ wartet. */
 data class PendingImport(val json: String, val preview: ImportPreview)
@@ -124,7 +129,7 @@ class BackupViewModel(
             val result = backup.import(pending.json)
             val error = result.error
             if (error != null) {
-                local.update { it.copy(message = BackupMessage(text = error.message)) }
+                post(BackupMessage(text = error.message))
                 return@work
             }
             if (takeNames) pending.preview.differingPlayers.forEach { players.save(it) }
@@ -172,9 +177,15 @@ class BackupViewModel(
         store.status.value.target?.let(::readFrom)
     }
 
-    fun messageShown() = local.update { it.copy(message = null) }
+    /** Die Meldung ist gezeigt worden. Eine inzwischen neuere Meldung bleibt stehen. */
+    fun messageShown(shown: BackupMessage) = local.update { if (it.message == shown) it.copy(message = null) else it }
 
-    private fun say(@StringRes res: Int) = local.update { it.copy(message = BackupMessage(res = res)) }
+    private val messageIds = AtomicLong()
+
+    private fun post(message: BackupMessage) =
+        local.update { it.copy(message = message.copy(id = messageIds.incrementAndGet())) }
+
+    private fun say(@StringRes res: Int) = post(BackupMessage(res = res))
 
     /** Eine Aufgabe nach der anderen; solange sie läuft, sind die Knöpfe gesperrt. */
     private fun work(block: suspend () -> Unit) {

@@ -31,7 +31,11 @@ fun statisticsSummary(resources: Resources, stats: Statistics, single: Boolean, 
     return parts.joinToString(" · ")
 }
 
-/** Die Auszeichnungen als Paare aus Titel und Wert; ohne Träger steht „noch niemand“ da. */
+/**
+ * Die Auszeichnungen als Paare aus Titel und Wert; ohne Träger steht „noch niemand“ da.
+ *
+ * @param short Für den Text zum Teilen: kurze Titel, die Zahlen in Klammern hinter dem Namen.
+ */
 fun awardLines(
     resources: Resources,
     stats: Statistics,
@@ -41,23 +45,24 @@ fun awardLines(
 ): List<Pair<String, String>> {
     val nobody = resources.getString(R.string.award_nobody)
     fun title(long: Int, shortRes: Int) = resources.getString(if (short) shortRes else long)
+    fun pick(long: Int, shortRes: Int) = if (short) shortRes else long
     val bock = stats.bock.king?.let {
         resources.getString(
-            R.string.award_bock_king_value,
+            pick(R.string.award_bock_king_value, R.string.share_award_bock_king),
             names(it.player),
             Money.format(it.balance, asMoney, signed = true),
             resources.getQuantityString(R.plurals.stats_bock_games_dative, it.games, it.games),
         )
     }
     val solo = stats.solo.specialist?.let {
-        resources.getString(R.string.award_solo_value, names(it.player), it.solos, it.announced)
+        resources.getString(pick(R.string.award_solo_value, R.string.share_award_solo), names(it.player), it.solos, it.announced)
     }
     val wallflower = stats.solo.wallflower?.let {
-        resources.getString(R.string.award_solo_value, names(it.player), it.solos, it.announced)
+        resources.getString(pick(R.string.award_solo_value, R.string.share_award_solo), names(it.player), it.solos, it.announced)
     }
     val partners = stats.partners.favorite?.let {
         resources.getString(
-            R.string.award_partners_value,
+            pick(R.string.award_partners_value, R.string.share_award_partners),
             names(it.first),
             names(it.second),
             it.won,
@@ -112,7 +117,7 @@ fun statisticsShareText(
     lines += ""
     lines += resources.getString(R.string.share_stats_gelegt_heading)
     for (record in stats.gelegt) {
-        lines += resources.getString(R.string.share_stats_line, names(record.player), resources.getString(record.badge.labelRes()))
+        lines += resources.getString(R.string.share_stats_gelegt_line, names(record.player), resources.getString(record.badge.labelRes()))
     }
     return lines.joinToString("\n")
 }

@@ -248,10 +248,11 @@ private fun Overview(state: StatisticsUiState, stats: Statistics) {
     val standings = stats.finance.standings.sortedBy { it.rank }
     StatTable(
         columns = listOf(
-            TableColumn(stringResource(R.string.stats_col_player), 120.dp, numeric = false),
-            TableColumn(stringResource(R.string.stats_col_balance), 92.dp),
-            TableColumn(stringResource(R.string.stats_col_games), 56.dp),
-            TableColumn(stringResource(R.string.stats_col_won), 80.dp),
+            // Zusammen 320 dp: passt auch auf schmale Handys (360 dp) und damit ganz ins geteilte Bild.
+            TableColumn(stringResource(R.string.stats_col_player), 104.dp, numeric = false),
+            TableColumn(stringResource(R.string.stats_col_balance), 88.dp),
+            TableColumn(stringResource(R.string.stats_col_games), 52.dp),
+            TableColumn(stringResource(R.string.stats_col_won), 76.dp),
         ),
         rows = standings.map { standing ->
             val stat = historyStats[standing.player]

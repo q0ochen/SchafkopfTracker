@@ -68,10 +68,14 @@ fun BackupScreen(navigator: Navigator) {
         uri?.let { viewModel.chooseAutoTarget(it.toString()) }
     }
 
+    // Erst zeigen, dann als gezeigt melden: Würde die Meldung vorher gelöscht, bräche das ihre Anzeige sofort ab.
     LaunchedEffect(state.message) {
         val message = state.message ?: return@LaunchedEffect
-        viewModel.messageShown()
-        snackbar.showSnackbar(message.text ?: resources.getString(message.res))
+        try {
+            snackbar.showSnackbar(message.text ?: resources.getString(message.res))
+        } finally {
+            viewModel.messageShown(message)
+        }
     }
 
     Scaffold(

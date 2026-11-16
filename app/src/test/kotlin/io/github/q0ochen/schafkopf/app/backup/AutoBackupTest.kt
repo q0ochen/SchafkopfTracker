@@ -38,9 +38,11 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.stopKoin
+import org.koin.dsl.module
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.IOException
 import java.time.Clock
 import java.time.Instant
@@ -117,6 +119,10 @@ class AutoBackupTest {
         assertEquals(AutoBackupOutcome.ACCESS_LOST, runner.run())
         assertEquals(AutoBackupError.ACCESS_LOST, store.status.value.lastError)
 
+        // Gelöscht oder verschoben: Warten hilft nicht, die Datei muss neu gewählt werden.
+        documents.failWrites = FileNotFoundException("gelöscht")
+        assertEquals(AutoBackupOutcome.ACCESS_LOST, runner.run())
+
         documents.failWrites = null
         assertEquals(AutoBackupOutcome.SAVED, runner.run())
         assertNull(store.status.value.lastError)
@@ -144,8 +150,16 @@ class AutoBackupTest {
         changes.value = 3
         assertEquals(1, jobs().count { it.state == WorkInfo.State.ENQUEUED })
 
+        // Beim Start der App bleibt ein wartender Auftrag (zum Beispiel ein Wiederholungsversuch) stehen.
+        val waiting = jobs().single { it.state == WorkInfo.State.ENQUEUED }.id
+        scheduler.request(replace = false)
+        assertEquals(listOf(waiting), jobs().filter { it.state == WorkInfo.State.ENQUEUED }.map { it.id })
+
         scheduler.cancel()
         assertTrue(jobs().all { it.state == WorkInfo.State.CANCELLED })
+        // Ohne wartenden Auftrag kommt auch beim Start einer dazu.
+        scheduler.request(replace = false)
+        assertEquals(1, jobs().count { it.state == WorkInfo.State.ENQUEUED })
         scope.cancel()
     }
 
@@ -162,9 +176,19 @@ class AutoBackupTest {
         assertEquals(ListenableWorker.Result.success(), worker.doWork())
         assertTrue(target.readText().contains("schafkopf-tracker-backup"))
 
-        // Ein Ordner statt einer Datei lässt sich nicht beschreiben: später noch einmal.
+        // Die Datei ist weg (hier: an ihrer Stelle liegt ein Ordner): Warten hilft nicht, also kein neuer Versuch.
         koin.get<AutoBackupStore>().setTarget(Uri.fromFile(folder.newFolder("ordner")).toString(), null)
+        assertEquals(ListenableWorker.Result.failure(), TestListenableWorkerBuilder<AutoBackupWorker>(context).build().doWork())
+        assertEquals(AutoBackupError.ACCESS_LOST, koin.get<AutoBackupStore>().status.value.lastError)
+    }
+
+    @Test
+    fun `ein voruebergehender Fehler fuehrt zu einem neuen Versuch`() = runBlocking {
+        context // startet die App und damit Koin
+        val failing = FakeDocuments().apply { failWrites = IOException("kein Netz") }
+        GlobalContext.get().loadModules(listOf(module { single<DocumentAccess> { failing } }), allowOverride = true)
+        GlobalContext.get().get<AutoBackupStore>().setTarget("mem://sicherung.json", null)
         assertEquals(ListenableWorker.Result.retry(), TestListenableWorkerBuilder<AutoBackupWorker>(context).build().doWork())
-        assertEquals(AutoBackupError.WRITE_FAILED, koin.get<AutoBackupStore>().status.value.lastError)
+        assertEquals(AutoBackupError.WRITE_FAILED, GlobalContext.get().get<AutoBackupStore>().status.value.lastError)
     }
 }

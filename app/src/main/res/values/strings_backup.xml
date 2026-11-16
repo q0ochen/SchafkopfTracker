@@ -17,7 +17,7 @@
     <string name="backup_auto_target">Datei: %1$s</string>
     <string name="backup_auto_last">Zuletzt gesichert: %1$s</string>
     <string name="backup_auto_never">Noch nicht gesichert.</string>
-    <string name="backup_auto_error_access">Am %1$s ging es nicht: Die App darf die Datei nicht mehr schreiben. Bitte den Speicherort neu wählen.</string>
+    <string name="backup_auto_error_access">Am %1$s ging es nicht: Die Datei ist nicht mehr erreichbar (gelöscht, verschoben oder kein Zugriff mehr). Bitte den Speicherort neu wählen.</string>
     <string name="backup_auto_error_write">Am %1$s ging es nicht: Die Datei ließ sich nicht schreiben. Die App versucht es von selbst weiter.</string>
     <string name="backup_auto_choose">Speicherort wählen</string>
     <string name="backup_auto_change">Anderen Speicherort wählen</string>

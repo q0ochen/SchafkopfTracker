@@ -65,6 +65,11 @@ class BackupViewModelTest {
     @After
     fun resetDispatcher() = Dispatchers.resetMain()
 
+    /** Wie die Oberfläche: die gezeigte Meldung als gezeigt melden. */
+    private fun BackupViewModel.clearMessage() {
+        state.value.message?.let(::messageShown)
+    }
+
     /** Ein Gerät: Ablagen, Sicherungsdienst und ViewModel. */
     private inner class Device(players: List<Player>, evenings: List<Evening>, val documents: FakeDocuments = FakeDocuments()) {
         val players = InMemoryPlayerRepository(players)
@@ -91,7 +96,7 @@ class BackupViewModelTest {
         backgroundScope.launch { old.viewModel.state.collect {} }
         old.viewModel.exportTo("mem://sicherung.json")
         assertEquals(R.string.backup_saved, old.viewModel.state.awaitFirst { it.message != null }.message?.res)
-        old.viewModel.messageShown()
+        old.viewModel.clearMessage()
 
         // Neues Handy: nur die Platzhalter der festen Runde, noch kein Abend.
         val fresh = Device(placeholders, emptyList(), shared)
@@ -139,12 +144,12 @@ class BackupViewModelTest {
         device.documents.failReads = DocumentAccess.TooLargeException()
         device.viewModel.readFrom("mem://riesig.json")
         assertEquals(R.string.backup_too_big, device.viewModel.state.awaitFirst { it.message != null }.message?.res)
-        device.viewModel.messageShown()
+        device.viewModel.clearMessage()
 
         device.documents.failReads = IOException("weg")
         device.viewModel.readFrom("mem://weg.json")
         assertEquals(R.string.backup_read_failed, device.viewModel.state.awaitFirst { it.message != null }.message?.res)
-        device.viewModel.messageShown()
+        device.viewModel.clearMessage()
 
         device.documents.failWrites = IOException("voll")
         device.viewModel.exportTo("mem://neu.json")
@@ -162,7 +167,7 @@ class BackupViewModelTest {
         assertEquals("schafkopf-sicherung.json", on.auto.targetName)
         assertTrue(device.documents.files.getValue("mem://drive/schafkopf-sicherung.json").contains("schafkopf-tracker-backup"))
         assertEquals(setOf("mem://drive/schafkopf-sicherung.json"), device.documents.kept)
-        device.viewModel.messageShown()
+        device.viewModel.clearMessage()
 
         // Umziehen gibt das Recht an der alten Datei ab.
         device.viewModel.chooseAutoTarget("mem://karte/neu.json")
@@ -187,6 +192,23 @@ class BackupViewModelTest {
         val off = device.viewModel.state.awaitFirst { it.auto.target == null }
         assertEquals(R.string.backup_auto_disabled, off.message?.res)
         assertTrue(device.documents.kept.isEmpty())
+    }
+
+    @Test
+    fun `zwei gleiche Meldungen nacheinander erscheinen beide, und eine neuere bleibt stehen`() = runTest(dispatcher) {
+        val device = Device(TestEvenings.players, emptyList())
+        backgroundScope.launch { device.viewModel.state.collect {} }
+        device.viewModel.exportTo("mem://a.json")
+        val first = device.viewModel.state.awaitFirst { it.message != null && !it.busy }.message!!
+        device.viewModel.exportTo("mem://b.json")
+        val second = device.viewModel.state.awaitFirst { it.message != first && !it.busy }.message!!
+        assertEquals(first.res, second.res)
+        assertTrue(first.id != second.id)
+        // Die erste Meldung als gezeigt zu melden, löscht nicht die zweite.
+        device.viewModel.messageShown(first)
+        assertEquals(second, device.viewModel.state.value.message)
+        device.viewModel.messageShown(second)
+        assertNull(device.viewModel.state.awaitFirst { it.message == null }.message)
     }
 
     @Test
