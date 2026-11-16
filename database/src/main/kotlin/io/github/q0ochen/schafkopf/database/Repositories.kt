@@ -6,6 +6,7 @@ import androidx.room.withTransaction
 import io.github.q0ochen.schafkopf.domain.evening.Evening
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.Player
+import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +30,10 @@ class RoomPlayerRepository(private val database: SchafkopfDatabase) : PlayerRepo
             val sortOrder = dao.find(player.id.value)?.sortOrder ?: (dao.highestSortOrder() + 1)
             dao.upsert(PlayerEntity(player.id.value, player.name, player.colorIndex, player.archived, sortOrder))
         }
+    }
+
+    override suspend fun delete(id: PlayerId) {
+        dao.delete(id.value)
     }
 }
 

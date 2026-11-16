@@ -7,6 +7,15 @@
     <string name="players_edit_title">Spieler bearbeiten</string>
     <string name="players_archive_label">Archiviert (erscheint nicht mehr in der Auswahl)</string>
     <string name="players_archive_hint">Alte Abende bleiben erhalten.</string>
+    <string name="players_delete">Spieler löschen</string>
+    <string name="players_delete_title">Spieler löschen?</string>
+    <string name="players_delete_text">„%1$s“ wird endgültig gelöscht. Das lässt sich nicht rückgängig machen.</string>
+    <string name="players_delete_confirm">Löschen</string>
+    <string name="players_delete_keep">Behalten</string>
+    <plurals name="players_delete_blocked">
+        <item quantity="one">Spielt in %1$d Abend mit und lässt sich deshalb nicht löschen. Archivieren blendet den Spieler aus; der Abend bleibt erhalten. Ganz entfernen lässt er sich erst, wenn dieser Abend gelöscht ist.</item>
+        <item quantity="other">Spielt in %1$d Abenden mit und lässt sich deshalb nicht löschen. Archivieren blendet den Spieler aus; die Abende bleiben erhalten. Ganz entfernen lässt er sich erst, wenn diese Abende gelöscht sind.</item>
+    </plurals>
 
     <!-- Einstellungen -->
     <string name="settings_title">Einstellungen</string>

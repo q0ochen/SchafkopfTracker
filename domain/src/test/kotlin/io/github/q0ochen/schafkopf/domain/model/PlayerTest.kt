@@ -40,4 +40,24 @@ class PlayerTest {
         assertEquals(false, player.archived)
         assertEquals(2, player.colorIndex)
     }
+
+    private fun player(id: String, colorIndex: Int, archived: Boolean = false) = Player(PlayerId(id), id, colorIndex, archived)
+
+    @Test
+    fun `ein neuer Spieler bekommt die erste freie Farbe`() {
+        assertEquals(0, Player.nextColorIndex(emptyList()))
+        assertEquals(4, Player.nextColorIndex(listOf(player("a", 0), player("b", 1), player("c", 2), player("d", 3))))
+        // Nach dem Löschen von Spieler 2 ist dessen Farbe wieder frei.
+        assertEquals(1, Player.nextColorIndex(listOf(player("a", 0), player("c", 2), player("d", 3), player("e", 4))))
+        // Archivierte Spieler geben ihre Farbe frei; Nummern über 7 zählen wie ihre Farbe in der Palette.
+        assertEquals(0, Player.nextColorIndex(listOf(player("a", 0, archived = true), player("b", 1))))
+        assertEquals(1, Player.nextColorIndex(listOf(player("a", 8), player("b", -6))))
+    }
+
+    @Test
+    fun `sind alle Farben vergeben, geht es nach der hoechsten Nummer weiter`() {
+        val all = (0 until Player.COLOR_COUNT).map { player("p$it", it) }
+        assertEquals(Player.COLOR_COUNT, Player.nextColorIndex(all))
+        assertEquals(12, Player.nextColorIndex(all + player("x", 11)))
+    }
 }

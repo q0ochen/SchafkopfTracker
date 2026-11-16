@@ -13,6 +13,9 @@ Statistik über alle Abende, sichert die Daten und lässt sich auch von der Uhr 
 ## 2. Spieler und Abende
 
 - Genau vier Spieler in einer festen Runde. Die App belegt vier Spieler vor; ihre Namen trägt die Runde selbst ein.
+- Spieler lassen sich umbenennen, archivieren (erscheinen nicht mehr in der Auswahl, alte Abende bleiben) und
+  löschen (#21). Löschen geht nur bei Spielern, die in keinem Abend vorkommen; sonst verlöre ein Abend seine Namen.
+  Ein neuer Spieler bekommt die erste freie Farbe.
 - Ein Abend hat ein Datum, ein freies Textfeld für den Spielort (keine Karten-Anbindung) und eine Liste von Spielen.
 - Zu Beginn des Abends wird die Sitzreihenfolge festgelegt (für die Geberfolge und die Statistik).
 - Ein Abend hat beliebig viele Spiele. Jedes Spiel lässt sich jederzeit ändern oder löschen; alle Stände und
@@ -96,6 +99,8 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
 - Gespeichert werden Ansager, Mitspieler und Ausgang; die Gewinner werden daraus abgeleitet, weil sich nur so
   „wer ruft fast nur“ und „Lieblingspartner“ berechnen lassen (15.11.2026).
 - Die Namen der Spieler stehen nicht im Quelltext; die Runde trägt sie in der App ein (15.11.2026).
+- Spieler sollen sich löschen lassen (Anmerkung des Hauptentwicklers, 16.11.2026, #21). Umgesetzt mit Schutz:
+  Wer in einem Abend vorkommt, lässt sich nur archivieren, bis die Abende gelöscht sind.
 - Öffentliches Repository, Lizenz CC0 1.0 (15.11.2026).
 - Anmerkungen des Hauptentwicklers werden zu Issues; umgesetzt wird nach Abstimmung mit dem Projektinhaber
   (15.11.2026, siehe README).

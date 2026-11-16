@@ -153,6 +153,26 @@ test("Regeln dieses Abends ändern rechnet neu", async ({ page }) => {
   await expect(standing(page, "Anna")).toContainText("+0,20");
 });
 
+test("Spieler löschen: ohne Abend mit Rückfrage, mit Abend nur archivieren", async ({ page }) => {
+  await openApp(page, "/spieler");
+  await page.getByLabel("Neuer Spieler").fill("Gast");
+  await page.getByRole("button", { name: "Hinzufügen" }).click();
+  await page.getByRole("button", { name: "Gast bearbeiten" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Spieler löschen" }).click();
+  await expect(page.getByRole("dialog", { name: "Spieler löschen?" })).toContainText("„Gast“ wird endgültig gelöscht.");
+  await expectAccessible(page);
+  await page.getByRole("dialog", { name: "Spieler löschen?" }).getByRole("button", { name: "Löschen" }).click();
+  await expect(page.getByRole("list", { name: "Alle Spieler" }).getByRole("listitem")).toHaveCount(4);
+
+  // Wer schon mitgespielt hat, lässt sich nicht löschen.
+  await startEvening(page);
+  await openApp(page, "/spieler");
+  await page.getByRole("button", { name: "Spieler 1 bearbeiten" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Spielt in 1 Abend mit und lässt sich deshalb nicht löschen.");
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Spieler löschen" })).toHaveCount(0);
+});
+
 test("helles Erscheinungsbild ist ebenfalls barrierefrei", async ({ page }) => {
   await openApp(page, "/einstellungen");
   await page.getByRole("group", { name: "Erscheinungsbild" }).getByRole("button", { name: "hell" }).click();

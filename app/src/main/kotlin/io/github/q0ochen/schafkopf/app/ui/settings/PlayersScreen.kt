@@ -33,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -51,23 +52,40 @@ import io.github.q0ochen.schafkopf.app.ui.theme.playerColor
 import io.github.q0ochen.schafkopf.domain.model.IdGenerator
 import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
+import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class PlayersViewModel(private val players: PlayerRepository, private val idGenerator: IdGenerator) : ViewModel() {
-    val state: StateFlow<List<Player>> =
-        players.players.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+/**
+ * Ein Spieler mit der Zahl der Abende, in denen er vorkommt.
+ *
+ * @property eveningCount Nur ein Spieler ohne Abend lässt sich löschen.
+ */
+data class PlayerRow(val player: Player, val eveningCount: Int) {
+    val canDelete: Boolean get() = eveningCount == 0
+}
+
+class PlayersViewModel(
+    private val players: PlayerRepository,
+    private val evenings: EveningRepository,
+    private val idGenerator: IdGenerator,
+) : ViewModel() {
+    val state: StateFlow<List<PlayerRow>> =
+        combine(players.players, evenings.evenings) { all, allEvenings ->
+            all.map { player -> PlayerRow(player, allEvenings.count { it.involves(player.id) }) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** @return `false`, wenn der Name leer oder zu lang ist. */
     fun add(nameInput: String): Boolean {
         val name = Player.cleanName(nameInput) ?: return false
         viewModelScope.launch {
             val existing = players.players.first()
-            players.save(Player(PlayerId(idGenerator.newId()), name, colorIndex = existing.size))
+            players.save(Player(PlayerId(idGenerator.newId()), name, colorIndex = Player.nextColorIndex(existing)))
         }
         return true
     }
@@ -78,16 +96,26 @@ class PlayersViewModel(private val players: PlayerRepository, private val idGene
         viewModelScope.launch { players.save(player.copy(name = name, archived = archived)) }
         return true
     }
+
+    /**
+     * Löscht einen Spieler endgültig, aber nur, wenn er in keinem Abend vorkommt: Sonst verlöre ein Abend seine Namen
+     * und ließe sich nicht mehr sichern und einlesen. Geprüft wird mit dem aktuellen Stand der Abende.
+     */
+    fun delete(player: Player) {
+        viewModelScope.launch {
+            if (evenings.evenings.first().none { it.involves(player.id) }) players.delete(player.id)
+        }
+    }
 }
 
-/** Spieler anlegen, umbenennen und archivieren. */
+/** Spieler anlegen, umbenennen, archivieren und löschen. */
 @Composable
 fun PlayersScreen(navigator: Navigator) {
     val viewModel: PlayersViewModel = koinViewModel()
-    val players by viewModel.state.collectAsStateWithLifecycle()
+    val rows by viewModel.state.collectAsStateWithLifecycle()
     var newName by rememberSaveable { mutableStateOf("") }
     var newNameError by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<Player?>(null) }
+    var editing by remember { mutableStateOf<PlayerRow?>(null) }
 
     Scaffold(
         topBar = { SubScreenTopBar(title = stringResource(R.string.players_title), onBack = { navigator.back() }) },
@@ -135,7 +163,7 @@ fun PlayersScreen(navigator: Navigator) {
                 ) { Text(stringResource(R.string.new_player_add_confirm)) }
             }
 
-            if (players.isEmpty()) {
+            if (rows.isEmpty()) {
                 Text(
                     stringResource(R.string.players_empty),
                     style = MaterialTheme.typography.bodyLarge,
@@ -143,13 +171,14 @@ fun PlayersScreen(navigator: Navigator) {
                 )
             }
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(players, key = { it.id.value }) { player ->
+                items(rows, key = { it.player.id.value }) { row ->
+                    val player = row.player
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 56.dp)
-                            .clickable(role = Role.Button) { editing = player },
+                            .clickable(role = Role.Button) { editing = row },
                     ) {
                         Box(
                             modifier = Modifier
@@ -179,27 +208,48 @@ fun PlayersScreen(navigator: Navigator) {
         }
     }
 
-    editing?.let { player ->
+    editing?.let { row ->
         EditPlayerDialog(
-            player = player,
+            row = row,
             onDismiss = { editing = null },
             onSave = { name, archived ->
-                if (viewModel.update(player, name, archived)) {
+                if (viewModel.update(row.player, name, archived)) {
                     editing = null
                     true
                 } else {
                     false
                 }
             },
+            onDelete = {
+                viewModel.delete(row.player)
+                editing = null
+            },
         )
     }
 }
 
 @Composable
-private fun EditPlayerDialog(player: Player, onDismiss: () -> Unit, onSave: (String, Boolean) -> Boolean) {
+private fun EditPlayerDialog(row: PlayerRow, onDismiss: () -> Unit, onSave: (String, Boolean) -> Boolean, onDelete: () -> Unit) {
+    val player = row.player
     var name by remember(player.id) { mutableStateOf(player.name) }
     var archived by remember(player.id) { mutableStateOf(player.archived) }
     var error by remember { mutableStateOf(false) }
+    var confirmDelete by remember(player.id) { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.players_delete_title)) },
+            text = { Text(stringResource(R.string.players_delete_text, player.name)) },
+            confirmButton = {
+                TextButton(onClick = onDelete) {
+                    Text(stringResource(R.string.players_delete_confirm), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.players_delete_keep)) } },
+        )
+        return
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -228,6 +278,21 @@ private fun EditPlayerDialog(player: Player, onDismiss: () -> Unit, onSave: (Str
                     checked = archived,
                     onCheckedChange = { archived = it },
                 )
+                if (row.canDelete) {
+                    TextButton(
+                        onClick = { confirmDelete = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                    ) { Text(stringResource(R.string.players_delete), color = MaterialTheme.colorScheme.error) }
+                } else {
+                    Text(
+                        pluralStringResource(R.plurals.players_delete_blocked, row.eveningCount, row.eveningCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         },
         confirmButton = {

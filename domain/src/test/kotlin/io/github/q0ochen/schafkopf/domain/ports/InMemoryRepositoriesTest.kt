@@ -10,6 +10,7 @@ import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.model.ThemeMode
 import io.github.q0ochen.schafkopf.domain.rules.RuleSet
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -54,6 +55,17 @@ class InMemoryRepositoriesTest {
 
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `Spieler - loeschen entfernt nur diesen Spieler, ein unbekannter aendert nichts`() = runTest {
+        val repository = InMemoryPlayerRepository(
+            listOf(Player(PlayerId("A"), "Spieler A", colorIndex = 0), Player(PlayerId("B"), "Spieler B", colorIndex = 1)),
+        )
+        repository.delete(PlayerId("A"))
+        assertEquals(listOf("Spieler B"), repository.players.first().map { it.name })
+        repository.delete(PlayerId("gibt-es-nicht"))
+        assertEquals(listOf("Spieler B"), repository.players.first().map { it.name })
     }
 
     @Test

@@ -64,6 +64,22 @@ describe("AppStore", () => {
     expect(store.playerName("unbekannt")).toBe("?");
   });
 
+  it("löscht nur Spieler, die in keinem Abend vorkommen, und das dauerhaft", async () => {
+    const repository = new InMemoryRepository(testCodec);
+    const store = await AppStore.load(repository, clock());
+    const gast = store.addPlayer("Gast");
+    await store.saveEvening(testEvening());
+    expect(store.deletePlayer("spieler-1")).toBe(false);
+    expect(store.deletePlayer("gibt-es-nicht")).toBe(false);
+    expect(gast).not.toBeNull();
+    expect(store.deletePlayer(gast?.id ?? "")).toBe(true);
+    await store.flush();
+    const reloaded = await AppStore.load(repository, clock());
+    expect(reloaded.getState().players.map((it) => it.id)).toEqual(["spieler-1", "spieler-2", "spieler-3", "spieler-4"]);
+    // Die Farbe des gelöschten Gasts ist wieder frei.
+    expect(reloaded.addPlayer("Neu")?.colorIndex).toBe(4);
+  });
+
   it("meldet Speicherfehler und hebt die Meldung auf, sobald wieder gespeichert wird", async () => {
     const repository = new InMemoryRepository(testCodec);
     const store = await AppStore.load(repository, clock());

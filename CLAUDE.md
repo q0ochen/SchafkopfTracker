@@ -144,7 +144,7 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 519, `data` 229, `app` 15, Web 127 Unit-Tests und 16 Oberflächen-Tests (der Workflow „Android“ prüft
+  `domain` 525, `data` 231, `app` 17, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow „Android“ prüft
   Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
   Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
   `--rerun-tasks` anhängen.
@@ -156,8 +156,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-Der neueste Stand liegt auf dem Zweig `claude/gracious-keller-48tcn0`. Er enthält alles von `entwicklung` und die
-Arbeit der Cloud-Sitzung; `entwicklung` und `main` sind noch auf dem älteren Stand.
+Der neueste Stand liegt auf dem Zweig `claude/gracious-keller-48tcn0`; `main` enthält alles bis Pull Request #20
+(15.11.2026), `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -212,6 +212,12 @@ geprüft: Unterschrift passt zum Fingerabdruck) und GitHub Pages eingeschaltet. 
 seinen Wunsch angelegt (Refs, schließt kein Issue); nach dem Zusammenführen ist die Web-App unter
 https://q0ochen.github.io/SchafkopfTracker/ online. „Run workflow“ zeigt GitHub erst, wenn ein Workflow in `main`
 liegt; bis dahin startet Claude Läufe über die API (`workflow_dispatch`).
+
+Pull Request #20 ist am 15.11.2026 zusammengeführt; die Web-App ist seitdem auf GitHub Pages online.
+
+Am 16.11.2026 (Anmerkung des Hauptentwicklers über den Nutzer, Issue #21): Spieler lassen sich in Android-App und
+Web-App löschen, aber nur, wenn sie in keinem Abend vorkommen (`Evening.involves`, `PlayerRepository.delete`);
+neue Spieler bekommen die erste freie Farbe (`Player.nextColorIndex`).
 
 Als Nächstes: Rückmeldungen der Tester abwarten, abstimmen, welche der Issues #1 bis #19 als erledigt gelten, dann
 Schritt 4 bis 6 und die offenen Fragen unten.
