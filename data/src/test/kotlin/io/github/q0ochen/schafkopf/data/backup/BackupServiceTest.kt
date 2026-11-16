@@ -937,6 +937,8 @@ class BackupServiceTest {
             }
 
             override suspend fun save(player: Player) = storedPlayers.save(player)
+
+            override suspend fun delete(id: PlayerId) = storedPlayers.delete(id)
         }
 
         val evenings: EveningRepository = object : EveningRepository {

@@ -7,7 +7,7 @@ import { compareInstants, instantFromEpochMillis } from "../core/instant";
 import type { AppSettings, Evening, EveningId, InstantText, Player, PlayerId } from "../core/model";
 import { RuleSets } from "../core/rules/RuleSet";
 import type { AppRepository } from "../data/repository";
-import { cleanName, defaultPlayers } from "./players";
+import { cleanName, defaultPlayers, eveningInvolves, nextColorIndex } from "./players";
 
 export interface AppState {
   /** Alle Spieler in Anlagereihenfolge, auch archivierte. */
@@ -167,7 +167,7 @@ export class AppStore {
   addPlayer(nameInput: string): Player | null {
     const name = cleanName(nameInput);
     if (name === null) return null;
-    const player: Player = { id: this.clock.newId(), name, colorIndex: this.state.players.length, archived: false };
+    const player: Player = { id: this.clock.newId(), name, colorIndex: nextColorIndex(this.state.players), archived: false };
     const players = [...this.state.players, player];
     this.setState({ players });
     void this.persist(() => this.repository.savePlayers(players));
@@ -179,6 +179,19 @@ export class AppStore {
     const name = cleanName(nameInput);
     if (name === null) return false;
     const players = this.state.players.map((it) => (it.id === id ? { ...it, name, archived } : it));
+    this.setState({ players });
+    void this.persist(() => this.repository.savePlayers(players));
+    return true;
+  }
+
+  /**
+   * Löscht einen Spieler endgültig, aber nur, wenn er in keinem Abend vorkommt; sonst `false` (dann bleibt nur das
+   * Archivieren). Gibt es ihn nicht, ebenfalls `false`.
+   */
+  deletePlayer(id: PlayerId): boolean {
+    if (!this.state.players.some((it) => it.id === id)) return false;
+    if (this.state.evenings.some((evening) => eveningInvolves(evening, id))) return false;
+    const players = this.state.players.filter((it) => it.id !== id);
     this.setState({ players });
     void this.persist(() => this.repository.savePlayers(players));
     return true;

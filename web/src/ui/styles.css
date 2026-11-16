@@ -396,6 +396,10 @@ textarea {
   cursor: pointer;
 }
 
+.text-button.danger-text {
+  color: var(--error);
+}
+
 .result-button {
   display: flex;
   flex-direction: column;

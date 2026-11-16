@@ -140,6 +140,24 @@ class FileStorageTest {
     }
 
     @Test
+    fun `ein geloeschter Spieler bleibt auch nach dem Neuladen weg`() = runTest {
+        val first = storage()
+        first.players.save(TestData.anna)
+        first.players.save(TestData.bertl)
+        first.players.delete(TestData.anna.id)
+        assertEquals(listOf(TestData.bertl), first.players.players.first())
+        assertEquals(listOf(TestData.bertl), storage().players.players.first())
+    }
+
+    @Test
+    fun `einen unbekannten Spieler zu loeschen schreibt nichts`() = runTest {
+        val storage = storage()
+        storage.players.delete(PlayerId("gibt-es-nicht"))
+        assertEquals(emptyList<Player>(), storage.players.players.first())
+        assertEquals(emptyList<String>(), filesBelow(dir))
+    }
+
+    @Test
     fun `nach dem Speichern liegen genau die erwarteten Dateien im Ordner und keine temporaere`() = runTest {
         val storage = storage()
         storage.players.save(TestData.anna)

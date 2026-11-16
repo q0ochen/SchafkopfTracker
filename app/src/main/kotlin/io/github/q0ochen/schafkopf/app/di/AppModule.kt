@@ -74,5 +74,5 @@ val appModule = module {
         )
     }
     viewModel { SettingsViewModel(get()) }
-    viewModel { PlayersViewModel(get(), get()) }
+    viewModel { PlayersViewModel(get(), get(), get()) }
 }

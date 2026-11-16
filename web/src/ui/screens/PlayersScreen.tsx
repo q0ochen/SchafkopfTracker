@@ -1,19 +1,51 @@
-/* Spieler anlegen, umbenennen und archivieren (wie `ui/settings/PlayersScreen.kt` der Android-App). */
+/* Spieler anlegen, umbenennen, archivieren und löschen (wie `ui/settings/PlayersScreen.kt` der Android-App). */
 import { useState } from "preact/hooks";
-import { MAX_NAME_LENGTH } from "../../app/players";
+import { eveningCount, MAX_NAME_LENGTH } from "../../app/players";
 import type { Player } from "../../core/model";
 import { Dialog, Icon, PlayerName, SwitchRow, TopBar } from "../components";
 import { useAppState, useServices } from "../context";
 
 function EditPlayerDialog({ player, onClose }: { player: Player; onClose: () => void }) {
   const { store } = useServices();
+  const { evenings } = useAppState();
   const [name, setName] = useState(player.name);
   const [archived, setArchived] = useState(player.archived);
   const [error, setError] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const usedIn = eveningCount(evenings, player.id);
   const save = () => {
     if (store.updatePlayer(player.id, name, archived)) onClose();
     else setError(true);
   };
+
+  if (confirmDelete) {
+    return (
+      <Dialog
+        title="Spieler löschen?"
+        onClose={() => setConfirmDelete(false)}
+        actions={
+          <>
+            <button type="button" class="text-button" onClick={() => setConfirmDelete(false)}>
+              Behalten
+            </button>
+            <button
+              type="button"
+              class="button danger"
+              onClick={() => {
+                store.deletePlayer(player.id);
+                onClose();
+              }}
+            >
+              Löschen
+            </button>
+          </>
+        }
+      >
+        <p>„{player.name}“ wird endgültig gelöscht. Das lässt sich nicht rückgängig machen.</p>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog
       title="Spieler bearbeiten"
@@ -63,6 +95,17 @@ function EditPlayerDialog({ player, onClose }: { player: Player; onClose: () => 
         checked={archived}
         onChange={setArchived}
       />
+      {usedIn === 0 ? (
+        <button type="button" class="text-button danger-text full-width" onClick={() => setConfirmDelete(true)}>
+          Spieler löschen
+        </button>
+      ) : (
+        <p class="hint">
+          {usedIn === 1
+            ? "Spielt in 1 Abend mit und lässt sich deshalb nicht löschen. Archivieren blendet den Spieler aus; der Abend bleibt erhalten. Ganz entfernen lässt er sich erst, wenn dieser Abend gelöscht ist."
+            : `Spielt in ${usedIn} Abenden mit und lässt sich deshalb nicht löschen. Archivieren blendet den Spieler aus; die Abende bleiben erhalten. Ganz entfernen lässt er sich erst, wenn diese Abende gelöscht sind.`}
+        </p>
+      )}
     </Dialog>
   );
 }

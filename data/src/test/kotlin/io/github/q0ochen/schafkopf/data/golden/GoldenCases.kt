@@ -757,6 +757,8 @@ internal class FailingPlayerRepository(initial: List<Player>, private val failAt
         if (saves++ == failAt) throw IOException("nachgestellter Fehler")
         inner.save(player)
     }
+
+    override suspend fun delete(id: PlayerId) = inner.delete(id)
 }
 
 /** Abende im Speicher, bei denen das Speichern des Abends Nr. [failAt] (ab 0 gezählt) scheitert. */

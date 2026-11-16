@@ -52,4 +52,15 @@ test("Bildschirme eines Abends", async ({ page }) => {
   await shot(page, "10-einstellungen", true);
   await openApp(page, "/regeln");
   await shot(page, "11-regeln", true);
+  await openApp(page, "/spieler");
+  await page.getByLabel("Neuer Spieler").fill("Gast");
+  await page.getByRole("button", { name: "Hinzufügen" }).click();
+  await page.getByRole("button", { name: "Gast bearbeiten" }).click();
+  await shot(page, "12-spieler-bearbeiten");
+  await page.getByRole("dialog").getByRole("button", { name: "Spieler löschen" }).click();
+  await shot(page, "13-spieler-loeschen");
+  await page.getByRole("button", { name: "Behalten" }).click();
+  await page.getByRole("button", { name: "Abbrechen" }).click();
+  await page.getByRole("button", { name: "Anna bearbeiten" }).click();
+  await shot(page, "14-spieler-mit-abend");
 });

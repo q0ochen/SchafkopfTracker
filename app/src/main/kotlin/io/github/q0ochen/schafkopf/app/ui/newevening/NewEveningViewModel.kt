@@ -110,7 +110,7 @@ class NewEveningViewModel(
         }
         viewModelScope.launch {
             val existing = players.players.first()
-            val player = Player(id = PlayerId(idGenerator.newId()), name = name, colorIndex = existing.size)
+            val player = Player(id = PlayerId(idGenerator.newId()), name = name, colorIndex = Player.nextColorIndex(existing))
             players.save(player)
             selection.update { before ->
                 val current = before.startingFromShown()

@@ -147,4 +147,20 @@ data class Evening(
         val position = index.coerceIn(0, entries.size)
         return copy(entries = entries.subList(0, position) + entry + entries.subList(position, entries.size))
     }
+
+    /**
+     * Ob der Spieler in diesem Abend vorkommt: am Tisch, als Geber oder in irgendeinem Eintrag (auch in beschädigten
+     * Daten, in denen ein Eintrag jemanden nennt, der nicht am Tisch sitzt). Solche Spieler dürfen nicht gelöscht
+     * werden, sonst verlöre der Abend seine Namen und ließe sich nicht mehr sichern und einlesen.
+     */
+    fun involves(player: PlayerId): Boolean =
+        player in seating || player == firstDealer || entries.any { entry ->
+            when (entry) {
+                is GameEntry -> player == entry.declarer || player == entry.partner || player in entry.klopfer ||
+                    player == entry.kontraBy || player == entry.retourBy
+                is BockTriggerEntry -> player == entry.player
+                is ManualEntry -> player in entry.amounts.keys
+                is ThrownInEntry -> false
+            }
+        }
 }

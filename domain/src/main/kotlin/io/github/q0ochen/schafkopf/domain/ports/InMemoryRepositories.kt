@@ -4,6 +4,7 @@ import io.github.q0ochen.schafkopf.domain.evening.Evening
 import io.github.q0ochen.schafkopf.domain.model.AppSettings
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.Player
+import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -22,6 +23,10 @@ class InMemoryPlayerRepository(initial: List<Player> = emptyList()) : PlayerRepo
         state.update { current ->
             if (current.any { it.id == player.id }) current.map { if (it.id == player.id) player else it } else current + player
         }
+    }
+
+    override suspend fun delete(id: PlayerId) {
+        state.update { current -> current.filterNot { it.id == id } }
     }
 }
 

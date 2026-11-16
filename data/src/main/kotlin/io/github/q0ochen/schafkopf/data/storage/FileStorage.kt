@@ -4,6 +4,7 @@ import io.github.q0ochen.schafkopf.domain.evening.Evening
 import io.github.q0ochen.schafkopf.domain.model.AppSettings
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.Player
+import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
@@ -73,6 +74,13 @@ class FileStorage(directory: Path, internal val ioDispatcher: CoroutineDispatche
             } else {
                 before.players + player
             }
+            onDisk { files.writePlayers(updated) }
+            before.copy(players = updated)
+        }
+
+        override suspend fun delete(id: PlayerId) = change { before ->
+            if (before.players.none { it.id == id }) return@change before
+            val updated = before.players.filterNot { it.id == id }
             onDisk { files.writePlayers(updated) }
             before.copy(players = updated)
         }

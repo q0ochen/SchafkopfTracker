@@ -4,6 +4,7 @@ import io.github.q0ochen.schafkopf.domain.evening.Evening
 import io.github.q0ochen.schafkopf.domain.model.AppSettings
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.Player
+import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import kotlinx.coroutines.flow.Flow
 
 /*
@@ -18,6 +19,12 @@ interface PlayerRepository {
 
     /** Legt einen Spieler an oder ersetzt den Spieler mit derselben Kennung. */
     suspend fun save(player: Player)
+
+    /**
+     * Löscht den Spieler mit dieser Kennung endgültig; gibt es ihn nicht, passiert nichts. Abende werden dabei nicht
+     * angefasst: Nur Spieler löschen, die in keinem Abend vorkommen (siehe `Evening.involves`).
+     */
+    suspend fun delete(id: PlayerId)
 }
 
 /** Die Abende mit ihren Einträgen. */
