@@ -158,8 +158,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-Der neueste Stand liegt auf dem Zweig `claude/gracious-keller-48tcn0`; `main` enthält alles bis Pull Request #22
-(16.11.2026), `entwicklung` ist noch auf dem älteren Stand.
+`main` enthält alles bis Pull Request #24 (16.11.2026, 20:33); der Zweig `claude/gracious-keller-48tcn0` ist auf
+demselben Stand, `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -271,9 +271,9 @@ vermutlich eine Wear-OS-Uhr.
 
 Pull Request #23 nach `main` (Schritte 4 bis 6 ohne Uhr) am 16.11.2026 auf Wunsch des Nutzers angelegt und vom Nutzer
 um 18:01 mit dem Stand `327719b` zusammengeführt; geschlossen sind #6, #10, #12, #13 und #14. Danach wünschte der
-Nutzer, dass Claude den Pull Request beobachtet („Zu 1. ja“) und die Lücken schließt („Zu 2. ja“). Das Folgende liegt
-deshalb auf dem Zweig `claude/gracious-keller-48tcn0`, noch nicht in `main` (neuer Pull Request nur auf Bitte des
-Nutzers):
+Nutzer, dass Claude den Pull Request beobachtet („Zu 1. ja“) und die Lücken schließt („Zu 2. ja“). Das Folgende kam
+deshalb mit einem eigenen Pull Request #24 (auf Wunsch des Nutzers, „Ja. Neuen pull request“), vom Nutzer am
+16.11.2026 um 20:33 zusammengeführt; er schließt #11:
 
 - **#11:** Spielarten als Balkendiagramm in Android-App (`GameModeChart`, `BarScale`) und Web-App
   (`web/src/ui/charts/GameModeChart.tsx`): je Spielart ein Abschnitt, je Spieler Balken für den Durchschnitt je
@@ -289,6 +289,11 @@ Nutzers):
   Zeile; die Tabellen der Statistik wachsen mit und lassen sich seitlich schieben); der Zustimmungstext nennt
   Abendbericht und Bilanz, weil die Zustimmung je Dienst für beides gilt; ein Kommentar in `BarScale`.
 - Offen bleibt außerdem #15 (Client-ID, Erprobung auf einem echten Handy).
+- Der Nutzer führt Pull Requests oft gleich nach dem Anlegen zusammen. Was danach auf den Zweig kommt, braucht
+  einen neuen Pull Request; deshalb vor dem Anlegen alles fertig und geprüft haben.
+- Zweimal (17:57 und 18:02, Läufe 23 und 24) scheiterte „Android“ auf GitHub nach 15 Sekunden, weil das
+  KSP-Plugin nicht aus den Paketquellen zu laden war; Läufe kurz davor und danach mit fast gleichem Stand waren
+  grün. Ursache außerhalb des Codes; tritt es wieder auf, Lauf einmal neu starten.
 
 Als Nächstes: Client-ID eintragen, sobald der Nutzer sie schickt, dann die Anmeldung auf einem echten Handy
 erproben; Rückmeldungen der Tester; abstimmen, welche der Issues #1 bis #19 als erledigt gelten.
