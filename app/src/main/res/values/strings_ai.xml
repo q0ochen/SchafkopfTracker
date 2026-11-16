@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Einstellungen des Abend-Kommentators -->
+    <string name="ai_title">Abend-Kommentator</string>
+    <string name="ai_intro">Nach dem Abend schreibt ein Sprachmodell eine witzige, leicht stichelnde Zusammenfassung auf Bairisch. Ohne Sprachmodell gibt es eine schlichte Zusammenfassung aus Textbausteinen; dafür geht nichts ins Internet.</string>
+    <string name="ai_enabled">Sprachmodell verwenden</string>
+    <string name="ai_enabled_hint">Standardmäßig aus. Erst wenn du es einschaltest und beim ersten Kommentar zustimmst, geht etwas ins Internet.</string>
+    <string name="ai_provider">Anbieter</string>
+    <string name="ai_provider_gemini">Google Gemini</string>
+    <string name="ai_provider_openai">Eigener Server</string>
+    <string name="ai_provider_openai_hint">Ein Dienst mit OpenAI-kompatibler Schnittstelle, zum Beispiel Ollama im eigenen Netz.</string>
+    <string name="ai_base_url">Adresse des Dienstes</string>
+    <string name="ai_base_url_hint">Zum Beispiel https://mein-server.de/v1 oder http://192.168.1.20:11434/v1</string>
+    <string name="ai_base_url_invalid">Diese Adresse geht nicht: nur https, http nur im eigenen Netz.</string>
+    <string name="ai_key">Schlüssel</string>
+    <string name="ai_key_saved">Ein Schlüssel ist gespeichert, verschlüsselt auf diesem Handy.</string>
+    <string name="ai_key_missing">Noch kein Schlüssel gespeichert.</string>
+    <string name="ai_key_input">Schlüssel einfügen</string>
+    <string name="ai_key_save">Schlüssel speichern</string>
+    <string name="ai_key_delete">Schlüssel löschen</string>
+    <string name="ai_key_how">So bekommst du einen kostenlosen Schlüssel: auf aistudio.google.com mit deinem Google-Konto anmelden, „Get API key“ und dann „Create API key“ wählen und den Schlüssel hier einfügen. Gib ihn niemandem weiter.</string>
+    <string name="ai_key_open_studio">Google AI Studio öffnen</string>
+    <string name="ai_model">Modell</string>
+    <string name="ai_model_hint_gemini">Leer lassen: immer das neueste schnelle Modell (gemini-flash-latest).</string>
+    <string name="ai_model_hint_openai">Name des Modells auf deinem Server, zum Beispiel llama3.</string>
+    <string name="ai_models_load">Modelle laden und Verbindung prüfen</string>
+    <plurals name="ai_models_loaded">
+        <item quantity="one">Verbindung klappt, %1$d Modell gefunden. Antippen zum Übernehmen.</item>
+        <item quantity="other">Verbindung klappt, %1$d Modelle gefunden. Antippen zum Übernehmen.</item>
+    </plurals>
+    <string name="ai_real_names">Echte Namen senden</string>
+    <string name="ai_real_names_hint">Aus: Das Sprachmodell bekommt Platzhalter statt der Namen; die echten Namen setzt erst die App wieder ein.</string>
+    <string name="ai_privacy">Gesendet werden nur Spielstände, Spielarten und besondere Spiele des Abends, nie der Ort. Im kostenlosen Tarif darf Google die Texte zur Verbesserung seiner Dienste verwenden.</string>
+    <string name="ai_key_stored">Schlüssel gespeichert.</string>
+    <string name="ai_key_deleted">Schlüssel gelöscht.</string>
+
+    <!-- Zustimmung vor dem ersten Senden -->
+    <string name="ai_consent_title">Daten an %1$s senden?</string>
+    <string name="ai_consent_text">Für den Kommentar gehen Spielstände, Spielarten und besondere Spiele dieses Abends an %1$s. %2$s Im kostenlosen Tarif von Google dürfen die Texte zur Verbesserung der Dienste verwendet werden.</string>
+    <string name="ai_consent_names_on">Die echten Namen werden mitgeschickt.</string>
+    <string name="ai_consent_names_off">Statt der Namen gehen Platzhalter mit.</string>
+    <string name="ai_consent_yes">Senden</string>
+    <string name="ai_consent_no">Abbrechen</string>
+
+    <!-- Kommentator im Abschluss -->
+    <string name="commentary_heading">Abend-Kommentator</string>
+    <string name="commentary_write">Kommentar schreiben lassen</string>
+    <string name="commentary_again">Neu schreiben lassen</string>
+    <string name="commentary_writing">Der Kommentator schreibt …</string>
+    <string name="commentary_template_note">Aus Textbausteinen. Mit Sprachmodell schreibt der Kommentator frei: Einstellungen → Abend-Kommentator.</string>
+    <string name="commentary_ai_note">Geschrieben von %1$s. Bitte vor dem Teilen lesen: Ein Sprachmodell kann sich auch einmal irren.</string>
+    <string name="commentary_failed">%1$s Hier stattdessen die Zusammenfassung aus Textbausteinen.</string>
+    <string name="commentary_share">Kommentar teilen</string>
+    <string name="commentary_share_subject">Schafkopf-Abend: der Kommentar</string>
+
+    <!-- Fehler des Sprachmodells -->
+    <string name="llm_error_invalid_key">Der Schlüssel fehlt oder wird nicht anerkannt (Einstellungen → Abend-Kommentator).</string>
+    <string name="llm_error_access_denied">Der Dienst verweigert den Zugriff, zum Beispiel weil er in diesem Land nicht angeboten wird.</string>
+    <string name="llm_error_model_unavailable">Dieses Modell gibt es nicht (mehr). Bitte in den Einstellungen ein anderes wählen.</string>
+    <string name="llm_error_quota">Das kostenlose Kontingent ist für den Moment aufgebraucht. Bitte später noch einmal versuchen.</string>
+    <string name="llm_error_blocked">Der Dienst hat die Anfrage abgelehnt.</string>
+    <string name="llm_error_empty">Die Antwort war leer oder unvollständig. Bitte noch einmal versuchen.</string>
+    <string name="llm_error_server">Der Dienst ist gerade nicht erreichbar oder überlastet. Bitte später noch einmal versuchen.</string>
+    <string name="llm_error_network">Keine Verbindung zum Internet.</string>
+    <string name="llm_error_endpoint">Die Adresse des Dienstes ist ungültig (nur https, http nur im eigenen Netz).</string>
+    <string name="llm_error_unknown">Unbekannter Fehler.</string>
+</resources>

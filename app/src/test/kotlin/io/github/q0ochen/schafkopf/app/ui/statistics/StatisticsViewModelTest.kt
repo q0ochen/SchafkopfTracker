@@ -45,6 +45,7 @@ class StatisticsViewModelTest {
         initial?.let(::EveningId),
         InMemoryEveningRepository(listOf(older, newer)),
         InMemoryPlayerRepository(TestEvenings.players),
+        dispatcher,
     )
 
     @Test

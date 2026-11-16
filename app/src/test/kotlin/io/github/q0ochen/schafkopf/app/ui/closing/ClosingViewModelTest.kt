@@ -1,11 +1,19 @@
 package io.github.q0ochen.schafkopf.app.ui.closing
 
+import io.github.q0ochen.schafkopf.app.ai.Commentary
+import io.github.q0ochen.schafkopf.app.ai.CommentarySource
+import io.github.q0ochen.schafkopf.app.ai.Commentator
+import io.github.q0ochen.schafkopf.app.ai.FakeGeneratorFactory
 import io.github.q0ochen.schafkopf.app.ui.TestEvenings
 import io.github.q0ochen.schafkopf.app.ui.awaitFirst
+import io.github.q0ochen.schafkopf.domain.model.AiSettings
+import io.github.q0ochen.schafkopf.domain.model.AppSettings
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.ports.InMemoryEveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.InMemoryPlayerRepository
+import io.github.q0ochen.schafkopf.domain.ports.InMemorySecretStore
+import io.github.q0ochen.schafkopf.domain.ports.InMemorySettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -34,7 +42,7 @@ class ClosingViewModelTest {
     @Test
     fun `rechnet den Abend durch und folgt neuen Namen`() = runTest(dispatcher) {
         val players = InMemoryPlayerRepository(TestEvenings.players)
-        val viewModel = ClosingViewModel(EveningId("abend-1"), InMemoryEveningRepository(listOf(TestEvenings.evening())), players)
+        val viewModel = ClosingViewModel(EveningId("abend-1"), InMemoryEveningRepository(listOf(TestEvenings.evening())), players, commentator(), dispatcher)
         backgroundScope.launch { viewModel.state.collect {} }
 
         val loaded = viewModel.state.awaitFirst { !it.loading }
@@ -47,12 +55,42 @@ class ClosingViewModelTest {
         assertEquals(1, renamed.colorIndex[TestEvenings.bert])
     }
 
+    private fun commentator(settings: InMemorySettingsRepository = InMemorySettingsRepository()) =
+        Commentator(settings, InMemorySecretStore("geheim"), FakeGeneratorFactory())
+
+    @Test
+    fun `der Kommentator fragt vor dem ersten Senden und schreibt dann`() = runTest(dispatcher) {
+        val settings = InMemorySettingsRepository(AppSettings(ai = AiSettings(enabled = true)))
+        val viewModel = ClosingViewModel(
+            EveningId("abend-1"),
+            InMemoryEveningRepository(listOf(TestEvenings.evening())),
+            InMemoryPlayerRepository(TestEvenings.players),
+            commentator(settings),
+            dispatcher,
+        )
+        backgroundScope.launch { viewModel.state.collect {} }
+        viewModel.state.awaitFirst { it.computed != null }
+
+        viewModel.writeCommentary()
+        val asking = viewModel.state.awaitFirst { it.commentary is CommentaryUi.NeedsConsent }.commentary as CommentaryUi.NeedsConsent
+        viewModel.declineConsent()
+        assertEquals(CommentaryUi.Idle, viewModel.state.awaitFirst { it.commentary == CommentaryUi.Idle }.commentary)
+
+        viewModel.writeCommentary()
+        viewModel.state.awaitFirst { it.commentary is CommentaryUi.NeedsConsent }
+        viewModel.consent(asking.host)
+        val ready = viewModel.state.awaitFirst { it.commentary is CommentaryUi.Ready }.commentary as CommentaryUi.Ready
+        assertEquals(Commentary("Servus!", CommentarySource.AI, "gemini-test"), ready.commentary)
+    }
+
     @Test
     fun `einen geloeschten Abend gibt es nicht mehr`() = runTest(dispatcher) {
         val viewModel = ClosingViewModel(
             EveningId("weg"),
             InMemoryEveningRepository(listOf(TestEvenings.evening())),
             InMemoryPlayerRepository(TestEvenings.players),
+            commentator(),
+            dispatcher,
         )
         backgroundScope.launch { viewModel.state.collect {} }
         val state = viewModel.state.awaitFirst { !it.loading }

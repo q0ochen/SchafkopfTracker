@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
+import io.github.q0ochen.schafkopf.app.ui.ai.AiSettingsScreen
 import io.github.q0ochen.schafkopf.app.ui.backup.BackupScreen
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
 import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
@@ -45,6 +46,7 @@ import io.github.q0ochen.schafkopf.app.ui.settings.RulesScreen
 import io.github.q0ochen.schafkopf.app.ui.settings.SettingsScreen
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
+import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
@@ -273,6 +275,26 @@ class ScreenshotTest {
         }
         show(ThemeMode.DARK, ready = "Datei: schafkopf-sicherung.json") { BackupScreen(Navigator()) }
         capture("19_sicherung_dunkel")
+    }
+
+    @Test
+    fun abend_kommentator_einstellungen_dunkel() {
+        seed()
+        runBlocking {
+            GlobalContext.get().get<SettingsRepository>().update { it.copy(ai = it.ai.copy(enabled = true)) }
+        }
+        show(ThemeMode.DARK, ready = "Google Gemini") { AiSettingsScreen(Navigator()) }
+        capture("20_kommentator_einstellungen_dunkel")
+    }
+
+    @Test
+    fun abschluss_mit_kommentar_dunkel() {
+        seed(finished = true)
+        show(ThemeMode.DARK, ready = "Wer zahlt wem") { ClosingScreen(eveningId, Navigator()) }
+        compose.onNodeWithText("Kommentar schreiben lassen").performScrollTo().performClick()
+        compose.waitForText("Kommentar teilen")
+        compose.onNodeWithText("Kommentar teilen").performScrollTo()
+        capture("21_abschluss_kommentar_dunkel")
     }
 
     @Test

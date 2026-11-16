@@ -160,6 +160,4 @@
     <string name="form_selected">ausgewählt</string>
     <string name="form_not_selected">nicht ausgewählt</string>
 
-    <!-- Platzhalter für Bildschirme, die noch entstehen -->
-    <string name="placeholder_coming_soon">Dieser Bereich ist noch in Arbeit.</string>
 </resources>

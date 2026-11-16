@@ -9,6 +9,7 @@ import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.stats.StatisticEngine
 import io.github.q0ochen.schafkopf.domain.stats.Statistics
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -51,11 +52,13 @@ data class StatisticsUiState(
  * Hauptthread.
  *
  * @param initial Der Abend, mit dem die Statistik öffnet; `null` für alle Abende.
+ * @param computeDispatcher Darauf wird gerechnet; Tests geben ihren eigenen, damit nach dem Test nichts nachläuft.
  */
 class StatisticsViewModel(
     initial: EveningId?,
     evenings: EveningRepository,
     players: PlayerRepository,
+    computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
     private val selection = MutableStateFlow(initial)
@@ -78,7 +81,7 @@ class StatisticsViewModel(
                 colorIndex = allPlayers.associate { it.id to it.colorIndex },
             )
         }
-            .flowOn(Dispatchers.Default)
+            .flowOn(computeDispatcher)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StatisticsUiState(selected = initial))
 
     /** Wählt einen Abend aus; `null` für alle Abende. */

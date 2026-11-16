@@ -95,7 +95,7 @@ class BackupViewModelTest {
         val old = Device(TestEvenings.players, listOf(TestEvenings.evening()), shared)
         backgroundScope.launch { old.viewModel.state.collect {} }
         old.viewModel.exportTo("mem://sicherung.json")
-        assertEquals(R.string.backup_saved, old.viewModel.state.awaitFirst { it.message != null }.message?.res)
+        assertEquals(R.string.backup_saved, old.viewModel.state.awaitFirst { it.message?.res == R.string.backup_saved }.message?.res)
         old.viewModel.clearMessage()
 
         // Neues Handy: nur die Platzhalter der festen Runde, noch kein Abend.
@@ -143,17 +143,17 @@ class BackupViewModelTest {
 
         device.documents.failReads = DocumentAccess.TooLargeException()
         device.viewModel.readFrom("mem://riesig.json")
-        assertEquals(R.string.backup_too_big, device.viewModel.state.awaitFirst { it.message != null }.message?.res)
+        assertEquals(R.string.backup_too_big, device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_too_big }.message?.res)
         device.viewModel.clearMessage()
 
         device.documents.failReads = IOException("weg")
         device.viewModel.readFrom("mem://weg.json")
-        assertEquals(R.string.backup_read_failed, device.viewModel.state.awaitFirst { it.message != null }.message?.res)
+        assertEquals(R.string.backup_read_failed, device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_read_failed }.message?.res)
         device.viewModel.clearMessage()
 
         device.documents.failWrites = IOException("voll")
         device.viewModel.exportTo("mem://neu.json")
-        assertEquals(R.string.backup_save_failed, device.viewModel.state.awaitFirst { it.message != null }.message?.res)
+        assertEquals(R.string.backup_save_failed, device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_save_failed }.message?.res)
     }
 
     @Test
@@ -217,7 +217,7 @@ class BackupViewModelTest {
         backgroundScope.launch { device.viewModel.state.collect {} }
         device.documents.refuseAccess = true
         device.viewModel.chooseAutoTarget("mem://einmalig.json")
-        assertEquals(R.string.backup_auto_access_refused, device.viewModel.state.awaitFirst { it.message != null }.message?.res)
+        assertEquals(R.string.backup_auto_access_refused, device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_auto_access_refused }.message?.res)
         assertNull(device.store.status.value.target)
     }
 }

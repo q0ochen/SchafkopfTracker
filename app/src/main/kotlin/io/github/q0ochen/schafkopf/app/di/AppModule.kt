@@ -2,6 +2,8 @@ package io.github.q0ochen.schafkopf.app.di
 
 import android.content.Context
 import androidx.work.WorkManager
+import io.github.q0ochen.schafkopf.app.ai.Commentator
+import io.github.q0ochen.schafkopf.app.ai.TextGeneratorFactory
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupRunner
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupScheduler
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
@@ -9,10 +11,15 @@ import io.github.q0ochen.schafkopf.app.backup.ContentResolverDocuments
 import io.github.q0ochen.schafkopf.app.backup.DocumentAccess
 import io.github.q0ochen.schafkopf.app.ui.backup.BackupViewModel
 import io.github.q0ochen.schafkopf.app.ui.board.BoardViewModel
+import io.github.q0ochen.schafkopf.app.security.AndroidKeystoreCipher
+import io.github.q0ochen.schafkopf.app.security.EncryptedSecretStore
+import io.github.q0ochen.schafkopf.app.security.EncryptedValues
 import io.github.q0ochen.schafkopf.app.storage.JsonRulesCodec
+import io.github.q0ochen.schafkopf.app.ui.ai.AiSettingsViewModel
 import io.github.q0ochen.schafkopf.app.storage.JsonSettingsCodec
 import io.github.q0ochen.schafkopf.app.storage.LegacyFileImport
 import io.github.q0ochen.schafkopf.data.backup.BackupService
+import io.github.q0ochen.schafkopf.data.llm.defaultHttpClient
 import io.github.q0ochen.schafkopf.database.RoomEveningRepository
 import io.github.q0ochen.schafkopf.database.RoomPlayerRepository
 import io.github.q0ochen.schafkopf.database.RoomSettingsRepository
@@ -30,7 +37,6 @@ import io.github.q0ochen.schafkopf.domain.model.EntryId
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.IdGenerator
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
-import io.github.q0ochen.schafkopf.domain.ports.InMemorySecretStore
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.ports.SecretStore
 import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
@@ -66,8 +72,14 @@ val appModule = module {
     single<PlayerRepository> { RoomPlayerRepository(get()) }
     single<EveningRepository> { RoomEveningRepository(get(), JsonRulesCodec) }
     single<SettingsRepository> { RoomSettingsRepository(get(), JsonSettingsCodec) }
-    // Der Schlüssel der KI-Zusammenfassung bleibt vorerst nur im Arbeitsspeicher (die Funktion kommt in Schritt 6).
-    single<SecretStore> { InMemorySecretStore() }
+    // Geheimnisse (Schlüssel des Abend-Kommentators) verschlüsselt mit einem Schlüssel aus dem Android Keystore.
+    single { EncryptedValues(androidContext(), AndroidKeystoreCipher()) }
+    single<SecretStore> { EncryptedSecretStore(get()) }
+
+    // Abend-Kommentator: ein HTTP-Client für die ganze App, die Anbindung je nach gewähltem Dienst.
+    single { defaultHttpClient() }
+    single { TextGeneratorFactory(get()) }
+    single { Commentator(get(), get(), get()) }
 
     single { EveningEditor(get(), get(), get()) }
 
@@ -98,7 +110,8 @@ val appModule = module {
             editor = get(),
         )
     }
-    viewModel { params -> ClosingViewModel(EveningId(params.get(0)), get(), get()) }
+    viewModel { params -> ClosingViewModel(EveningId(params.get(0)), get(), get(), get()) }
+    viewModel { AiSettingsViewModel(get(), get(), get()) }
     viewModel { params ->
         StatisticsViewModel(
             initial = params.get<String>(0).takeIf { it.isNotEmpty() }?.let(::EveningId),
