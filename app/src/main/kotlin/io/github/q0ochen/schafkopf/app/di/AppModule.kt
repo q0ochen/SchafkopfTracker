@@ -9,10 +9,16 @@ import io.github.q0ochen.schafkopf.app.backup.ContentResolverDocuments
 import io.github.q0ochen.schafkopf.app.backup.DocumentAccess
 import io.github.q0ochen.schafkopf.app.ui.backup.BackupViewModel
 import io.github.q0ochen.schafkopf.app.ui.board.BoardViewModel
+import io.github.q0ochen.schafkopf.app.storage.JsonRulesCodec
+import io.github.q0ochen.schafkopf.app.storage.JsonSettingsCodec
+import io.github.q0ochen.schafkopf.app.storage.LegacyFileImport
 import io.github.q0ochen.schafkopf.data.backup.BackupService
+import io.github.q0ochen.schafkopf.database.RoomEveningRepository
+import io.github.q0ochen.schafkopf.database.RoomPlayerRepository
+import io.github.q0ochen.schafkopf.database.RoomSettingsRepository
+import io.github.q0ochen.schafkopf.database.openSchafkopfDatabase
 import io.github.q0ochen.schafkopf.app.ui.closing.ClosingViewModel
 import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsViewModel
-import io.github.q0ochen.schafkopf.data.storage.FileStorage
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormViewModel
 import io.github.q0ochen.schafkopf.app.ui.newevening.NewEveningViewModel
 import io.github.q0ochen.schafkopf.app.ui.settings.PlayersViewModel
@@ -32,14 +38,10 @@ import kotlinx.coroutines.Dispatchers
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
+import org.koin.dsl.onClose
 import java.time.Clock
 import java.util.UUID
 
-/**
- * Ordner im privaten Speicher der App, in dem alle Daten als JSON-Dateien liegen (siehe [FileStorage]).
- * Nur die App selbst kann ihn lesen; beim Deinstallieren löscht Android ihn mit.
- */
-const val STORAGE_FOLDER = "daten"
 
 /** Version der App, wie sie im Kopf jeder Sicherung steht. */
 private fun appVersion(context: Context): String =
@@ -49,8 +51,9 @@ private fun appVersion(context: Context): String =
  * Kompositionswurzel der App: Hier und nur hier steht, welche Umsetzung hinter welchem Port steckt.
  * Alle Klassen bekommen ihre Abhängigkeiten über den Konstruktor; Koin setzt sie zusammen.
  *
- * Gespeichert wird dauerhaft in JSON-Dateien ([FileStorage] aus dem Modul `data`): Jede Eingabe steht sofort auf
- * dem Gerät und übersteht, dass Android die App beendet. Die Room-Datenbank (Modul `database`) löst das später ab.
+ * Gespeichert wird dauerhaft in der Room-Datenbank (Modul `database`, eine Datei im privaten Speicher der App): Jede
+ * Eingabe steht sofort auf dem Gerät und übersteht, dass Android die App beendet; Änderungen melden sich über Flows
+ * von selbst bei allen Bildschirmen. Die JSON-Dateien der ersten Testversionen übernimmt [LegacyFileImport] einmalig.
  *
  * ViewModels mit Parametern bekommen Kennungen als Text; ein leerer Text bedeutet „keine“.
  */
@@ -58,11 +61,11 @@ val appModule = module {
     single<Clock> { Clock.systemDefaultZone() }
     single<IdGenerator> { IdGenerator { UUID.randomUUID().toString() } }
 
-    // Für einen Ordner darf es nur ein einziges FileStorage geben; alle drei Ablagen kommen aus ihm.
-    single { FileStorage(androidContext().filesDir.toPath().resolve(STORAGE_FOLDER), Dispatchers.IO) }
-    single<PlayerRepository> { get<FileStorage>().players }
-    single<EveningRepository> { get<FileStorage>().evenings }
-    single<SettingsRepository> { get<FileStorage>().settings }
+    // Eine einzige Datenbank für die ganze App; beim Beenden von Koin (in Tests) wird sie geschlossen.
+    single { openSchafkopfDatabase(androidContext()) } onClose { it?.close() }
+    single<PlayerRepository> { RoomPlayerRepository(get()) }
+    single<EveningRepository> { RoomEveningRepository(get(), JsonRulesCodec) }
+    single<SettingsRepository> { RoomSettingsRepository(get(), JsonSettingsCodec) }
     // Der Schlüssel der KI-Zusammenfassung bleibt vorerst nur im Arbeitsspeicher (die Funktion kommt in Schritt 6).
     single<SecretStore> { InMemorySecretStore() }
 

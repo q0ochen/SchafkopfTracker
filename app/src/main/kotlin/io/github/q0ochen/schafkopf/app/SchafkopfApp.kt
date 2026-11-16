@@ -1,6 +1,8 @@
 package io.github.q0ochen.schafkopf.app
 
 import android.app.Application
+import android.util.Log
+import io.github.q0ochen.schafkopf.app.storage.LegacyFileImport
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupError
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupScheduler
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
@@ -13,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
@@ -28,8 +31,24 @@ class SchafkopfApp : Application() {
             androidContext(this@SchafkopfApp)
             modules(appModule)
         }
+        importLegacyFiles()
         applicationScope.launch { ensureDefaultPlayers(get()) }
         startAutoBackup()
+    }
+
+    /**
+     * Einmalig nach dem Update: die Daten der ersten Testversionen (JSON-Dateien) in die Datenbank übernehmen, bevor
+     * irgendein Bildschirm sie liest. Das dauert nur einen Augenblick und geschieht nur, solange der alte Ordner
+     * noch da ist. Geht es schief, bleibt der Ordner liegen und der nächste Start versucht es wieder.
+     */
+    private fun importLegacyFiles() {
+        try {
+            runBlocking(Dispatchers.IO) {
+                LegacyFileImport.runIfNeeded(filesDir.toPath().resolve(LegacyFileImport.FOLDER), get())
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Übernahme der alten Daten fehlgeschlagen; nächster Versuch beim nächsten Start", e)
+        }
     }
 
     /**
@@ -43,6 +62,8 @@ class SchafkopfApp : Application() {
     }
 
     companion object {
+        private const val TAG = "SchafkopfApp"
+
         /**
          * Die feste Vierer-Runde. Die Kennungen sind fest vergeben, damit Sicherungen von verschiedenen Geräten
          * dieselben Spieler meinen. Die echten Namen trägt die Runde in der App ein (Bereich „Spieler“);

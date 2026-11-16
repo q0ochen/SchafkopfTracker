@@ -22,6 +22,7 @@ import io.github.q0ochen.schafkopf.domain.ports.InMemoryPlayerRepository
 import io.github.q0ochen.schafkopf.domain.ports.InMemorySettingsRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -46,6 +47,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 /** Automatische Sicherung: Ziel und Verlauf, ein Sicherungsversuch, der Auftrag an WorkManager und die Arbeit dahinter. */
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], application = TestSchafkopfApp::class)
 class AutoBackupTest {

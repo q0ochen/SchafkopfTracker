@@ -17,4 +17,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "SchafkopfTracker"
 
-include(":domain", ":data", ":app")
+include(":domain", ":data", ":database", ":app")

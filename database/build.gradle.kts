@@ -43,7 +43,8 @@ ksp {
 dependencies {
     api(project(":domain"))
 
-    implementation(libs.androidx.room.runtime)
+    // „api“: Die Datenbank-Klasse ist Teil der Schnittstelle dieses Moduls (zum Öffnen und Schließen in der App).
+    api(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
     implementation(libs.kotlinx.coroutines.android)
 
