@@ -23,6 +23,11 @@
     <string name="backup_drive_restore">Aus Google Drive einlesen</string>
     <string name="backup_drive_none">In Google Drive gibt es noch keine Sicherung dieser App.</string>
     <string name="backup_drive_sign_in_failed">Die Anmeldung bei Google hat nicht geklappt.</string>
+    <string name="backup_drive_not_allowed">Ohne den Zugriff auf Google Drive geht es nicht. Bitte bei der Anmeldung „Google Drive“ erlauben.</string>
+    <string name="backup_drive_no_browser">Für die Anmeldung bei Google braucht es einen Browser auf dem Handy.</string>
+    <string name="backup_drive_connected">Mit Google verbunden.</string>
+    <string name="backup_drive_disconnect">Verbindung zu Google trennen</string>
+    <string name="backup_drive_disconnected">Verbindung zu Google getrennt.</string>
 
     <!-- Fehler von Google Drive -->
     <string name="drive_error_sign_in">Die Anmeldung bei Google gilt nicht mehr. Bitte neu verbinden.</string>

@@ -98,7 +98,7 @@ val appModule = module {
             context = androidContext(),
             values = get(),
             clientId = androidContext().getString(R.string.google_client_id).trim(),
-            redirectScheme = androidContext().packageName,
+            http = get(),
         )
     }
     single { DriveBackup(GoogleDriveClient(get(), { get<DriveAccount>().accessToken() })) }

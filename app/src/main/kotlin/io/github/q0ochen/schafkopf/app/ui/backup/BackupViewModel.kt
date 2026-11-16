@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.q0ochen.schafkopf.R
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupKind
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupOutcome
@@ -15,8 +16,10 @@ import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
 import io.github.q0ochen.schafkopf.app.backup.DocumentAccess
 import io.github.q0ochen.schafkopf.app.drive.DriveAccount
 import io.github.q0ochen.schafkopf.app.drive.DriveSignIn
+import io.github.q0ochen.schafkopf.app.drive.SignInResult
 import io.github.q0ochen.schafkopf.app.drive.messageRes
 import io.github.q0ochen.schafkopf.data.drive.DriveBackup
+import io.github.q0ochen.schafkopf.data.drive.DriveError
 import io.github.q0ochen.schafkopf.data.drive.DriveResult
 import io.github.q0ochen.schafkopf.data.backup.BackupService
 import io.github.q0ochen.schafkopf.data.backup.ImportPreview
@@ -87,7 +90,6 @@ class BackupViewModel(
 ) : ViewModel() {
 
     private val local = MutableStateFlow(LocalState())
-    private var afterSignIn: AfterSignIn? = null
 
     val state: StateFlow<BackupUiState> =
         combine(local, store.status, players.players, settings.settings, driveAccount.status) { mine, auto, allPlayers, appSettings, drive ->
@@ -107,27 +109,41 @@ class BackupViewModel(
         viewModelScope.launch { driveAccount.load() }
     }
 
-    /** Die Anmeldung bei Google im Browser; danach geschieht [action]. */
-    fun signInIntent(action: AfterSignIn): Intent {
-        afterSignIn = action
-        return driveAccount.signInIntent()
+    /** Die Anmeldung bei Google im Browser; `null` (mit Meldung), wenn es auf dem Gerät keinen Browser gibt. */
+    fun signInIntent(): Intent? = try {
+        driveAccount.signInIntent()
+    } catch (_: ActivityNotFoundException) {
+        say(R.string.backup_drive_no_browser)
+        null
     }
 
-    /** Ergebnis der Anmeldung; bei Erfolg geht es mit dem vorgemerkten Schritt weiter. */
-    fun completeSignIn(result: Intent?) {
-        val action = afterSignIn
-        afterSignIn = null
+    /**
+     * Ergebnis der Anmeldung; bei Erfolg geht es mit [action] weiter. Die Oberfläche merkt sich den Schritt selbst,
+     * damit er auch dann nicht verloren geht, wenn Android die App während der Anmeldung im Browser beendet.
+     */
+    fun completeSignIn(result: Intent?, action: AfterSignIn?) {
         viewModelScope.launch {
-            if (!driveAccount.completeSignIn(result)) {
-                say(R.string.backup_drive_sign_in_failed)
-                return@launch
-            }
-            when (action) {
-                AfterSignIn.ENABLE_AUTO -> enableDrive()
-                AfterSignIn.RESTORE -> restoreFromDrive()
-                null -> Unit
+            when (driveAccount.completeSignIn(result)) {
+                SignInResult.FAILED -> say(R.string.backup_drive_sign_in_failed)
+                SignInResult.DRIVE_NOT_ALLOWED -> say(R.string.backup_drive_not_allowed)
+                SignInResult.OK -> when (action) {
+                    AfterSignIn.ENABLE_AUTO -> enableDrive()
+                    AfterSignIn.RESTORE -> restoreFromDrive()
+                    null -> say(R.string.backup_drive_connected)
+                }
             }
         }
+    }
+
+    /** Trennt die Verbindung zu Google (auch bei Google widerrufen); eine automatische Sicherung nach Drive endet. */
+    fun disconnectDrive() {
+        val status = store.status.value
+        if (status.enabled && status.kind == AutoBackupKind.GOOGLE_DRIVE) {
+            store.setTarget(null, null)
+            scheduler.cancel()
+        }
+        viewModelScope.launch { driveAccount.signOut() }
+        say(R.string.backup_drive_disconnected)
     }
 
     /** Automatisch nach Google Drive sichern (Anmeldung vorausgesetzt); die erste Sicherung folgt sofort. */
@@ -142,6 +158,7 @@ class BackupViewModel(
     fun restoreFromDrive() = work {
         val file = when (val latest = driveBackup.latest()) {
             is DriveResult.Failure -> {
+                forgetIfUnusable(latest.error)
                 say(latest.error.messageRes())
                 return@work
             }
@@ -157,6 +174,14 @@ class BackupViewModel(
                 local.update { it.copy(pending = PendingImport(text.value, preview)) }
             }
         }
+    }
+
+    /**
+     * Ohne gültige Anmeldung oder ohne erlaubten Zugriff hilft nur eine neue Anmeldung: die alte verwerfen, damit der
+     * nächste Versuch gleich den Browser öffnet.
+     */
+    private suspend fun forgetIfUnusable(error: DriveError) {
+        if (error == DriveError.SIGN_IN_REQUIRED || error == DriveError.ACCESS_DENIED) driveAccount.signOut()
     }
 
     /** Schreibt eine Sicherung in die eben gewählte Datei. */
@@ -222,8 +247,13 @@ class BackupViewModel(
             say(R.string.backup_auto_access_refused)
             return
         }
-        val previous = store.status.value.target
-        if (previous != null && previous != uri) documents.releaseAccess(previous)
+        val previous = store.status.value
+        if (previous.kind == AutoBackupKind.GOOGLE_DRIVE && previous.enabled) {
+            // Vorher ging die Sicherung nach Drive: Die Anmeldung dort wird nicht mehr gebraucht.
+            viewModelScope.launch { driveAccount.signOut() }
+        } else if (previous.target != null && previous.target != uri) {
+            documents.releaseAccess(previous.target)
+        }
         store.setTarget(uri, documents.displayName(uri))
         backupNow(enabled = true)
     }

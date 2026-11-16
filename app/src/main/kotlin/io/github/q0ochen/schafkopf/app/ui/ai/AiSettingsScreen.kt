@@ -65,10 +65,17 @@ fun AiSettingsScreen(navigator: Navigator) {
 
     val stored = stringResource(R.string.ai_key_stored)
     val deleted = stringResource(R.string.ai_key_deleted)
+    val failed = stringResource(R.string.ai_key_failed)
     LaunchedEffect(state.keyMessage) {
         val message = state.keyMessage ?: return@LaunchedEffect
         try {
-            snackbar.showSnackbar(if (message) stored else deleted)
+            snackbar.showSnackbar(
+                when (message) {
+                    KeyMessage.STORED -> stored
+                    KeyMessage.DELETED -> deleted
+                    KeyMessage.FAILED -> failed
+                },
+            )
         } finally {
             viewModel.keyMessageShown()
         }

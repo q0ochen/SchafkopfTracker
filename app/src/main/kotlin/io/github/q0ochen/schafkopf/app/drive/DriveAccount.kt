@@ -5,19 +5,27 @@ import android.content.Intent
 import android.net.Uri
 import io.github.q0ochen.schafkopf.app.security.EncryptedValues
 import io.github.q0ochen.schafkopf.data.drive.GoogleDriveClient
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import net.openid.appauth.AuthState
 import net.openid.appauth.AuthorizationException
+import net.openid.appauth.AuthorizationException.GeneralErrors
+import net.openid.appauth.AuthorizationException.TokenRequestErrors
 import net.openid.appauth.AuthorizationRequest
 import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
+import okhttp3.FormBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -29,6 +37,17 @@ import kotlin.coroutines.resumeWithException
  */
 data class DriveSignIn(val signedIn: Boolean = false, val email: String? = null)
 
+/** Wie die Anmeldung ausging. */
+enum class SignInResult {
+    OK,
+
+    /** Abgebrochen oder gescheitert. */
+    FAILED,
+
+    /** Angemeldet, aber den Zugriff auf Google Drive nicht erlaubt (bei Google lässt er sich einzeln abwählen). */
+    DRIVE_NOT_ALLOWED,
+}
+
 /** Die Anmeldung bei Google für die Sicherung in Drive. Als Schnittstelle, damit sich die Abläufe ohne Google prüfen lassen. */
 interface DriveAccount {
     /** `false`, solange in dieser Version der App keine Client-ID von Google eingetragen ist. */
@@ -38,11 +57,14 @@ interface DriveAccount {
     /** Liest den gespeicherten Anmeldestand (einmal genügt; danach hält [status] ihn aktuell). */
     suspend fun load()
 
-    /** Die Anmeldung im Browser; das Ergebnis geht an [completeSignIn]. */
+    /**
+     * Die Anmeldung im Browser; das Ergebnis geht an [completeSignIn].
+     *
+     * @throws android.content.ActivityNotFoundException, wenn es auf dem Gerät keinen Browser gibt.
+     */
     fun signInIntent(): Intent
 
-    /** @return `true`, wenn die Anmeldung geklappt hat. */
-    suspend fun completeSignIn(result: Intent?): Boolean
+    suspend fun completeSignIn(result: Intent?): SignInResult
 
     /**
      * Ein gültiges Zugriffstoken (bei Bedarf frisch geholt) oder `null`, wenn eine neue Anmeldung nötig ist.
@@ -51,6 +73,7 @@ interface DriveAccount {
      */
     suspend fun accessToken(): String?
 
+    /** Abmelden: Die Anmeldung wird auf dem Gerät gelöscht und, soweit erreichbar, auch bei Google widerrufen. */
     suspend fun signOut()
 }
 
@@ -59,14 +82,17 @@ interface DriveAccount {
  * Google-Bibliotheken und ohne Play-Dienste. Die App verlangt nur `drive.file` (sie sieht nur ihre eigenen Dateien)
  * und die E-Mail-Adresse zur Anzeige. Der Anmeldestand (mit dem Token zum Erneuern) liegt verschlüsselt auf dem Gerät.
  *
+ * Ein Zugriffstoken gilt bei Google eine Stunde; erneuert wird erst, wenn es abläuft. Nur dann entsteht ein
+ * [AuthorizationService] (es verbindet sich mit dem Browser) und wird der Anmeldestand neu gespeichert.
+ *
  * @param clientId Die Client-ID des Android-Clients im Google-Cloud-Projekt; leer, solange es keines gibt.
- * @param redirectScheme Das eigene URI-Schema der App (der Paketname), wie es Google für Android-Clients verlangt.
+ * @param http Für den Widerruf beim Abmelden.
  */
 class AppAuthDriveAccount(
     context: Context,
     private val values: EncryptedValues,
     private val clientId: String,
-    private val redirectScheme: String,
+    private val http: OkHttpClient,
 ) : DriveAccount {
     private val appContext = context.applicationContext
     private val lock = Mutex()
@@ -91,7 +117,7 @@ class AppAuthDriveAccount(
             serviceConfiguration,
             clientId,
             ResponseTypeValues.CODE,
-            Uri.parse("$redirectScheme:/oauth2redirect"),
+            Uri.parse("$REDIRECT_SCHEME:/oauth2redirect"),
         )
             .setScopes("openid", "email", GoogleDriveClient.SCOPE_DRIVE_FILE)
             .build()
@@ -103,9 +129,9 @@ class AppAuthDriveAccount(
         }
     }
 
-    override suspend fun completeSignIn(result: Intent?): Boolean = lock.withLock {
-        val data = result ?: return@withLock false
-        val response = AuthorizationResponse.fromIntent(data) ?: return@withLock false
+    override suspend fun completeSignIn(result: Intent?): SignInResult = lock.withLock {
+        val data = result ?: return@withLock SignInResult.FAILED
+        val response = AuthorizationResponse.fromIntent(data) ?: return@withLock SignInResult.FAILED
         val fresh = AuthState(response, AuthorizationException.fromIntent(data))
         val service = AuthorizationService(appContext)
         try {
@@ -118,58 +144,115 @@ class AppAuthDriveAccount(
         } finally {
             service.dispose()
         }
-        if (!fresh.isAuthorized) return@withLock false
-        save(fresh)
-        true
+        if (!fresh.isAuthorized) return@withLock SignInResult.FAILED
+        // Google lässt einzelne Freigaben abwählen. Ohne Drive nützt die Anmeldung nichts: gleich wieder verwerfen.
+        val scopes = fresh.scopeSet
+        if (scopes != null && GoogleDriveClient.SCOPE_DRIVE_FILE !in scopes) {
+            revoke(fresh.refreshToken ?: fresh.accessToken)
+            return@withLock SignInResult.DRIVE_NOT_ALLOWED
+        }
+        try {
+            save(fresh)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Der Schlüsselspeicher des Geräts streikt: lieber keine Anmeldung als eine, die nach dem Neustart fehlt.
+            return@withLock SignInResult.FAILED
+        }
+        SignInResult.OK
     }
 
     override suspend fun accessToken(): String? = lock.withLock {
         val current = current() ?: return@withLock null
+        if (!current.needsTokenRefresh) return@withLock current.accessToken
         val service = AuthorizationService(appContext)
-        try {
-            val token = suspendCancellableCoroutine { continuation ->
+        val outcome = try {
+            suspendCancellableCoroutine { continuation ->
                 current.performActionWithFreshTokens(service) { accessToken, _, error ->
                     when {
                         error == null -> continuation.resume(accessToken)
-                        error.type == AuthorizationException.TYPE_OAUTH_TOKEN_ERROR -> continuation.resume(null)
-                        // Kein Netz oder Google überlastet: später noch einmal, die Anmeldung bleibt.
-                        else -> continuation.resumeWithException(IOException("Token nicht erneuert (${error.type}/${error.code})"))
+                        error.isTransient() -> continuation.resumeWithException(IOException("Token nicht erneuert (${error.type}/${error.code})"))
+                        else -> continuation.resume(null)
                     }
                 }
             }
-            if (token == null) clear() else save(current)
-            token
         } finally {
             service.dispose()
         }
+        if (outcome == null) clear() else save(current)
+        outcome
     }
 
     override suspend fun signOut() {
-        lock.withLock { clear() }
+        val token = lock.withLock {
+            val token = authState?.let { it.refreshToken ?: it.accessToken }
+            clear()
+            token
+        }
+        revoke(token)
     }
 
-    /** Muss unter [lock] laufen. */
+    /**
+     * Nur ein Fehler von Google, der eine neue Anmeldung verlangt (Erneuerung widerrufen oder abgelaufen, Client
+     * ungültig), löscht die Anmeldung; alles andere (Netz, Überlastung, unbekannte Antworten) ist vorübergehend.
+     */
+    private fun AuthorizationException.isTransient(): Boolean = when (this) {
+        TokenRequestErrors.INVALID_GRANT, TokenRequestErrors.INVALID_CLIENT, TokenRequestErrors.UNAUTHORIZED_CLIENT -> false
+        // Lokal und dauerhaft: kein Token zum Erneuern oder ein unbrauchbares Anmeldetoken.
+        AuthorizationException.AuthorizationRequestErrors.CLIENT_ERROR,
+        GeneralErrors.ID_TOKEN_PARSING_ERROR,
+        GeneralErrors.ID_TOKEN_VALIDATION_ERROR,
+        -> false
+        else -> true
+    }
+
+    /** Widerruft die Anmeldung bei Google; ohne Netz bleibt es beim Löschen auf dem Gerät. */
+    private suspend fun revoke(token: String?) {
+        if (token.isNullOrBlank()) return
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("https://oauth2.googleapis.com/revoke")
+                    .post(FormBody.Builder().add("token", token).build())
+                    .build()
+                http.newCall(request).execute().close()
+            } catch (_: IOException) {
+                // Nicht erreichbar: Auf dem Gerät ist die Anmeldung trotzdem weg.
+            }
+        }
+    }
+
+    /** Muss unter [lock] laufen. Ein nicht lesbarer Anmeldestand wird beim nächsten Mal noch einmal versucht. */
     private suspend fun current(): AuthState? {
         if (!loaded) {
-            authState = values.get(KEY)?.let { runCatching { AuthState.jsonDeserialize(it) }.getOrNull() }
-            loaded = true
+            when (val read = values.read(KEY)) {
+                EncryptedValues.Read.Absent -> loaded = true
+                EncryptedValues.Read.Unreadable -> Unit
+                is EncryptedValues.Read.Present -> {
+                    authState = runCatching { AuthState.jsonDeserialize(read.value) }.getOrNull()
+                    loaded = true
+                }
+            }
             publish()
         }
         return authState?.takeIf { it.isAuthorized }
     }
 
     private suspend fun save(fresh: AuthState) {
+        values.set(KEY, fresh.jsonSerializeString())
         authState = fresh
         loaded = true
-        values.set(KEY, fresh.jsonSerializeString())
         publish()
     }
 
     private suspend fun clear() {
         authState = null
         loaded = true
-        values.set(KEY, null)
-        publish()
+        try {
+            values.set(KEY, null)
+        } finally {
+            publish()
+        }
     }
 
     private fun publish() {
@@ -180,7 +263,12 @@ class AppAuthDriveAccount(
         )
     }
 
-    private companion object {
-        const val KEY = "google_drive"
+    companion object {
+        /**
+         * Das eigene URI-Schema für den Rücksprung aus der Anmeldung: der Paketname, wie Google es für Android-Clients
+         * verlangt. Muss zu `manifestPlaceholders["appAuthRedirectScheme"]` in `app/build.gradle.kts` passen.
+         */
+        const val REDIRECT_SCHEME = "io.github.q0ochen.schafkopf"
+        private const val KEY = "google_drive"
     }
 }

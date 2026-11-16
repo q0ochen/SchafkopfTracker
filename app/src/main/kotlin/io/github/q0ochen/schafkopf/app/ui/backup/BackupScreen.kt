@@ -68,8 +68,16 @@ fun BackupScreen(navigator: Navigator) {
     val chooseAuto = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { viewModel.chooseAutoTarget(it.toString()) }
     }
+    // Was nach der Anmeldung geschehen soll; übersteht, dass Android die App währenddessen beendet.
+    var pendingAction by rememberSaveable { mutableStateOf<AfterSignIn?>(null) }
     val signIn = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        viewModel.completeSignIn(result.data)
+        viewModel.completeSignIn(result.data, pendingAction)
+        pendingAction = null
+    }
+    fun startSignIn(action: AfterSignIn) {
+        val intent = viewModel.signInIntent() ?: return
+        pendingAction = action
+        signIn.launch(intent)
     }
     // Mit Google verbinden, falls nötig, und dann [action] ausführen.
     fun withDrive(action: AfterSignIn) {
@@ -79,7 +87,7 @@ fun BackupScreen(navigator: Navigator) {
                 AfterSignIn.RESTORE -> viewModel.restoreFromDrive()
             }
         } else {
-            signIn.launch(viewModel.signInIntent(action))
+            startSignIn(action)
         }
     }
 
@@ -160,7 +168,7 @@ fun BackupScreen(navigator: Navigator) {
                 if (state.auto.lastError == AutoBackupError.SIGN_IN_REQUIRED) {
                     Button(
                         enabled = !state.busy,
-                        onClick = { signIn.launch(viewModel.signInIntent(AfterSignIn.ENABLE_AUTO)) },
+                        onClick = { startSignIn(AfterSignIn.ENABLE_AUTO) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 56.dp),
@@ -197,6 +205,12 @@ fun BackupScreen(navigator: Navigator) {
                         modifier = Modifier.heightIn(min = 48.dp),
                     ) { Text(stringResource(R.string.backup_auto_disable)) }
                 }
+            }
+            if (state.drive.signedIn) {
+                TextButton(
+                    onClick = { viewModel.disconnectDrive() },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.backup_drive_disconnect)) }
             }
         }
     }

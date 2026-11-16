@@ -24,7 +24,8 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         // Rücksprung aus der Anmeldung bei Google (AppAuth): eigenes URI-Schema = Paketname, wie Google es für
-        // Android-Clients verlangt (io.github.q0ochen.schafkopf:/oauth2redirect).
+        // Android-Clients verlangt (io.github.q0ochen.schafkopf:/oauth2redirect). Muss zu
+        // AppAuthDriveAccount.REDIRECT_SCHEME passen; ein applicationIdSuffix ändert daran nichts.
         manifestPlaceholders["appAuthRedirectScheme"] = "io.github.q0ochen.schafkopf"
     }
 

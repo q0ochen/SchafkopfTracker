@@ -146,7 +146,7 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 525, `data` 241, `database` 16, `app` 81, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow
+  `domain` 525, `data` 241, `database` 16, `app` 84, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow
   „Android“ prüft Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
   Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
   `--rerun-tasks` anhängen.
@@ -260,6 +260,14 @@ vermutlich eine Wear-OS-Uhr.
   (`app/src/main/res/values/google.xml`, Anleitung in `docs/GOOGLE-CLOUD.md`, dem Nutzer am 16.11.2026 geschickt);
   solange sie leer ist, bietet die App Drive nicht an. Mit echtem Google noch nicht erprobt (in der Cloud-Umgebung
   sind die Google-Adressen gesperrt, und eine Anmeldung im Browser geht dort nicht).
+
+- Eine unabhängige Durchsicht (16.11.2026) fand acht Schwachstellen, alle behoben: http zum eigenen Server im
+  Heimnetz war von Android gesperrt (jetzt `network_security_config.xml`, http begrenzt weiter `EndpointPolicy`); ein
+  vorübergehender Fehler bei Google konnte die Anmeldung löschen (jetzt nur bei `invalid_grant` und Ähnlichem); ohne
+  erlaubten Drive-Zugriff saß man fest (Prüfung der Freigabe, „Verbindung zu Google trennen“, Widerruf bei Google);
+  ohne Browser stürzte die Anmeldung ab; doppeltes „Senden“ schickte zweimal; der Schritt nach der Anmeldung ging
+  verloren, wenn Android die App beendet; Token wurden bei jedem Aufruf erneuert und gespeichert; Fehler des
+  Schlüsselspeichers stürzten die App ab.
 
 Als Nächstes: Client-ID eintragen, sobald der Nutzer sie schickt, dann die Anmeldung auf einem echten Handy
 erproben; Rückmeldungen der Tester; abstimmen, welche der Issues #1 bis #19 als erledigt gelten.

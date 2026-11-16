@@ -86,11 +86,18 @@ class FakeDriveAccount(override val configured: Boolean = true, signedIn: Boolea
 
     override suspend fun load() = Unit
 
-    override fun signInIntent(): Intent = Intent("anmelden")
+    override fun signInIntent(): Intent {
+        if (noBrowser) throw android.content.ActivityNotFoundException("kein Browser")
+        return Intent("anmelden")
+    }
 
-    override suspend fun completeSignIn(result: Intent?): Boolean {
-        if (signInSucceeds) state.value = DriveSignIn(true, "runde@example.com")
-        return signInSucceeds
+    var result = SignInResult.OK
+    var noBrowser = false
+
+    override suspend fun completeSignIn(result: Intent?): SignInResult {
+        if (!signInSucceeds) return SignInResult.FAILED
+        if (this.result == SignInResult.OK) state.value = DriveSignIn(true, "runde@example.com")
+        return this.result
     }
 
     override suspend fun accessToken(): String? = if (state.value.signedIn) token else null

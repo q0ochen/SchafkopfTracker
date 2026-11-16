@@ -55,8 +55,10 @@ class ClosingViewModelTest {
         assertEquals(1, renamed.colorIndex[TestEvenings.bert])
     }
 
+    private val generator = io.github.q0ochen.schafkopf.app.ai.FakeTextGenerator()
+
     private fun commentator(settings: InMemorySettingsRepository = InMemorySettingsRepository()) =
-        Commentator(settings, InMemorySecretStore("geheim"), FakeGeneratorFactory())
+        Commentator(settings, InMemorySecretStore("geheim"), FakeGeneratorFactory(generator))
 
     @Test
     fun `der Kommentator fragt vor dem ersten Senden und schreibt dann`() = runTest(dispatcher) {
@@ -78,9 +80,12 @@ class ClosingViewModelTest {
 
         viewModel.writeCommentary()
         viewModel.state.awaitFirst { it.commentary is CommentaryUi.NeedsConsent }
+        // Doppeltes Tippen auf „Senden“ schickt nur einmal.
+        viewModel.consent(asking.host)
         viewModel.consent(asking.host)
         val ready = viewModel.state.awaitFirst { it.commentary is CommentaryUi.Ready }.commentary as CommentaryUi.Ready
         assertEquals(Commentary("Servus!", CommentarySource.AI, "gemini-test"), ready.commentary)
+        assertEquals(1, generator.prompts.size)
     }
 
     @Test

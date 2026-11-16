@@ -9,6 +9,7 @@ import androidx.core.content.edit
 import io.github.q0ochen.schafkopf.domain.ports.SecretStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.security.InvalidKeyException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -31,7 +32,14 @@ class AndroidKeystoreCipher(private val alias: String = ALIAS) : SecretCipher {
 
     override fun encrypt(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key())
+        try {
+            cipher.init(Cipher.ENCRYPT_MODE, key())
+        } catch (_: InvalidKeyException) {
+            // Der Schlüssel ist unbrauchbar geworden (zum Beispiel nach einer Änderung der Gerätesperre): einen neuen
+            // anlegen. Was mit dem alten verschlüsselt war, ist damit verloren und muss neu eingegeben werden.
+            KeyStore.getInstance(PROVIDER).apply { load(null) }.deleteEntry(alias)
+            cipher.init(Cipher.ENCRYPT_MODE, key())
+        }
         return cipher.iv + cipher.doFinal(plain)
     }
 
@@ -74,16 +82,32 @@ class AndroidKeystoreCipher(private val alias: String = ALIAS) : SecretCipher {
 class EncryptedValues(context: Context, private val cipher: SecretCipher) {
     private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    suspend fun get(name: String): String? = withContext(Dispatchers.IO) {
-        val stored = prefs.getString(name, null) ?: return@withContext null
+    /** Was beim Lesen herauskam. */
+    sealed interface Read {
+        data object Absent : Read
+
+        /** Gespeichert, aber nicht entschlüsselbar (anderes Gerät, neuer Schlüssel oder ein vorübergehender Fehler). */
+        data object Unreadable : Read
+        data class Present(val value: String) : Read
+    }
+
+    suspend fun read(name: String): Read = withContext(Dispatchers.IO) {
+        val stored = prefs.getString(name, null) ?: return@withContext Read.Absent
         try {
-            cipher.decrypt(Base64.decode(stored, Base64.NO_WRAP)).toString(Charsets.UTF_8)
+            Read.Present(cipher.decrypt(Base64.decode(stored, Base64.NO_WRAP)).toString(Charsets.UTF_8))
         } catch (_: Exception) {
-            null
+            Read.Unreadable
         }
     }
 
-    /** Speichert den Wert verschlüsselt; `null` löscht ihn. */
+    /** Der Wert, oder `null`, wenn er fehlt oder sich nicht lesen lässt. */
+    suspend fun get(name: String): String? = (read(name) as? Read.Present)?.value
+
+    /**
+     * Speichert den Wert verschlüsselt; `null` löscht ihn.
+     *
+     * @throws Exception, wenn der Schlüsselspeicher des Geräts nicht verschlüsseln kann.
+     */
     suspend fun set(name: String, value: String?) = withContext(Dispatchers.IO) {
         if (value == null) {
             prefs.edit { remove(name) }

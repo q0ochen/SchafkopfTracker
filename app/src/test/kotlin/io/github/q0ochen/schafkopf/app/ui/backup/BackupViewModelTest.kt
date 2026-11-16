@@ -201,7 +201,7 @@ class BackupViewModelTest {
         device.viewModel.dismissImport()
 
         device.viewModel.disableAuto()
-        val off = device.viewModel.state.awaitFirst { it.auto.target == null }
+        val off = device.viewModel.state.awaitFirst { it.auto.target == null && it.message?.res == R.string.backup_auto_disabled }
         assertEquals(R.string.backup_auto_disabled, off.message?.res)
         assertTrue(device.documents.kept.isEmpty())
     }
@@ -231,8 +231,8 @@ class BackupViewModelTest {
         assertTrue(old.viewModel.state.awaitFirst { it.driveConfigured }.driveConfigured)
 
         // Erst anmelden, dann einschalten: Die erste Sicherung landet sofort in Drive.
-        old.viewModel.signInIntent(AfterSignIn.ENABLE_AUTO)
-        old.viewModel.completeSignIn(null)
+        assertTrue(old.viewModel.signInIntent() != null)
+        old.viewModel.completeSignIn(null, AfterSignIn.ENABLE_AUTO)
         val on = old.viewModel.state.awaitFirst { it.message?.res == R.string.backup_auto_enabled && !it.busy }
         assertEquals(AutoBackupKind.GOOGLE_DRIVE, on.auto.kind)
         assertEquals("runde@example.com", on.auto.targetName)
@@ -257,8 +257,7 @@ class BackupViewModelTest {
         val device = Device(TestEvenings.players, emptyList())
         backgroundScope.launch { device.viewModel.state.collect {} }
         device.account.signInSucceeds = false
-        device.viewModel.signInIntent(AfterSignIn.RESTORE)
-        device.viewModel.completeSignIn(null)
+        device.viewModel.completeSignIn(null, AfterSignIn.RESTORE)
         assertEquals(
             R.string.backup_drive_sign_in_failed,
             device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_drive_sign_in_failed }.message?.res,
@@ -266,14 +265,67 @@ class BackupViewModelTest {
         device.viewModel.clearMessage()
 
         device.account.signInSucceeds = true
-        device.viewModel.signInIntent(AfterSignIn.RESTORE)
-        device.viewModel.completeSignIn(null)
+        device.viewModel.completeSignIn(null, AfterSignIn.RESTORE)
         assertEquals(R.string.backup_drive_none, device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_drive_none }.message?.res)
         device.viewModel.clearMessage()
 
         device.driveServer.failWith = 503
         device.viewModel.restoreFromDrive()
         assertEquals(R.string.drive_error_server, device.viewModel.state.awaitFirst { it.message?.res == R.string.drive_error_server }.message?.res)
+    }
+
+    @Test
+    fun `Google Drive - Zugriff abgewaehlt, kein Browser, ungueltige Anmeldung, Verbindung trennen`() = runTest(dispatcher) {
+        val device = Device(TestEvenings.players, listOf(TestEvenings.evening()))
+        backgroundScope.launch { device.viewModel.state.collect {} }
+
+        device.account.result = io.github.q0ochen.schafkopf.app.drive.SignInResult.DRIVE_NOT_ALLOWED
+        device.viewModel.completeSignIn(null, AfterSignIn.ENABLE_AUTO)
+        assertEquals(R.string.backup_drive_not_allowed, device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_drive_not_allowed }.message?.res)
+        assertFalse(device.viewModel.state.value.auto.enabled)
+        device.viewModel.clearMessage()
+
+        device.account.noBrowser = true
+        assertNull(device.viewModel.signInIntent())
+        assertEquals(R.string.backup_drive_no_browser, device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_drive_no_browser }.message?.res)
+        device.viewModel.clearMessage()
+
+        // Ohne Folgeschritt (zum Beispiel nach einem Neustart der App während der Anmeldung): nur die Bestätigung.
+        device.account.result = io.github.q0ochen.schafkopf.app.drive.SignInResult.OK
+        device.viewModel.completeSignIn(null, null)
+        assertEquals(R.string.backup_drive_connected, device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_drive_connected }.message?.res)
+        assertTrue(device.viewModel.state.awaitFirst { it.drive.signedIn }.drive.signedIn)
+        device.viewModel.clearMessage()
+
+        // Google verweigert den Zugriff: Die Anmeldung wird verworfen, damit der nächste Versuch neu anmeldet.
+        device.driveServer.failWith = 403
+        device.viewModel.restoreFromDrive()
+        assertEquals(R.string.drive_error_access, device.viewModel.state.awaitFirst { it.message?.res == R.string.drive_error_access }.message?.res)
+        assertTrue(device.account.signedOut)
+        device.viewModel.clearMessage()
+
+        device.driveServer.failWith = null
+        device.account.signedOut = false
+        device.viewModel.completeSignIn(null, AfterSignIn.ENABLE_AUTO)
+        device.viewModel.state.awaitFirst { it.auto.enabled && it.auto.kind == AutoBackupKind.GOOGLE_DRIVE && !it.busy }
+        device.viewModel.clearMessage()
+        device.viewModel.disconnectDrive()
+        val off = device.viewModel.state.awaitFirst {
+            !it.auto.enabled && !it.drive.signedIn && it.message?.res == R.string.backup_drive_disconnected
+        }
+        assertEquals(R.string.backup_drive_disconnected, off.message?.res)
+        assertTrue(device.account.signedOut)
+    }
+
+    @Test
+    fun `wer von Drive auf eine Datei wechselt, wird bei Google abgemeldet`() = runTest(dispatcher) {
+        val device = Device(TestEvenings.players, listOf(TestEvenings.evening()), account = FakeDriveAccount(signedIn = true))
+        backgroundScope.launch { device.viewModel.state.collect {} }
+        device.viewModel.enableDrive()
+        device.viewModel.state.awaitFirst { it.auto.kind == AutoBackupKind.GOOGLE_DRIVE && !it.busy }
+        device.viewModel.chooseAutoTarget("mem://datei.json")
+        device.viewModel.state.awaitFirst { it.auto.kind == AutoBackupKind.DOCUMENT && it.auto.enabled && !it.busy }
+        assertTrue(device.account.signedOut)
     }
 
     @Test

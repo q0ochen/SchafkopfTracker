@@ -9,6 +9,7 @@ import io.github.q0ochen.schafkopf.domain.ports.InMemorySecretStore
 import io.github.q0ochen.schafkopf.domain.ports.InMemorySettingsRepository
 import io.github.q0ochen.schafkopf.domain.ports.LlmError
 import io.github.q0ochen.schafkopf.domain.ports.LlmResult
+import io.github.q0ochen.schafkopf.domain.ports.SecretStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -72,14 +73,27 @@ class AiSettingsViewModelTest {
         viewModel.saveKey("   ")
         assertNull(secrets.apiKey())
         viewModel.saveKey(" geheim ")
-        assertTrue(viewModel.state.awaitFirst { it.hasKey }.keyMessage == true)
+        assertEquals(KeyMessage.STORED, viewModel.state.awaitFirst { it.hasKey }.keyMessage)
         assertEquals("geheim", secrets.apiKey()?.trim())
         assertFalse(viewModel.state.value.toString().contains("geheim"))
         viewModel.keyMessageShown()
 
         viewModel.deleteKey()
-        assertEquals(false, viewModel.state.awaitFirst { !it.hasKey }.keyMessage)
+        assertEquals(KeyMessage.DELETED, viewModel.state.awaitFirst { !it.hasKey }.keyMessage)
         assertNull(secrets.apiKey())
+    }
+
+    @Test
+    fun `streikt die Verschluesselung, wird nichts gespeichert und das gemeldet`() = runTest(dispatcher) {
+        val broken = object : SecretStore {
+            override suspend fun apiKey(): String? = null
+            override suspend fun setApiKey(key: String?) = throw IllegalStateException("Keystore")
+        }
+        val viewModel = AiSettingsViewModel(InMemorySettingsRepository(), broken, FakeGeneratorFactory())
+        backgroundScope.launch { viewModel.state.collect {} }
+        viewModel.saveKey("geheim")
+        assertEquals(KeyMessage.FAILED, viewModel.state.awaitFirst { it.keyMessage != null }.keyMessage)
+        assertFalse(viewModel.state.value.hasKey)
     }
 
     @Test

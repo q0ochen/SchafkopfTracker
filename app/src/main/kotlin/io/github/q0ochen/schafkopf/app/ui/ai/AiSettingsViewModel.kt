@@ -9,6 +9,7 @@ import io.github.q0ochen.schafkopf.domain.ports.LlmError
 import io.github.q0ochen.schafkopf.domain.ports.LlmResult
 import io.github.q0ochen.schafkopf.domain.ports.SecretStore
 import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -32,16 +33,18 @@ data class AiSettingsUiState(
     val models: List<String>? = null,
     val modelsError: LlmError? = null,
     val hostAllowed: Boolean = true,
-    val keyMessage: Boolean? = null,
+    val keyMessage: KeyMessage? = null,
 )
+
+/** Was mit dem Schlüssel geschah. */
+enum class KeyMessage { STORED, DELETED, FAILED }
 
 private data class Local(
     val hasKey: Boolean = false,
     val busy: Boolean = false,
     val models: List<String>? = null,
     val modelsError: LlmError? = null,
-    /** `true`: Schlüssel gespeichert, `false`: gelöscht, `null`: nichts zu melden. */
-    val keyMessage: Boolean? = null,
+    val keyMessage: KeyMessage? = null,
 )
 
 class AiSettingsViewModel(
@@ -94,15 +97,22 @@ class AiSettingsViewModel(
     fun saveKey(key: String) {
         if (key.isBlank()) return
         viewModelScope.launch {
-            secrets.setApiKey(key)
-            local.update { it.copy(hasKey = secrets.apiKey() != null, keyMessage = true, models = null, modelsError = null) }
+            try {
+                secrets.setApiKey(key)
+                local.update { it.copy(hasKey = secrets.apiKey() != null, keyMessage = KeyMessage.STORED, models = null, modelsError = null) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Der Schlüsselspeicher des Geräts kann gerade nicht verschlüsseln: lieber nichts speichern als im Klartext.
+                local.update { it.copy(keyMessage = KeyMessage.FAILED) }
+            }
         }
     }
 
     fun deleteKey() {
         viewModelScope.launch {
             secrets.setApiKey(null)
-            local.update { it.copy(hasKey = false, keyMessage = false, models = null) }
+            local.update { it.copy(hasKey = false, keyMessage = KeyMessage.DELETED, models = null) }
         }
     }
 

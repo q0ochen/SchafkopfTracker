@@ -33,6 +33,7 @@
     <string name="ai_privacy">Gesendet werden nur Spielstände, Spielarten und besondere Spiele des Abends, nie der Ort. Im kostenlosen Tarif darf Google die Texte zur Verbesserung seiner Dienste verwenden.</string>
     <string name="ai_key_stored">Schlüssel gespeichert.</string>
     <string name="ai_key_deleted">Schlüssel gelöscht.</string>
+    <string name="ai_key_failed">Der Schlüssel ließ sich auf diesem Handy nicht sicher speichern.</string>
 
     <!-- Zustimmung vor dem ersten Senden -->
     <string name="ai_consent_title">Daten an %1$s senden?</string>

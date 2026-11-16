@@ -95,8 +95,10 @@ class ClosingViewModel(
         }
     }
 
-    /** Der Nutzer stimmt dem Senden an diesen Dienst zu; dann geht es gleich los. */
+    /** Der Nutzer stimmt dem Senden an diesen Dienst zu; dann geht es gleich los. Ein zweites Tippen zählt nicht. */
     fun consent(host: String) {
+        if (commentary.value !is CommentaryUi.NeedsConsent) return
+        commentary.value = CommentaryUi.Writing
         viewModelScope.launch {
             commentator.consent(host)
             commentary.value = CommentaryUi.Idle
