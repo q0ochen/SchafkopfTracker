@@ -83,7 +83,7 @@
         <item quantity="other">Bock: noch %1$d Spiele</item>
     </plurals>
     <string name="board_no_entries">Noch nichts eingetragen.</string>
-    <string name="board_menu_progress">Verlauf</string>
+    <string name="board_menu_statistics">Statistik dieses Abends</string>
     <string name="board_menu_closing">Abschluss</string>
     <string name="board_menu_rules">Regeln dieses Abends</string>
     <string name="board_menu_finish">Abend beenden</string>

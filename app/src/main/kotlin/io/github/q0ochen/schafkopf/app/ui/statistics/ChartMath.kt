@@ -1,0 +1,72 @@
+package io.github.q0ochen.schafkopf.app.ui.statistics
+
+import kotlin.math.abs
+import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.max
+import kotlin.math.pow
+import kotlin.math.roundToInt
+import kotlin.math.roundToLong
+
+/** Rechenteil des Verlaufsdiagramms, ohne Android und deshalb einfach zu prüfen (wie `BalanceChart.tsx` der Web-App). */
+object ChartMath {
+
+    /**
+     * Runde Teilstriche für die y-Achse (etwa [target] Abschnitte), die den Bereich von [min] bis [max] ganz abdecken.
+     * Beträge sind ganze Cent; deshalb sind auch die Teilstriche ganze Zahlen (nie „2,5 Cent“).
+     */
+    fun niceTicks(min: Int, max: Int, target: Int = 4): List<Int> {
+        var low = min.toDouble()
+        var high = max.toDouble()
+        if (min == max) {
+            val pad = max(1.0, abs(low) * 0.1)
+            low -= pad
+            high += pad
+        }
+        val rough = (high - low) / target
+        val magnitude = 10.0.pow(floor(log10(rough)))
+        val step = listOf(1.0, 2.0, 2.5, 5.0, 10.0)
+            .map { it * magnitude }
+            .filter { it >= 1.0 && it == floor(it) }
+            .firstOrNull { it >= rough }
+            ?: max(1.0, 10 * magnitude)
+        val start = floor(low / step) * step
+        val ticks = ArrayList<Int>()
+        var index = 0
+        while (start + index * step <= high + step * 1e-9) {
+            ticks += (start + index * step).roundToLong().toInt()
+            index++
+        }
+        if (ticks.last() < high) ticks += (ticks.last() + step).roundToLong().toInt()
+        return ticks
+    }
+
+    /**
+     * Schiebt Beschriftungen auseinander, damit sie sich nicht überlappen: Abstand mindestens [gap], alle zwischen
+     * [min] und [max]. Die Reihenfolge von oben nach unten bleibt erhalten.
+     *
+     * @param positions Die gewünschten senkrechten Positionen (zum Beispiel die Linienenden).
+     * @return Die Positionen in derselben Reihenfolge wie [positions].
+     */
+    fun spreadLabels(positions: List<Float>, gap: Float, min: Float, max: Float): List<Float> {
+        val order = positions.withIndex().sortedBy { it.value }
+        val placed = order.map { it.value }.toMutableList()
+        for (i in 1 until placed.size) placed[i] = maxOf(placed[i], placed[i - 1] + gap)
+        val overflow = if (placed.isEmpty()) 0f else placed.last() - max
+        if (overflow > 0) for (i in placed.indices) placed[i] -= overflow
+        for (i in placed.size - 2 downTo 0) placed[i] = minOf(placed[i], placed[i + 1] - gap)
+        if (placed.isNotEmpty() && placed.first() < min) {
+            val shift = min - placed.first()
+            for (i in placed.indices) placed[i] += shift
+        }
+        val result = MutableList(positions.size) { 0f }
+        order.forEachIndexed { rank, item -> result[item.index] = placed[rank] }
+        return result
+    }
+
+    /** Der Punkt, der der waagerechten Position [x] am nächsten liegt (0 bis [last]). */
+    fun nearestIndex(x: Float, plotLeft: Float, plotWidth: Float, last: Int): Int {
+        if (plotWidth <= 0f || last <= 0) return 0
+        return ((x - plotLeft) / plotWidth * last).roundToInt().coerceIn(0, last)
+    }
+}

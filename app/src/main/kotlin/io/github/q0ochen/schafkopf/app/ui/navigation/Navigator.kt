@@ -16,9 +16,10 @@ sealed interface Screen {
 
     /** @property entryId `null`: neues Spiel eintragen. Sonst: diesen Eintrag ändern. */
     data class GameForm(val eveningId: String, val entryId: String?) : Screen
-    data class Progress(val eveningId: String) : Screen
     data class Closing(val eveningId: String) : Screen
-    data object Statistics : Screen
+
+    /** @property eveningId `null`: alle Abende („ewige Tabelle“). Sonst: die Statistik dieses Abends. */
+    data class Statistics(val eveningId: String?) : Screen
     data object Players : Screen
     data object Settings : Screen
 
@@ -32,9 +33,8 @@ sealed interface Screen {
         NewEvening -> "new"
         is Board -> "board$SEP$eveningId"
         is GameForm -> "form$SEP$eveningId$SEP${entryId.orEmpty()}"
-        is Progress -> "progress$SEP$eveningId"
         is Closing -> "closing$SEP$eveningId"
-        Statistics -> "stats"
+        is Statistics -> "stats$SEP${eveningId.orEmpty()}"
         Players -> "players"
         Settings -> "settings"
         is Rules -> "rules$SEP${eveningId.orEmpty()}"
@@ -52,9 +52,10 @@ sealed interface Screen {
                 "new" -> NewEvening
                 "board" -> parts.getOrNull(1)?.let { Board(it) }
                 "form" -> parts.getOrNull(1)?.let { GameForm(it, parts.getOrNull(2)?.takeIf(String::isNotEmpty)) }
-                "progress" -> parts.getOrNull(1)?.let { Progress(it) }
+                // „Verlauf“ hieß früher ein eigener Bildschirm; heute ist das die Statistik des Abends.
+                "progress" -> parts.getOrNull(1)?.let { Statistics(it) }
                 "closing" -> parts.getOrNull(1)?.let { Closing(it) }
-                "stats" -> Statistics
+                "stats" -> Statistics(parts.getOrNull(1)?.takeIf(String::isNotEmpty))
                 "players" -> Players
                 "settings" -> Settings
                 "rules" -> Rules(parts.getOrNull(1)?.takeIf(String::isNotEmpty))

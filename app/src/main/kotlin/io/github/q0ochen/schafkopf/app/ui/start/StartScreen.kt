@@ -84,7 +84,7 @@ fun StartScreen(navigator: Navigator) {
 
             item(key = "links") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    LinkButton(R.string.start_statistics, Modifier.weight(1f)) { navigator.open(Screen.Statistics) }
+                    LinkButton(R.string.start_statistics, Modifier.weight(1f)) { navigator.open(Screen.Statistics(null)) }
                     LinkButton(R.string.start_players, Modifier.weight(1f)) { navigator.open(Screen.Players) }
                     LinkButton(R.string.start_settings, Modifier.weight(1f)) { navigator.open(Screen.Settings) }
                 }

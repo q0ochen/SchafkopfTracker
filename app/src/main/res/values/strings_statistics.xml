@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Statistik eines Abends oder aller Abende („ewige Tabelle“) -->
+    <string name="stats_title">Statistik</string>
+    <string name="stats_filter_label">Auswertung für</string>
+    <string name="stats_filter_all">Alle Abende (ewige Tabelle)</string>
+    <string name="stats_filter_description">Auswertung für %1$s. Antippen, um einen anderen Abend zu wählen.</string>
+    <string name="stats_empty">Noch keine Spiele – die Statistik füllt sich mit dem ersten eingetragenen Spiel.</string>
+    <string name="stats_share">Statistik teilen</string>
+    <plurals name="stats_evenings_count">
+        <item quantity="one">%1$d Abend</item>
+        <item quantity="other">%1$d Abende</item>
+    </plurals>
+    <string name="stats_turnover">Umsatz %1$s</string>
+
+    <!-- Kontostand -->
+    <string name="stats_balance">Kontostand</string>
+    <string name="stats_col_player">Spieler</string>
+    <string name="stats_col_balance">Saldo</string>
+    <string name="stats_col_games">Spiele</string>
+    <string name="stats_col_won">gewonnen</string>
+    <string name="stats_balance_row">Platz %1$d: %2$s, Saldo %3$s, Spiele %4$d, gewonnen %5$s</string>
+
+    <!-- Vermögensverlauf -->
+    <string name="stats_history">Vermögensverlauf</string>
+    <string name="stats_history_hint">Antippen oder waagerecht wischen zeigt die Stände nach einem Spiel.</string>
+    <string name="stats_chart_description">Vermögensverlauf: Kontostand je Spieler nach jedem Spiel. Endstand: %1$s. Die Werte stehen auch in der Tabelle darunter.</string>
+    <string name="stats_chart_start">Start</string>
+    <string name="stats_chart_after_game">nach Spiel %1$d</string>
+    <string name="stats_chart_empty">Der Verlauf erscheint nach dem ersten Spiel.</string>
+    <string name="stats_history_table_show">Verlauf als Tabelle zeigen</string>
+    <string name="stats_history_table_hide">Tabelle ausblenden</string>
+    <string name="stats_col_after">nach</string>
+    <string name="stats_col_evening">Abend</string>
+    <string name="stats_row_game">Spiel %1$d</string>
+    <string name="stats_history_row">%1$s: %2$s</string>
+
+    <!-- Spielarten -->
+    <string name="stats_modes">Selbst gespielt: gewonnen von gespielt</string>
+    <string name="stats_modes_hint">Bei Über Kreuz zählen alle Spiele am Tisch, weil dort niemand ansagt.</string>
+    <string name="stats_modes_cell">%1$d/%2$d</string>
+    <string name="stats_modes_item">%1$s %2$d von %3$d gewonnen</string>
+    <string name="stats_modes_item_none">%1$s nicht gespielt</string>
+
+    <!-- „Sollte er es lassen?“ -->
+    <string name="stats_gelegt">Sollte er es lassen? (Legen)</string>
+    <string name="badge_streichholz_sparer">Streichholz-Sparer: hat noch nie gelegt</string>
+    <string name="badge_noch_offen">Noch offen: zu selten gelegt für ein Urteil</string>
+    <string name="badge_sichere_bank">Sichere Bank: Legen lohnt sich</string>
+    <string name="badge_brandstifter">Brandstifter: sollte es lassen!</string>
+    <string name="badge_gluecksritter">Glücksritter: unterm Strich im Plus</string>
+    <string name="badge_wackelkandidat">Wackelkandidat: unterm Strich nicht im Plus</string>
+    <string name="stats_gelegt_detail">%1$d× gelegt, %2$d gewonnen · unterm Strich %3$s · das Legen selbst brachte %4$s</string>
+
+    <!-- Auszeichnungen -->
+    <string name="stats_awards">Auszeichnungen</string>
+    <string name="award_bock_king">Bock-König (bestes Ergebnis in Bockspielen)</string>
+    <string name="award_bock_king_short">Bock-König</string>
+    <string name="award_bock_king_value">%1$s: %2$s in %3$s</string>
+    <plurals name="stats_bock_games_dative">
+        <item quantity="one">%1$d Bockspiel</item>
+        <item quantity="other">%1$d Bockspielen</item>
+    </plurals>
+    <string name="award_solo">Solo-Spezialist (spielt am liebsten allein)</string>
+    <string name="award_solo_short">Solo-Spezialist</string>
+    <string name="award_wallflower">Mauerblümchen (spielt fast nie allein)</string>
+    <string name="award_wallflower_short">Mauerblümchen</string>
+    <string name="award_solo_value">%1$s: %2$d von %3$d angesagten Spielen allein</string>
+    <string name="award_partners">Lieblingspartner (bestes Gespann)</string>
+    <string name="award_partners_short">Lieblingspartner</string>
+    <string name="award_partners_value">%1$s und %2$s: %3$d von %4$s gewonnen, %5$s</string>
+    <plurals name="stats_games_dative">
+        <item quantity="one">%1$d Spiel</item>
+        <item quantity="other">%1$d Spielen</item>
+    </plurals>
+    <string name="award_nobody">noch niemand</string>
+
+    <!-- Weitere Zahlen und Rekorde -->
+    <string name="stats_more">Weitere Zahlen</string>
+    <string name="stats_most_expensive">Teuerstes Spiel</string>
+    <string name="stats_most_expensive_value">Spiel %1$d: Spielwert %2$s</string>
+    <string name="stats_most_expensive_value_date">Spiel %1$d am %2$s: Spielwert %3$s</string>
+    <string name="stats_lead_changes">Führungswechsel</string>
+    <string name="stats_bock_counts">Bockspiele / ausgelöste Bockrunden</string>
+    <string name="stats_thrown_in">Zusammengeworfen</string>
+    <string name="stats_records">Rekorde je Spieler</string>
+    <string name="stats_col_biggest_win">größter Gewinn</string>
+    <string name="stats_col_biggest_loss">größter Verlust</string>
+    <string name="stats_col_streak">Siegesserie</string>
+    <string name="stats_col_schneider">Schneider +/−</string>
+    <string name="stats_records_row">%1$s: größter Gewinn %2$s, größter Verlust %3$s, längste Siegesserie %4$d, Schneider gewonnen %5$d, verloren %6$d</string>
+    <string name="stats_none">–</string>
+
+    <!-- Statistik als Text zum Teilen -->
+    <string name="share_stats_subject">Schafkopf-Statistik</string>
+    <string name="share_stats_heading_all">Schafkopf-Statistik: alle Abende</string>
+    <string name="share_stats_heading_evening">Schafkopf-Statistik: Abend vom %1$s</string>
+    <string name="share_stats_balance_heading">Kontostand:</string>
+    <string name="share_stats_awards_heading">Auszeichnungen:</string>
+    <string name="share_stats_gelegt_heading">Sollte er es lassen?</string>
+    <string name="share_stats_line">%1$s: %2$s</string>
+</resources>

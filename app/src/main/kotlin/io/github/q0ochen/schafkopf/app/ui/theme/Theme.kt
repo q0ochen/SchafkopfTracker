@@ -69,8 +69,13 @@ private val DarkColors = darkColorScheme(
 
 /**
  * Farben, die Material nicht kennt: Gewinn und Verlust sowie je eine feste Farbe pro Spieler.
- * Die Spielerfarben stammen aus der für Farbfehlsichtige geeigneten Okabe-Ito-Palette; Beträge tragen
- * zusätzlich immer ein Vorzeichen, damit nichts nur an der Farbe hängt.
+ *
+ * Die Spielerfarben sind eine geprüfte Palette für Diagramme (dieselbe wie in der Web-App): Helligkeit, Sättigung,
+ * Abstand der Nachbarn auch bei Rot-Grün- und Blau-Gelb-Schwäche und Kontrast zum Hintergrund, jeweils für Hell und
+ * Dunkel getrennt nachgerechnet. Die Farbe kennzeichnet den Spieler nur als Punkt oder Linie neben seinem Namen;
+ * Text bleibt in Textfarbe, und Beträge tragen immer ein Vorzeichen, damit nichts nur an der Farbe hängt.
+ * In Hell liegen drei Farben unter dem Kontrast 3:1 zum Hintergrund; deshalb stehen im Diagramm die Namen direkt an
+ * den Linien, und es gibt die Werte zusätzlich als Tabelle.
  */
 @Immutable
 data class ExtraColors(
@@ -83,8 +88,8 @@ private val LightExtra = ExtraColors(
     gain = Color(0xFF176B36),
     loss = Color(0xFFB3261E),
     players = listOf(
-        Color(0xFF0072B2), Color(0xFFD55E00), Color(0xFF007A5A), Color(0xFFAA4A8A),
-        Color(0xFF8A6D00), Color(0xFF3A86C8), Color(0xFF5C5C5C), Color(0xFF7A3E00),
+        Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100),
+        Color(0xFFE87BA4), Color(0xFF008300), Color(0xFF6250D6), Color(0xFFE34948),
     ),
 )
 
@@ -92,8 +97,8 @@ private val DarkExtra = ExtraColors(
     gain = Color(0xFF7FDC9A),
     loss = Color(0xFFFFB4AB),
     players = listOf(
-        Color(0xFF56B4E9), Color(0xFFF0A040), Color(0xFF3FD0A8), Color(0xFFE8A0CC),
-        Color(0xFFF0E442), Color(0xFF9CCBEE), Color(0xFFC8C8C8), Color(0xFFE0A070),
+        Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500),
+        Color(0xFFD55181), Color(0xFF0CA30C), Color(0xFF9085E9), Color(0xFFE66767),
     ),
 )
 

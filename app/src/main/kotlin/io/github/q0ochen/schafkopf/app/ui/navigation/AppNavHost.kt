@@ -23,6 +23,7 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.q0ochen.schafkopf.R
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
+import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormScreen
 import io.github.q0ochen.schafkopf.app.ui.newevening.NewEveningScreen
@@ -30,6 +31,7 @@ import io.github.q0ochen.schafkopf.app.ui.settings.PlayersScreen
 import io.github.q0ochen.schafkopf.app.ui.settings.RulesScreen
 import io.github.q0ochen.schafkopf.app.ui.settings.SettingsScreen
 import io.github.q0ochen.schafkopf.app.ui.start.StartScreen
+import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsScreen
 
 /**
  * Hält je Bildschirm auf dem Stapel einen eigenen Behälter für ViewModels. Er überlebt Drehungen des Geräts
@@ -76,9 +78,8 @@ fun AppNavHost() {
                 Screen.NewEvening -> NewEveningScreen(navigator)
                 is Screen.Board -> BoardScreen(screen.eveningId, navigator)
                 is Screen.GameForm -> GameFormScreen(screen.eveningId, screen.entryId, navigator)
-                is Screen.Progress -> ComingSoonScreen(R.string.board_menu_progress, navigator)
-                is Screen.Closing -> ComingSoonScreen(R.string.board_menu_closing, navigator)
-                Screen.Statistics -> ComingSoonScreen(R.string.start_statistics, navigator)
+                is Screen.Closing -> ClosingScreen(screen.eveningId, navigator)
+                is Screen.Statistics -> StatisticsScreen(screen.eveningId, navigator)
                 Screen.Players -> PlayersScreen(navigator)
                 Screen.Settings -> SettingsScreen(navigator)
                 is Screen.Rules -> RulesScreen(screen.eveningId, navigator)

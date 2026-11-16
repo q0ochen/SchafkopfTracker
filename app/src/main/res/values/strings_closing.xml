@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Abschluss eines Abends -->
+    <string name="closing_title">Abschluss</string>
+    <string name="closing_running">Der Abend läuft noch.</string>
+    <string name="closing_standings">Endstand</string>
+    <string name="closing_standing_description">Platz %1$d: %2$s, %3$s</string>
+    <string name="closing_transfers">Wer zahlt wem</string>
+    <string name="closing_transfer">%1$s zahlt %2$s</string>
+    <string name="closing_transfer_description">%1$s zahlt %2$s %3$s</string>
+    <string name="closing_nobody_pays">Niemand muss etwas zahlen.</string>
+    <string name="closing_unbalanced">Die Stände gehen nicht auf (eine freie Buchung ist fehlerhaft); ein Rest bleibt offen.</string>
+    <string name="closing_statistics">Statistik dieses Abends</string>
+
+    <!-- Teilen (Abschluss und Statistik) -->
+    <string name="share_as_text">Als Text teilen</string>
+    <string name="share_as_image">Als Bild teilen</string>
+    <string name="share_chooser">Teilen mit …</string>
+    <string name="share_no_app">Teilen ist hier leider nicht möglich: Auf dem Gerät gibt es keine App dafür.</string>
+    <string name="share_image_failed">Das Bild ließ sich nicht erstellen.</string>
+    <string name="share_closing_subject">Schafkopf-Abend</string>
+    <string name="share_closing_heading">Schafkopf-Abend vom %1$s</string>
+    <string name="share_closing_heading_location">Schafkopf-Abend vom %1$s · %2$s</string>
+    <string name="share_standing_line">%1$d. %2$s %3$s</string>
+    <string name="share_transfers_heading">Wer zahlt wem:</string>
+    <string name="share_transfer_line">%1$s → %2$s: %3$s</string>
+</resources>

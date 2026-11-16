@@ -9,9 +9,15 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
+import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
+import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsScreen
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormScreen
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
 import io.github.q0ochen.schafkopf.app.ui.newevening.NewEveningScreen
@@ -76,7 +82,7 @@ class ScreenshotTest {
     @After
     fun stopDependencyInjection() = stopKoin()
 
-    private fun seed(finished: Boolean = false) = runBlocking {
+    private fun seed(finished: Boolean = false, secondEvening: Boolean = false) = runBlocking {
         ApplicationProvider.getApplicationContext<TestSchafkopfApp>()
         val koin = GlobalContext.get()
         val players = koin.get<PlayerRepository>()
@@ -114,6 +120,25 @@ class ScreenshotTest {
                 entries = entries,
             ),
         )
+        if (secondEvening) {
+            val earlier = start.minusSeconds(14 * 24 * 3600L)
+            evenings.save(
+                Evening(
+                    id = EveningId("abend-0"),
+                    startedAt = earlier,
+                    finishedAt = earlier.plusSeconds(4 * 3600L),
+                    seating = seating,
+                    firstDealer = hans,
+                    rules = RuleSet.standard(),
+                    entries = listOf(
+                        GameEntry(EntryId("f1"), earlier, GameType.RUFSPIEL, Suit.SCHELLEN, declarer = hans, partner = vroni, declarerWon = true),
+                        GameEntry(EntryId("f2"), earlier, GameType.FARBSOLO, Suit.EICHEL, declarer = kathi, declarerWon = false, laufende = 3),
+                        GameEntry(EntryId("f3"), earlier, GameType.RUFSPIEL, Suit.EICHEL, declarer = sepp, partner = hans, declarerWon = true, klopfer = setOf(sepp)),
+                        GameEntry(EntryId("f4"), earlier, GameType.WENZ, declarer = vroni, declarerWon = true, klopfer = setOf(vroni, kathi)),
+                    ),
+                ),
+            )
+        }
     }
 
     private fun show(themeMode: ThemeMode = ThemeMode.LIGHT, content: @Composable () -> Unit) {
@@ -201,6 +226,37 @@ class ScreenshotTest {
         seed()
         show(ThemeMode.DARK) { SettingsScreen(Navigator()) }
         capture("08_einstellungen_dunkel")
+    }
+
+    @Test
+    fun abschluss_dunkel() {
+        seed(finished = true)
+        show(ThemeMode.DARK) { ClosingScreen(eveningId, Navigator()) }
+        capture("11_abschluss_dunkel")
+    }
+
+    @Test
+    fun statistik_abend_hell() {
+        seed()
+        show { StatisticsScreen(eveningId, Navigator()) }
+        capture("12_statistik_abend_hell")
+        // Antippen zeigt das Fadenkreuz mit den Ständen nach diesem Spiel.
+        compose.onNodeWithContentDescription("Vermögensverlauf", substring = true).performTouchInput { click(center) }
+        capture("13_statistik_fadenkreuz_hell")
+        compose.onNodeWithText("Auszeichnungen").performScrollTo()
+        capture("14_statistik_auszeichnungen_hell")
+    }
+
+    @Test
+    fun statistik_alle_dunkel() {
+        seed(secondEvening = true)
+        show(ThemeMode.DARK) { StatisticsScreen(null, Navigator()) }
+        capture("15_statistik_alle_dunkel")
+        compose.onNodeWithText("Verlauf als Tabelle zeigen").performScrollTo().performClick()
+        compose.onNodeWithText("Selbst gespielt: gewonnen von gespielt").performScrollTo()
+        capture("16_statistik_tabelle_dunkel")
+        compose.onNodeWithText("Rekorde je Spieler").performScrollTo()
+        capture("17_statistik_rekorde_dunkel")
     }
 
     @Test

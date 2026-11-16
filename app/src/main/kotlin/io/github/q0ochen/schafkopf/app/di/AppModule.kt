@@ -1,6 +1,8 @@
 package io.github.q0ochen.schafkopf.app.di
 
 import io.github.q0ochen.schafkopf.app.ui.board.BoardViewModel
+import io.github.q0ochen.schafkopf.app.ui.closing.ClosingViewModel
+import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsViewModel
 import io.github.q0ochen.schafkopf.data.storage.FileStorage
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormViewModel
 import io.github.q0ochen.schafkopf.app.ui.newevening.NewEveningViewModel
@@ -71,6 +73,14 @@ val appModule = module {
             settings = get(),
             evenings = get(),
             editor = get(),
+        )
+    }
+    viewModel { params -> ClosingViewModel(EveningId(params.get(0)), get(), get()) }
+    viewModel { params ->
+        StatisticsViewModel(
+            initial = params.get<String>(0).takeIf { it.isNotEmpty() }?.let(::EveningId),
+            evenings = get(),
+            players = get(),
         )
     }
     viewModel { SettingsViewModel(get()) }
