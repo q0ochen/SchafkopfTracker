@@ -229,7 +229,8 @@ class RoomRepositoriesTest {
         evenings.save(evening().copy(rules = RuleSet.sauspiel().copy(unit = 77)))
         database.openHelper.writableDatabase.execSQL("UPDATE evenings SET rules_json = 'kaputt' WHERE id = 'abend'")
 
-        assertEquals(RuleSet.sauspiel(), evenings.evening(EveningId("abend")).first()?.rules)
+        // Die Standardregeln der Runde (RuleSet.standard()), nicht die Vorlage Sauspiel.
+        assertEquals(RuleSet.standard(), evenings.evening(EveningId("abend")).first()?.rules)
     }
 
     /**

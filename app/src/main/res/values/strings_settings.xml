@@ -26,10 +26,10 @@
     <string name="settings_theme_light">hell</string>
     <string name="settings_theme_dark">dunkel</string>
     <string name="settings_rules">Regeln für neue Abende</string>
-    <string name="settings_ai">KI-Zusammenfassung</string>
-    <string name="settings_ai_hint">Freiwillig und standardmäßig aus.</string>
+    <string name="settings_ai">Abend-Kommentator</string>
+    <string name="settings_ai_hint">Witzige Zusammenfassung des Abends; mit Sprachmodell freiwillig und standardmäßig aus.</string>
     <string name="settings_backup">Sicherung und Export</string>
-    <string name="settings_backup_hint">Alle Daten als Datei speichern oder einlesen.</string>
+    <string name="settings_backup_hint">Als Datei speichern oder einlesen, automatisch sichern (zum Beispiel in Google Drive).</string>
     <string name="settings_version">Version %1$s</string>
 
     <!-- Regelwerk -->

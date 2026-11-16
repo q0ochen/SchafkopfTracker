@@ -5,11 +5,15 @@
 <li><b>Doubling:</b> every player who knocked doubles the value (matchbox symbol); “6 Nixer” start a Bock round in which games count double.</li>
 <li><b>Evening:</b> running totals with places, dealer and Bock counter; every game can be edited or deleted later and everything is recalculated at once.</li>
 <li><b>Configurable rules:</b> tariffs, Laufende, Bock round, pot split for solo games; every evening keeps its own rules.</li>
+<li><b>Closing and statistics:</b> final standings and who pays whom; statistics for one evening or all evenings with a balance history chart, game types, a knocking index, Bock king, solo specialist and favourite partners.</li>
+<li><b>Sharing:</b> closing and statistics as text or as an image, for example to Signal or Telegram.</li>
+<li><b>Backup:</b> save and restore a file (also exchangeable with the iPhone web app) and, if you like, automatically after every change, directly to Google Drive or into a file you pick once.</li>
+<li><b>Evening commentator:</b> a funny, slightly teasing summary of the evening in Bavarian, from text templates or, if you like, written by a language model (Google Gemini with your own key).</li>
 <li><b>Made for dimly lit pubs:</b> dark design, large buttons, works with a screen reader.</li>
 </ul>
 
-<p><b>Privacy:</b> everything stays on the device. No internet, no account, no ads, no tracking.</p>
+<p><b>Privacy:</b> everything stays on the device. The app uses the internet only for two optional extras: backup to Google Drive and the evening commentator with a language model (sends only after consent, without real names by default). No own server, no ads, no tracking.</p>
 
-<p><b>Test version:</b> statistics, backup and the watch app are still to come. For the iPhone there is a web app with the same calculations.</p>
+<p><b>Test version:</b> the watch app comes later. For the iPhone there is a web app with the same calculations.</p>
 
 <p>Free software (CC0 1.0). Source code: <a href="https://github.com/q0ochen/SchafkopfTracker">github.com/q0ochen/SchafkopfTracker</a></p>

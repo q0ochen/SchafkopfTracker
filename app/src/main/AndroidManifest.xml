@@ -3,17 +3,17 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-        Die App braucht derzeit kein Internet: Alles bleibt auf dem Gerät. Die Netzbibliothek (OkHttp, für die spätere
-        KI-Zusammenfassung im Modul data) bringt die Berechtigung von selbst mit; sie wird hier wieder entfernt.
-        Erst wenn Abend-Kommentator oder Drive-Sicherung in die App kommen, diese Zeile löschen.
+        Internet nur für zwei freiwillige Dinge: den Abend-Kommentator mit Sprachmodell (standardmäßig aus, sendet erst
+        nach Zustimmung) und die Sicherung in Google Drive. Alles andere funktioniert ohne Netz.
     -->
-    <uses-permission
-        android:name="android.permission.INTERNET"
-        tools:node="remove" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".app.SchafkopfApp"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -28,6 +28,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Gibt geteilte Bilder (Abschluss, Statistik) an die gewählte App weiter, nur mit Leserecht für dieses Bild. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.dateien"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

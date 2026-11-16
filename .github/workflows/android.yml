@@ -70,8 +70,8 @@ jobs:
           yes | "$SDKM" --licenses >/dev/null || true
           "$SDKM" "platforms;android-37.0" "build-tools;36.0.0" >/dev/null
 
-      - name: Tests von Rechenkern und Datenschicht (mit Abdeckung des Kerns)
-        run: ./gradlew :domain:test :data:test :domain:koverVerify --no-daemon
+      - name: Tests von Rechenkern, Datenschicht und Datenbank (mit Abdeckung des Kerns)
+        run: ./gradlew :domain:test :data:test :domain:koverVerify :database:testDebugUnitTest --no-daemon
 
       - name: Tests der App (inklusive Bildschirmfotos)
         run: ./gradlew :app:testFdroidDebugUnitTest --no-daemon
@@ -82,7 +82,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import glob, sys, xml.etree.ElementTree as ET
-          minimum = {"domain": 525, "data": 231, "app": 17}
+          minimum = {"domain": 525, "data": 241, "database": 16, "app": 84}
           ok = True
           for module, least in minimum.items():
               files = glob.glob(f"{module}/build/test-results/**/*.xml", recursive=True)
@@ -302,7 +302,7 @@ jobs:
 
           ### Hinweise
           - Testversion, mit dem öffentlichen Test-Schlüssel signiert. Neue Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten.
-          - Die App braucht kein Internet; alles bleibt auf dem Handy.
+          - Alles bleibt auf dem Handy. Internet braucht die App nur für zwei freiwillige Zusätze: den Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in Google Drive.
           - Prüfsumme (SHA-256) der APK: siehe \`SchafkopfTracker.apk.sha256\`.
           EOF
 

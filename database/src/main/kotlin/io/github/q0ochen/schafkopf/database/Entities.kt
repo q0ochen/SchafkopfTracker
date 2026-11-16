@@ -98,6 +98,20 @@ data class EntryEntity(
     }
 }
 
+/**
+ * Die Einstellungen der App als eine einzige Zeile (Kennung 0). Gespeichert als JSON-Text in der Schreibweise der
+ * früheren Datei `settings.json`; so braucht eine neue Einstellung keine neue Spalte.
+ */
+@Entity(tableName = "settings")
+data class SettingsEntity(
+    @PrimaryKey val id: Int = SINGLE_ROW,
+    val json: String,
+) {
+    companion object {
+        const val SINGLE_ROW = 0
+    }
+}
+
 /** Ein Abend mit allen seinen Einträgen, in einer Abfrage geladen. */
 data class EveningWithEntries(
     @Embedded val evening: EveningEntity,

@@ -9,13 +9,14 @@ rechnet aus, wer wie viel bekommt oder zahlt. Am Ende des Abends stehen Gewinner
 ## Android-Testversion
 
 Die Testversion wird bei jeder Änderung automatisch gebaut, getestet und im Emulator probehalber installiert. Neue
-Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten. Die App braucht
-kein Internet.
+Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten. Internet braucht
+die App nur für zwei freiwillige Zusätze: den Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in
+Google Drive.
 
 ### In F-Droid (empfohlen)
 
-Mit [F-Droid](https://f-droid.org) kommen neue Testversionen als normale Updates. Die Paketquelle ist erreichbar,
-sobald der Schlüssel bei GitHub hinterlegt ist ([docs/F-DROID.md](docs/F-DROID.md), Abschnitt 3).
+Mit [F-Droid](https://f-droid.org) kommen neue Testversionen als normale Updates (Einzelheiten:
+[docs/F-DROID.md](docs/F-DROID.md)).
 
 1. **F-Droid installieren:** auf [f-droid.org](https://f-droid.org) „F-Droid herunterladen“ antippen und die Datei
    öffnen (Erlaubnis zulassen; warnt Play Protect: **Weitere Details → Trotzdem installieren**).
@@ -57,8 +58,7 @@ man nicht neu installieren.
 ## iPhone: Web-App
 
 Fürs iPhone gibt es in der Testphase eine kostenlose **Web-App** mit denselben Rechnungen wie die Android-App
-(automatisch gegen den Rechenkern der Android-App geprüft). Sie ist online, sobald der Arbeitsstand in `main`
-zusammengeführt ist.
+(automatisch gegen den Rechenkern der Android-App geprüft). Sie zeigt den Stand von `main`.
 
 1. In **Safari** öffnen: **https://q0ochen.github.io/SchafkopfTracker/**
 2. Auf **Teilen** tippen (Quadrat mit Pfeil nach oben; je nach iOS-Version hinter den drei Punkten „…“) →
@@ -67,8 +67,8 @@ zusammengeführt ist.
    hat einen eigenen Speicher; was im Safari-Tab eingetragen wurde, ist dort nicht zu sehen.
 
 Alles bleibt auf dem iPhone, und die Web-App funktioniert auch ohne Empfang. Löscht man das Symbol, sind die Daten
-weg – deshalb ab und zu **Einstellungen → Sicherung speichern**. Dieselbe Datei kann die Android-App später
-einlesen.
+weg – deshalb ab und zu **Einstellungen → Sicherung speichern**. Dieselbe Datei liest die Android-App ein
+(**Einstellungen → Sicherung und Export → Sicherung einlesen**), und umgekehrt.
 
 ## Was die App kann (Stand der Entwicklung)
 
@@ -79,13 +79,17 @@ einlesen.
 | Abend-Liste mit laufendem Stand, Plätzen, Geber und Bock-Zähler | fertig |
 | Dunkles Design als Standard, große Tippflächen, Bedienung mit Screenreader | fertig |
 | Statistik für einen Abend und über alle Abende: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index, Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner | Rechenwerk fertig, getestet |
-| Statistik-Bildschirm mit Diagrammen, Abschluss mit „Wer zahlt wem“, Teilen als Text | in der Web-App fertig, in der Android-App geplant |
-| Speichern auf dem Gerät (jede Eingabe sofort) | fertig |
+| Statistik-Bildschirm mit Diagrammen, Abschluss mit „Wer zahlt wem“, Teilen als Text | Android-App und Web-App |
+| Teilen als Bild (Abschluss und Statistik) | Android-App |
+| Speichern auf dem Gerät (jede Eingabe sofort; Android: Room-Datenbank) | fertig |
 | Testversion für Android über eine eigene F-Droid-Paketquelle, Web-App fürs iPhone | eingerichtet |
-| Sicherung als Datei (speichern und einlesen, zwischen iPhone und Android austauschbar) | in der Web-App fertig, in der Android-App geplant |
-| Sicherung auf Google Drive, Stammtisch-Zusammenfassung, Wear-OS-App, Teilen als Bild | geplant |
+| Sicherung als Datei (speichern und einlesen, zwischen iPhone und Android austauschbar) | Android-App und Web-App |
+| Automatische Sicherung nach jeder Änderung, direkt in Google Drive oder in eine gewählte Datei | Android-App (Drive nach Einrichtung des Google-Cloud-Projekts) |
+| Abend-Kommentator: witzige Zusammenfassung des Abends (Gemini mit eigenem Schlüssel oder Textbausteine) | Android-App |
+| Wear-OS-App | aufgeschoben bis zu einer Ausgabe ohne F-Droid |
 
-Alles liegt nur auf dem Gerät. Kein Konto, kein Server, keine Werbung, keine Auswertung des Nutzungsverhaltens.
+Alles liegt nur auf dem Gerät, außer man schaltet die Sicherung in Google Drive oder den Abend-Kommentator mit
+Sprachmodell selbst ein. Kein eigener Server, keine Werbung, keine Auswertung des Nutzungsverhaltens.
 
 ## Regeln und Abrechnung
 
@@ -139,7 +143,7 @@ Die Labels stehen in [.github/labels.json](.github/labels.json) und werden vom W
 ```
 domain/     Reines Kotlin: Regelwerk, Abrechnung, Abend-Logik, Statistik, Zusammenfassung + Tests
 data/       Reines Kotlin: Speicherung und Sicherung als JSON, CSV, Netzanbindungen + Tests
-database/   Room-Datenbank (SQLite): Tabellen, Abfragen, Repositories + Tests (noch nicht eingebunden)
+database/   Room-Datenbank (SQLite): Tabellen, Abfragen, Repositories + Tests
 app/        Android-App (Jetpack Compose): Oberfläche, ViewModels, Verdrahtung mit Koin
 web/        Web-App fürs iPhone (TypeScript, Preact): Rechenkern geprüft gegen den Kotlin-Kern + Tests
 fdroid/     Eigene F-Droid-Paketquelle für die Testversionen

@@ -23,6 +23,10 @@ android {
         // F-Droid liest diese beiden Werte per Textsuche: Sie müssen als feste Zahlen bzw. Texte hier stehen.
         versionCode = 1
         versionName = "0.1.0"
+        // Rücksprung aus der Anmeldung bei Google (AppAuth): eigenes URI-Schema = Paketname, wie Google es für
+        // Android-Clients verlangt (io.github.q0ochen.schafkopf:/oauth2redirect). Muss zu
+        // AppAuthDriveAccount.REDIRECT_SCHEME passen; ein applicationIdSuffix ändert daran nichts.
+        manifestPlaceholders["appAuthRedirectScheme"] = "io.github.q0ochen.schafkopf"
     }
 
     // Fester, öffentlicher Test-Schlüssel (kein Geheimnis, liegt bewusst im Repository): Alle Debug-Builds und alle
@@ -109,6 +113,7 @@ androidComponents {
 dependencies {
     implementation(project(":domain"))
     implementation(project(":data"))
+    implementation(project(":database"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -117,6 +122,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.okhttp)
+    implementation(libs.appauth)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -133,5 +141,6 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.androidx.work.testing)
     debugImplementation(libs.compose.ui.test.manifest)
 }

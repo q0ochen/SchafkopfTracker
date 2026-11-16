@@ -70,20 +70,29 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
 6. Teilen: Jede Statistik und jede Abend-Abrechnung lässt sich als formatierter Text und als Bild über das
    Teilen-Menü von Android weitergeben (Signal, Telegram und andere).
 
+Stand 16.11.2026: umgesetzt in der Android-App (Statistik, Abschluss, Teilen als Text und Bild) und in der Web-App
+(ohne Teilen als Bild).
+
 ## 6. Sicherung und Zusätze
 
 - **Google Drive:** Nach jedem Eintragen, Ändern oder Löschen wird im Hintergrund eine Sicherung auf Google Drive
   aktualisiert. Ohne Empfang wird sie nachgeholt. In den Einstellungen lässt sich eine Sicherung zurückspielen.
+  Stand 16.11.2026: direkt in Google Drive (Anmeldung mit dem Google-Konto, Ordner „SchafkopfTracker_Backups“),
+  sobald die Client-ID des Google-Cloud-Projekts eingetragen ist (`docs/GOOGLE-CLOUD.md`); daneben wahlweise in eine
+  Datei aus der Dateiauswahl von Android. „Aus Google Drive einlesen“ spielt die Sicherung zurück.
 - **Abend-Kommentator:** Auf Wunsch schreibt ein Sprachmodell (Gemini, eigener Schlüssel) aus den Zahlen des Abends
   eine witzige, bairisch gefärbte und leicht stichelnde Zusammenfassung; auch sie lässt sich teilen.
-  Ohne Schlüssel entsteht die Zusammenfassung aus Textbausteinen.
+  Ohne Schlüssel entsteht die Zusammenfassung aus Textbausteinen. Stand 16.11.2026: in der Android-App umgesetzt
+  (Abschluss → „Kommentar schreiben lassen“; Einstellungen → Abend-Kommentator).
 - **Uhr (Wear OS):** eine Kachel mit dem Zwischenstand des laufenden Abends und der Schaltfläche „Neues Spiel“ sowie
   eine Schnelleingabe in Schritten für das runde Display; die Eingabe wird mit dem Handy abgeglichen.
+  Aufgeschoben (Entscheidung vom 16.11.2026), bis es eine Ausgabe der App ohne F-Droid gibt.
 
 ## 7. Technik und Vertrieb
 
 - Android, vollständig in Kotlin, Oberfläche mit Jetpack Compose (Material 3). Zielgeräte: Pixel 11 Pro, Pixel Watch 4.
-- Clean Architecture (Presentation, Domain, Data) mit MVVM, Koin, Room mit `Flow`.
+- Clean Architecture (Presentation, Domain, Data) mit MVVM, Koin, Room mit `Flow` (seit 16.11.2026; die Daten der
+  ersten Testversionen werden beim ersten Start einmalig übernommen).
 - Tests: über 90 % Abdeckung im Domain Layer (JUnit 5, MockK, Turbine), dazu Tests für Datenbank, Repositories
   und Sicherung.
 - Veröffentlichung auf F-Droid: keine proprietären Bibliotheken in der Ausgabe `fdroid`, keine Tracker, kein
@@ -106,6 +115,8 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
   (15.11.2026, siehe README).
 - Sprachmodell und Google Drive werden über offene Schnittstellen (REST, OAuth 2) angebunden, nicht über
   proprietäre Bibliotheken (15.11.2026).
+- Google Drive direkt über ein kostenloses Google-Cloud-Projekt des Projektinhabers; Abend-Kommentator ja; die Uhr
+  wird aufgeschoben, bis die App auch ohne F-Droid gebaut wird (16.11.2026).
 
 ## Offene Entscheidungen
 
@@ -115,4 +126,4 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
 - Bockrunde im Einzelnen: Dauer (angenommen vier Spiele), erneutes Auslösen (angenommen: wird angehängt),
   ob das Blatt mit den 6 Nixern zusammengeworfen wird (angenommen: ja).
 - Laufende: Die Eingabe bietet Zahlen erst ab der Schwelle an (Rufspiel, Über Kreuz, Farbsolo ab 3; Wenz, Geier ab 2).
-- Google Drive braucht ein kostenloses Google-Cloud-Projekt des Projektinhabers.
+- Wann gibt es eine Ausgabe ohne F-Droid (Ausgabe `full`), mit der die Uhr kommen kann?

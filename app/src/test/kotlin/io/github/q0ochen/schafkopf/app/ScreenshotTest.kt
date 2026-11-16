@@ -9,9 +9,19 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
+import io.github.q0ochen.schafkopf.app.ui.ai.AiSettingsScreen
+import io.github.q0ochen.schafkopf.app.ui.backup.BackupScreen
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
+import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
+import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsScreen
+import io.github.q0ochen.schafkopf.app.ui.waitForText
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormScreen
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
 import io.github.q0ochen.schafkopf.app.ui.newevening.NewEveningScreen
@@ -36,6 +46,7 @@ import io.github.q0ochen.schafkopf.app.ui.settings.RulesScreen
 import io.github.q0ochen.schafkopf.app.ui.settings.SettingsScreen
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
+import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
@@ -76,7 +87,7 @@ class ScreenshotTest {
     @After
     fun stopDependencyInjection() = stopKoin()
 
-    private fun seed(finished: Boolean = false) = runBlocking {
+    private fun seed(finished: Boolean = false, secondEvening: Boolean = false) = runBlocking {
         ApplicationProvider.getApplicationContext<TestSchafkopfApp>()
         val koin = GlobalContext.get()
         val players = koin.get<PlayerRepository>()
@@ -114,15 +125,36 @@ class ScreenshotTest {
                 entries = entries,
             ),
         )
+        if (secondEvening) {
+            val earlier = start.minusSeconds(14 * 24 * 3600L)
+            evenings.save(
+                Evening(
+                    id = EveningId("abend-0"),
+                    startedAt = earlier,
+                    finishedAt = earlier.plusSeconds(4 * 3600L),
+                    seating = seating,
+                    firstDealer = hans,
+                    rules = RuleSet.standard(),
+                    entries = listOf(
+                        GameEntry(EntryId("f1"), earlier, GameType.RUFSPIEL, Suit.SCHELLEN, declarer = hans, partner = vroni, declarerWon = true),
+                        GameEntry(EntryId("f2"), earlier, GameType.FARBSOLO, Suit.EICHEL, declarer = kathi, declarerWon = false, laufende = 3),
+                        GameEntry(EntryId("f3"), earlier, GameType.RUFSPIEL, Suit.EICHEL, declarer = sepp, partner = hans, declarerWon = true, klopfer = setOf(sepp)),
+                        GameEntry(EntryId("f4"), earlier, GameType.WENZ, declarer = vroni, declarerWon = true, klopfer = setOf(vroni, kathi)),
+                    ),
+                ),
+            )
+        }
     }
 
-    private fun show(themeMode: ThemeMode = ThemeMode.LIGHT, content: @Composable () -> Unit) {
+    /** @param ready Ein Text, der erst mit den geladenen Daten erscheint; bis dahin wird gewartet. */
+    private fun show(themeMode: ThemeMode = ThemeMode.LIGHT, ready: String? = null, content: @Composable () -> Unit) {
         compose.setContent {
             SchafkopfTheme(themeMode) {
                 Surface(modifier = Modifier.fillMaxSize()) { content() }
             }
         }
         compose.waitForIdle()
+        ready?.let { compose.waitForText(it) }
     }
 
     private fun capture(name: String) {
@@ -133,14 +165,14 @@ class ScreenshotTest {
     @Test
     fun start_mit_laufendem_abend() {
         seed()
-        show { StartScreen(Navigator()) }
+        show(ready = "Wirtshaus zur Post") { StartScreen(Navigator()) }
         capture("01_start")
     }
 
     @Test
     fun neuer_abend() {
         seed(finished = true)
-        show { NewEveningScreen(Navigator()) }
+        show(ready = "Wie letztes Mal") { NewEveningScreen(Navigator()) }
         compose.onNodeWithText("Wie letztes Mal").performClick()
         capture("02_neuer_abend")
     }
@@ -148,28 +180,28 @@ class ScreenshotTest {
     @Test
     fun abend_hell() {
         seed()
-        show { BoardScreen(eveningId, Navigator()) }
+        show(ready = "Sepp") { BoardScreen(eveningId, Navigator()) }
         capture("03_abend_hell")
     }
 
     @Test
     fun abend_dunkel() {
         seed()
-        show(ThemeMode.DARK) { BoardScreen(eveningId, Navigator()) }
+        show(ThemeMode.DARK, ready = "Sepp") { BoardScreen(eveningId, Navigator()) }
         capture("04_abend_dunkel")
     }
 
     @Test
     fun spiel_eintragen_leer() {
         seed()
-        show { GameFormScreen(eveningId, null, Navigator()) }
+        show(ready = "Sepp") { GameFormScreen(eveningId, null, Navigator()) }
         capture("05_formular_leer")
     }
 
     @Test
     fun spiel_eintragen_ausgefuellt() {
         seed()
-        show { GameFormScreen(eveningId, null, Navigator()) }
+        show(ready = "Sepp") { GameFormScreen(eveningId, null, Navigator()) }
         compose.onAllNodesWithText("Sepp")[0].performClick()
         compose.onAllNodesWithText("Kathi")[0].performClick()
         compose.onAllNodesWithText("Hans")[1].performClick()
@@ -182,7 +214,7 @@ class ScreenshotTest {
     @Test
     fun ueber_kreuz_eintragen() {
         seed()
-        show(ThemeMode.DARK) { GameFormScreen(eveningId, null, Navigator()) }
+        show(ThemeMode.DARK, ready = "Sepp") { GameFormScreen(eveningId, null, Navigator()) }
         compose.onNodeWithText("Über Kreuz").performClick()
         // Ein Tipp auf Sepp wählt das Paar Sepp und Kathi, die sich gegenübersitzen.
         compose.onAllNodesWithText("Sepp")[0].performClick()
@@ -192,21 +224,83 @@ class ScreenshotTest {
     @Test
     fun spiel_aendern_dunkel() {
         seed()
-        show(ThemeMode.DARK) { GameFormScreen(eveningId, "e4", Navigator()) }
+        show(ThemeMode.DARK, ready = "Vroni") { GameFormScreen(eveningId, "e4", Navigator()) }
         capture("07_formular_aendern_dunkel")
     }
 
     @Test
     fun einstellungen_dunkel() {
         seed()
-        show(ThemeMode.DARK) { SettingsScreen(Navigator()) }
+        show(ThemeMode.DARK, ready = "hell") { SettingsScreen(Navigator()) }
         capture("08_einstellungen_dunkel")
+    }
+
+    @Test
+    fun abschluss_dunkel() {
+        seed(finished = true)
+        show(ThemeMode.DARK, ready = "Wer zahlt wem") { ClosingScreen(eveningId, Navigator()) }
+        capture("11_abschluss_dunkel")
+    }
+
+    @Test
+    fun statistik_abend_hell() {
+        seed()
+        show(ready = "Kontostand") { StatisticsScreen(eveningId, Navigator()) }
+        capture("12_statistik_abend_hell")
+        // Antippen zeigt das Fadenkreuz mit den Ständen nach diesem Spiel.
+        compose.onNodeWithContentDescription("Vermögensverlauf", substring = true).performTouchInput { click(center) }
+        capture("13_statistik_fadenkreuz_hell")
+        compose.onNodeWithText("Auszeichnungen").performScrollTo()
+        capture("14_statistik_auszeichnungen_hell")
+    }
+
+    @Test
+    fun statistik_alle_dunkel() {
+        seed(secondEvening = true)
+        show(ThemeMode.DARK, ready = "Kontostand") { StatisticsScreen(null, Navigator()) }
+        capture("15_statistik_alle_dunkel")
+        compose.onNodeWithText("Verlauf als Tabelle zeigen").performScrollTo().performClick()
+        compose.onNodeWithText("Selbst gespielt: gewonnen von gespielt").performScrollTo()
+        capture("16_statistik_tabelle_dunkel")
+        compose.onNodeWithText("Rekorde je Spieler").performScrollTo()
+        capture("17_statistik_rekorde_dunkel")
+    }
+
+    @Test
+    fun sicherung_dunkel() {
+        seed()
+        GlobalContext.get().get<AutoBackupStore>().apply {
+            setTarget("content://drive/1", "schafkopf-sicherung.json")
+            recordSuccess(start.plusSeconds(3 * 3600L))
+        }
+        show(ThemeMode.DARK, ready = "Datei: schafkopf-sicherung.json") { BackupScreen(Navigator()) }
+        capture("19_sicherung_dunkel")
+    }
+
+    @Test
+    fun abend_kommentator_einstellungen_dunkel() {
+        seed()
+        runBlocking {
+            GlobalContext.get().get<SettingsRepository>().update { it.copy(ai = it.ai.copy(enabled = true)) }
+        }
+        show(ThemeMode.DARK, ready = "Google Gemini") { AiSettingsScreen(Navigator()) }
+        capture("20_kommentator_einstellungen_dunkel")
+    }
+
+    @Test
+    fun abschluss_mit_kommentar_dunkel() {
+        seed(finished = true)
+        show(ThemeMode.DARK, ready = "Wer zahlt wem") { ClosingScreen(eveningId, Navigator()) }
+        compose.onNodeWithText("Kommentar schreiben lassen").performScrollTo().performClick()
+        compose.waitForText("Kommentar teilen")
+        compose.onNodeWithText("Kommentar teilen").performScrollTo()
+        capture("21_abschluss_kommentar_dunkel")
     }
 
     @Test
     fun regelwerk_dunkel() {
         seed()
-        show(ThemeMode.DARK) { RulesScreen(null, Navigator()) }
+        show(ThemeMode.DARK, ready = "Runde 10/50") { RulesScreen(null, Navigator()) }
         capture("09_regelwerk_dunkel")
     }
 }

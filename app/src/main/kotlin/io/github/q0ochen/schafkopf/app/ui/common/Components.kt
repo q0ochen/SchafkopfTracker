@@ -2,7 +2,9 @@ package io.github.q0ochen.schafkopf.app.ui.common
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,8 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -41,6 +45,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.q0ochen.schafkopf.R
 import io.github.q0ochen.schafkopf.app.ui.theme.LocalExtraColors
+import io.github.q0ochen.schafkopf.app.ui.theme.playerColor
 import io.github.q0ochen.schafkopf.domain.rules.GameType
 import io.github.q0ochen.schafkopf.domain.rules.KontraLevel
 import io.github.q0ochen.schafkopf.domain.rules.ResultLevel
@@ -204,6 +209,42 @@ fun AmountText(
         maxLines = 1,
         modifier = modifier,
     )
+}
+
+/** Der farbige Punkt eines Spielers; dieselbe Farbe trägt seine Linie im Diagramm. Für Screenreader unsichtbar. */
+@Composable
+fun PlayerDot(colorIndex: Int, modifier: Modifier = Modifier, size: Dp = 10.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .background(playerColor(colorIndex), CircleShape),
+    )
+}
+
+/**
+ * Name eines Spielers in Textfarbe, davor sein farbiger Punkt. Die Farbe kennzeichnet nur; lesbar bleibt der Name
+ * auch dort, wo eine Spielerfarbe auf dem Hintergrund zu wenig Kontrast hätte.
+ */
+@Composable
+fun PlayerName(
+    name: String,
+    colorIndex: Int,
+    modifier: Modifier = Modifier,
+    style: TextStyle = MaterialTheme.typography.bodyLarge,
+    fontWeight: FontWeight? = null,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        PlayerDot(colorIndex)
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = name,
+            style = style,
+            fontWeight = fontWeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+    }
 }
 
 @StringRes

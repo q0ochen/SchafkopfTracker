@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Unverschlüsseltes http lässt Android seit Version 9 nur noch zu, wenn die App es erlaubt. Gebraucht wird es für
+    genau einen Fall: einen eigenen Sprachmodell-Server im Heimnetz (zum Beispiel Ollama unter http://192.168.1.20:11434).
+    Die App selbst schickt http ohnehin nur dorthin: EndpointPolicy (Modul data) erlaubt http ausschließlich zum eigenen
+    Gerät und zu Adressen des eigenen Netzes; Google Drive und Gemini laufen immer über https.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

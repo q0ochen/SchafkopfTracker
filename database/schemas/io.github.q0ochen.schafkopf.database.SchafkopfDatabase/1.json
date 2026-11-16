@@ -1,0 +1,311 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "8b76a6ae4b521af80bb403eb18173b0b",
+    "entities": [
+      {
+        "tableName": "players",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `color_index` INTEGER NOT NULL, `archived` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "colorIndex",
+            "columnName": "color_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archived",
+            "columnName": "archived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sort_order",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "evenings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `finished_at` INTEGER, `location` TEXT NOT NULL, `seat_1` TEXT NOT NULL, `seat_2` TEXT NOT NULL, `seat_3` TEXT NOT NULL, `seat_4` TEXT NOT NULL, `first_dealer` TEXT NOT NULL, `rules_json` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "finishedAt",
+            "columnName": "finished_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "location",
+            "columnName": "location",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seat1",
+            "columnName": "seat_1",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seat2",
+            "columnName": "seat_2",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seat3",
+            "columnName": "seat_3",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seat4",
+            "columnName": "seat_4",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstDealer",
+            "columnName": "first_dealer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rulesJson",
+            "columnName": "rules_json",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "entries",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `evening_id` TEXT NOT NULL, `position` INTEGER NOT NULL, `kind` TEXT NOT NULL, `recorded_at` INTEGER NOT NULL, `game_type` TEXT, `suit` TEXT, `declarer` TEXT, `partner` TEXT, `declarer_won` INTEGER, `level` TEXT, `laufende` INTEGER, `announcement` TEXT, `gelegt_by` TEXT, `kontra` TEXT, `kontra_by` TEXT, `retour_by` TEXT, `bock_override` TEXT, `declarer_eyes` INTEGER, `note` TEXT, `bock_reason` TEXT, `bock_player` TEXT, `hand_thrown_in` INTEGER, `manual_amounts` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`evening_id`) REFERENCES `evenings`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eveningId",
+            "columnName": "evening_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordedAt",
+            "columnName": "recorded_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gameType",
+            "columnName": "game_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "suit",
+            "columnName": "suit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "declarer",
+            "columnName": "declarer",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "partner",
+            "columnName": "partner",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "declarerWon",
+            "columnName": "declarer_won",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "level",
+            "columnName": "level",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "laufende",
+            "columnName": "laufende",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "announcement",
+            "columnName": "announcement",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "gelegtBy",
+            "columnName": "gelegt_by",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kontra",
+            "columnName": "kontra",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kontraBy",
+            "columnName": "kontra_by",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "retourBy",
+            "columnName": "retour_by",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bockOverride",
+            "columnName": "bock_override",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "declarerEyes",
+            "columnName": "declarer_eyes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bockReason",
+            "columnName": "bock_reason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bockPlayer",
+            "columnName": "bock_player",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "handThrownIn",
+            "columnName": "hand_thrown_in",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "manualAmounts",
+            "columnName": "manual_amounts",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_entries_evening_id",
+            "unique": false,
+            "columnNames": [
+              "evening_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_entries_evening_id` ON `${TABLE_NAME}` (`evening_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "evenings",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "evening_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `json` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "json",
+            "columnName": "json",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8b76a6ae4b521af80bb403eb18173b0b')"
+    ]
+  }
+}

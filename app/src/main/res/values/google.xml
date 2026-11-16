@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Client-ID des Android-Clients im Google-Cloud-Projekt „Schafkopf Tracker“ (Anleitung: docs/GOOGLE-CLOUD.md).
+        Kein Geheimnis: Sie steht in jeder installierten App. Solange sie leer ist, bietet die App die Sicherung in
+        Google Drive nicht an.
+    -->
+    <string name="google_client_id" translatable="false"></string>
+</resources>

@@ -39,6 +39,10 @@ abstract class EveningDao {
     @Query("SELECT * FROM evenings WHERE id = :id")
     abstract fun observe(id: String): Flow<EveningWithEntries?>
 
+    /** 1, wenn es den Abend gibt, sonst 0. */
+    @Query("SELECT COUNT(*) FROM evenings WHERE id = :id")
+    abstract suspend fun exists(id: String): Int
+
     @Upsert
     protected abstract suspend fun upsertEvening(evening: EveningEntity)
 
@@ -63,14 +67,28 @@ abstract class EveningDao {
     abstract suspend fun delete(id: String)
 }
 
+@Dao
+interface SettingsDao {
+    /** Die Einstellungen als Text; `null`, solange nie etwas gespeichert wurde. Meldet sich bei jeder Änderung neu. */
+    @Query("SELECT json FROM settings WHERE id = 0")
+    fun observe(): Flow<String?>
+
+    @Query("SELECT json FROM settings WHERE id = 0")
+    suspend fun current(): String?
+
+    @Upsert
+    suspend fun upsert(settings: SettingsEntity)
+}
+
 @Database(
-    entities = [PlayerEntity::class, EveningEntity::class, EntryEntity::class],
+    entities = [PlayerEntity::class, EveningEntity::class, EntryEntity::class, SettingsEntity::class],
     version = 1,
     exportSchema = true,
 )
 abstract class SchafkopfDatabase : RoomDatabase() {
     abstract fun playerDao(): PlayerDao
     abstract fun eveningDao(): EveningDao
+    abstract fun settingsDao(): SettingsDao
 
     companion object {
         const val FILE_NAME = "schafkopf.db"

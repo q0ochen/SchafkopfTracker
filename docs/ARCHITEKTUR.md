@@ -1,6 +1,6 @@
 # Architektur (verbindlicher Vertrag)
 
-Stand: 15.11.2026. Namen, Pakete, Funktionen und Pfade in diesem Dokument sind exakt so zu verwenden.
+Stand: 16.11.2026. Namen, Pakete, Funktionen und Pfade in diesem Dokument sind exakt so zu verwenden.
 Wer davon abweichen muss, ändert zuerst dieses Dokument. Was die App können soll, steht in
 [ANFORDERUNGEN.md](ANFORDERUNGEN.md).
 
@@ -14,7 +14,7 @@ Wer davon abweichen muss, ändert zuerst dieses Dokument. Was die App können so
 | Ganze Cent | Beträge sind `Int` in Cent. Kein Gleitkomma in der Abrechnung. Jedes Spiel ist ein Nullsummenspiel. In Euro formatiert wird nur in der Oberfläche (`:app`). |
 | Nichts geht verloren | Jede Eingabe wird sofort in einer Datenbank-Transaktion gespeichert. Fehler beim Lesen führen nie zum Absturz. |
 | Regelwerk je Abend | Jeder Abend trägt eine eigene Kopie des Regelwerks. Änderungen an der Vorlage verändern alte Abende nicht. |
-| Minimale Rechte | Einzige Berechtigung: `INTERNET` (Cloud-Sicherung und Abend-Kommentator). |
+| Minimale Rechte | Einzige Berechtigung: `INTERNET`, nur für die freiwilligen Zusätze Abend-Kommentator und Sicherung in Google Drive. Die Sicherung in eine Datei schreibt über die Dateiauswahl von Android (Storage Access Framework) und braucht keine. |
 | Barrierefrei | Dunkles Design als Standard. Tippziele mindestens 48 dp, Hauptaktionen 56 dp und mehr, Schrift bis 200 %, hoher Kontrast, keine Information nur über Farbe, Diagramme zusätzlich als Text, `contentDescription` bzw. Semantik überall. |
 | Sprache | Oberfläche Deutsch, alle Texte in `strings*.xml`. Kommentare Deutsch. Bezeichner Englisch mit deutschen Fachbegriffen (Rufspiel, Laufende, Bock; Abend heißt `Evening`). |
 | Keine Namen | Namen von Personen stehen nie im Quelltext, in Tests, Issues oder Commit-Nachrichten. Tests verwenden Beispielnamen. |
@@ -25,7 +25,7 @@ Wer davon abweichen muss, ändert zuerst dieses Dokument. Was die App können so
 | Modul | Art | Paket | Inhalt |
 |---|---|---|---|
 | `:domain` | Kotlin/JVM | `io.github.q0ochen.schafkopf.domain` | Modelle, Regelwerk, `ScoreCalculator`, `PayoutCalculator`, Abend-Logik, `StatisticEngine`, Zusammenfassung, Ports |
-| `:data` | Kotlin/JVM | `io.github.q0ochen.schafkopf.data` | Sicherung als JSON, CSV, Netzanbindungen (Sprachmodell, Google Drive) |
+| `:data` | Kotlin/JVM | `io.github.q0ochen.schafkopf.data` | Sicherung als JSON, CSV, Netzanbindungen (Sprachmodell, Google Drive REST v3), Dateiformat der ersten Testversionen (`FileStorage`) |
 | `:database` | Android-Bibliothek | `io.github.q0ochen.schafkopf.database` | Room: Tabellen, DAOs mit `Flow`, Repositories |
 | `:app` | Android-App | `io.github.q0ochen.schafkopf.app` | Compose-Oberfläche, ViewModels (MVVM), Navigation, Koin-Module, Android-Adapter |
 | `:wear` | Wear-OS-App (geplant) | `io.github.q0ochen.schafkopf.wear` | Kachel und Schnelleingabe auf der Uhr |
@@ -189,18 +189,42 @@ Für die gesamte Statistik (`EveningStatistics`, `HistoryStatistics`, `Statistic
 
 ### Room (`:database`)
 
-Tabellen `players`, `evenings`, `entries` (Fremdschlüssel auf den Abend, Löschen mit `CASCADE`). DAOs liefern
+Tabellen `players`, `evenings`, `entries` (Fremdschlüssel auf den Abend, Löschen mit `CASCADE`) und `settings`
+(eine Zeile, die Einstellungen als JSON in der Schreibweise der früheren `settings.json`, `SettingsJson`). DAOs liefern
 `Flow`s, sodass sich jede Änderung von selbst bei allen Bildschirmen meldet. Ein Abend wird samt Einträgen in einer
 Transaktion gespeichert. Aufzählungen stehen mit ihrem Namen in der Datenbank: Die Namen der Enum-Werte sind Teil des
 Schemas. Das Schema jeder Version liegt unter `database/schemas/`; jede Änderung braucht eine Migration mit Test.
+
+Die ersten Testversionen speicherten JSON-Dateien im Ordner `daten` (`FileStorage` in `:data`). Beim Start übernimmt
+`LegacyFileImport` (`app/storage`) sie einmalig mit `importMissing`: in einer Transaktion, ohne Vorhandenes zu
+überschreiben, bei einem Fehler beim nächsten Start erneut. Danach heißt der Ordner `daten-uebernommen` und bleibt
+als Rückfall liegen.
 
 ### Sicherung (`:data`)
 
 Eine UTF-8-JSON-Datei mit Kopf (`format`, `schemaVersion`, `appVersion`, `exportedAt`), festen Schlüsseln und
 Beträgen in Cent. Der Import führt zusammen und löscht nichts; ein Abend, der in sich nicht stimmig ist (falsche
 Sitzordnung, unbekannte Spieler, Buchungen, die nicht aufgehen, Beträge außerhalb des Bereichs, mit dem die App
-rechnet), wird mit Begründung ausgelassen (`EveningCheck`, `EveningProblem`). Dieselbe Datei wird auf Google Drive gesichert
-(Hintergrundarbeit mit `WorkManager`, ohne Empfang nachgeholt). Schlüssel und Anmeldedaten stehen nie in der Sicherung.
+rechnet), wird mit Begründung ausgelassen (`EveningCheck`, `EveningProblem`). Schlüssel und Anmeldedaten stehen nie in
+der Sicherung.
+
+Automatische Sicherung (`app/backup`): Der Nutzer wählt einmal eine Datei in der Dateiauswahl von Android, zum
+Beispiel in Google Drive (`DocumentAccess`, dauerhaftes Lese- und Schreibrecht). Jede Änderung an Spielern, Abenden
+oder der Regel-Vorlage stößt `AutoBackupWorker` an (WorkManager, eindeutiger Auftrag, 3 Sekunden gebündelt, bei
+Fehlern mit wachsendem Abstand ab 30 Sekunden, höchstens 10 Versuche, beim nächsten Start erneut). Das Hochladen
+übernimmt die App des Anbieters, auch später ohne Netz. Ziel und Verlauf stehen nur auf dem Gerät
+(`AutoBackupStore`), nie in der Sicherung.
+
+Google Drive direkt (`AutoBackupKind.GOOGLE_DRIVE`): Anmeldung im Browser mit AppAuth (`app/drive/DriveAccount.kt`;
+OAuth 2.0 mit PKCE, Android-Client mit eigenem URI-Schema `io.github.q0ochen.schafkopf:/oauth2redirect`, Freigaben
+`openid`, `email`, `drive.file`), Aufrufe über `GoogleDriveClient` und `DriveBackup` (`:data`, Ordner
+`SchafkopfTracker_Backups`, Datei `schafkopf-sicherung.json`, Ersetzen per `PATCH`). Der Auftrag an WorkManager wartet
+auf Netz. Einrichtung des Google-Cloud-Projekts: [GOOGLE-CLOUD.md](GOOGLE-CLOUD.md).
+
+Geheimnisse (Schlüssel des Abend-Kommentators, Anmeldestand bei Google) liegen AES-GCM-verschlüsselt mit einem
+Schlüssel aus dem Android Keystore in `geheimnisse.xml` (`app/security`); diese Datei und das Ziel der automatischen
+Sicherung sind von der Datensicherung von Android ausgenommen (`res/xml/backup_rules.xml`,
+`data_extraction_rules.xml`).
 
 ### Sprachmodell (`:data`, Paket `data.llm`)
 
@@ -225,8 +249,13 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 
 - MVVM: je Bildschirm ein ViewModel mit `StateFlow` als Zustand; die Oberfläche liest nur diesen Zustand.
 - Navigation: eigener Stapel aus `Screen`-Werten (`Navigator`), je Eintrag ein eigener ViewModel-Speicher.
-- Bildschirme: Start, Neuer Abend, Abend, Spiel eintragen, Verlauf, Abschluss, Statistik, Spieler, Einstellungen,
-  Regelwerk, Sicherung, Abend-Kommentator.
+- Bildschirme: Start, Neuer Abend, Abend, Spiel eintragen, Abschluss, Statistik (ein Abend oder alle Abende, oben
+  wählbar; Vermögensverlauf als selbst gezeichnetes Liniendiagramm mit Tabelle als Alternative), Spieler,
+  Einstellungen, Regelwerk, Sicherung, Abend-Kommentator.
+- Abend-Kommentator (`app/ai`): `Commentator` mit `SummaryService` und `TemplateSummary`; Zustimmung je Dienst
+  (`AiSettings.consentHost`), Platzhalter statt Namen als Standard, Standardmodell `gemini-flash-latest`.
+- Teilen: Abschluss und Statistik als Text (`ACTION_SEND`) und als Bild (Compose-Ansicht über `GraphicsLayer` als PNG
+  im Cache, weitergegeben über `FileProvider`, nur der Ordner `cache/geteilt`).
 - Texte der Oberfläche stehen in `res/values/strings*.xml`; Beträge formatiert ausschließlich `:app`.
 
 ## 5. Tests
@@ -234,7 +263,8 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 - `:domain`: JUnit Jupiter, MockK, Turbine; Ziel über 90 % Abdeckung (gemessen mit Kover).
   Pflicht: Preisberechnung aller Spielarten, Potenzen aus Bock und Gelegt, Verteilung der Spielschuld, Nullsumme.
 - `:data`: Sicherung hin und zurück, Import-Prüfungen, CSV, Netzanbindungen gegen einen Testserver.
-- `:database`: Room mit SQLite im Arbeitsspeicher (Robolectric), DAOs, Repositories, Schema-Wächter.
+- `:database`: Room mit SQLite im Arbeitsspeicher (Robolectric), DAOs, Repositories, Einstellungen, Übernahme,
+  Schema-Wächter.
 - `:app`: Bildschirmfotos der wichtigsten Bildschirme (Roborazzi) als Sichtprüfung; eigene UI-Tests sind nicht
   verlangt. Dazu Tests einzelner ViewModels ohne Oberfläche, mit Ablagen im Arbeitsspeicher (`GameFormViewModelTest`).
 

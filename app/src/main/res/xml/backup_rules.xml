@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Datensicherung von Android bis Android 11: Spieler, Abende und Einstellungen werden mitgesichert. Ausgenommen sind
+    die verschlüsselten Geheimnisse (auf einem anderen Gerät nicht lesbar) und das Ziel der automatischen Sicherung
+    (die Freigabe einer Datei gilt nur auf diesem Gerät).
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="geheimnisse.xml" />
+    <exclude domain="sharedpref" path="automatische_sicherung.xml" />
+</full-backup-content>

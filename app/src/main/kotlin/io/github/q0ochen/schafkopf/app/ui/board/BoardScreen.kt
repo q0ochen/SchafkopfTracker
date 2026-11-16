@@ -59,12 +59,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.q0ochen.schafkopf.R
 import io.github.q0ochen.schafkopf.app.ui.common.AmountText
+import io.github.q0ochen.schafkopf.app.ui.common.PlayerName
 import io.github.q0ochen.schafkopf.app.ui.common.KeepScreenOn
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
 import io.github.q0ochen.schafkopf.app.ui.common.formatDate
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
 import io.github.q0ochen.schafkopf.app.ui.navigation.Screen
-import io.github.q0ochen.schafkopf.app.ui.theme.playerColor
 import io.github.q0ochen.schafkopf.domain.evening.EntryResult
 import io.github.q0ochen.schafkopf.domain.evening.EveningState
 import io.github.q0ochen.schafkopf.domain.evening.GameEntry
@@ -105,10 +105,10 @@ fun BoardScreen(eveningId: String, navigator: Navigator) {
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.board_menu_progress)) },
+                                text = { Text(stringResource(R.string.board_menu_statistics)) },
                                 onClick = {
                                     menuOpen = false
-                                    navigator.open(Screen.Progress(eveningId))
+                                    navigator.open(Screen.Statistics(eveningId))
                                 },
                             )
                             DropdownMenuItem(
@@ -309,13 +309,12 @@ private fun PlayerHeaderCell(
             .padding(horizontal = 2.dp)
             .clearAndSetSemantics { contentDescription = description },
     ) {
-        Text(
-            text = name,
+        // Der Name steht in Textfarbe, die Spielerfarbe als Punkt davor (wie im Diagramm der Statistik).
+        PlayerName(
+            name = name,
+            colorIndex = colorIndex,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
-            color = playerColor(colorIndex),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
         AmountText(balance, asMoney, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
