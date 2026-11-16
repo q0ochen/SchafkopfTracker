@@ -77,15 +77,16 @@ Stand 16.11.2026: umgesetzt in der Android-App (Statistik, Abschluss, Teilen als
 
 - **Google Drive:** Nach jedem Eintragen, Ändern oder Löschen wird im Hintergrund eine Sicherung auf Google Drive
   aktualisiert. Ohne Empfang wird sie nachgeholt. In den Einstellungen lässt sich eine Sicherung zurückspielen.
-  Stand 16.11.2026: umgesetzt über die Dateiauswahl von Android. Man wählt einmal eine Datei, zum Beispiel in Google
-  Drive (dafür muss die Drive-App auf dem Handy sein); danach schreibt die App nach jeder Änderung dorthin, und Drive
-  lädt sie hoch, auch später ohne Netz. „Sicherung einlesen“ spielt sie zurück. Ein Google-Cloud-Projekt ist dafür
-  nicht nötig.
+  Stand 16.11.2026: direkt in Google Drive (Anmeldung mit dem Google-Konto, Ordner „SchafkopfTracker_Backups“),
+  sobald die Client-ID des Google-Cloud-Projekts eingetragen ist (`docs/GOOGLE-CLOUD.md`); daneben wahlweise in eine
+  Datei aus der Dateiauswahl von Android. „Aus Google Drive einlesen“ spielt die Sicherung zurück.
 - **Abend-Kommentator:** Auf Wunsch schreibt ein Sprachmodell (Gemini, eigener Schlüssel) aus den Zahlen des Abends
   eine witzige, bairisch gefärbte und leicht stichelnde Zusammenfassung; auch sie lässt sich teilen.
-  Ohne Schlüssel entsteht die Zusammenfassung aus Textbausteinen.
+  Ohne Schlüssel entsteht die Zusammenfassung aus Textbausteinen. Stand 16.11.2026: in der Android-App umgesetzt
+  (Abschluss → „Kommentar schreiben lassen“; Einstellungen → Abend-Kommentator).
 - **Uhr (Wear OS):** eine Kachel mit dem Zwischenstand des laufenden Abends und der Schaltfläche „Neues Spiel“ sowie
   eine Schnelleingabe in Schritten für das runde Display; die Eingabe wird mit dem Handy abgeglichen.
+  Aufgeschoben (Entscheidung vom 16.11.2026), bis es eine Ausgabe der App ohne F-Droid gibt.
 
 ## 7. Technik und Vertrieb
 
@@ -113,8 +114,9 @@ Stand 16.11.2026: umgesetzt in der Android-App (Statistik, Abschluss, Teilen als
 - Anmerkungen des Hauptentwicklers werden zu Issues; umgesetzt wird nach Abstimmung mit dem Projektinhaber
   (15.11.2026, siehe README).
 - Sprachmodell und Google Drive werden über offene Schnittstellen (REST, OAuth 2) angebunden, nicht über
-  proprietäre Bibliotheken (15.11.2026). Für Google Drive gibt es bis zur Entscheidung unten die Lösung über die
-  Dateiauswahl von Android; sie kommt ganz ohne Bibliothek und ohne Google-Cloud-Projekt aus.
+  proprietäre Bibliotheken (15.11.2026).
+- Google Drive direkt über ein kostenloses Google-Cloud-Projekt des Projektinhabers; Abend-Kommentator ja; die Uhr
+  wird aufgeschoben, bis die App auch ohne F-Droid gebaut wird (16.11.2026).
 
 ## Offene Entscheidungen
 
@@ -124,10 +126,4 @@ Stand 16.11.2026: umgesetzt in der Android-App (Statistik, Abschluss, Teilen als
 - Bockrunde im Einzelnen: Dauer (angenommen vier Spiele), erneutes Auslösen (angenommen: wird angehängt),
   ob das Blatt mit den 6 Nixern zusammengeworfen wird (angenommen: ja).
 - Laufende: Die Eingabe bietet Zahlen erst ab der Schwelle an (Rufspiel, Über Kreuz, Farbsolo ab 3; Wenz, Geier ab 2).
-- Google Drive: Reicht die Sicherung über die Dateiauswahl (siehe Abschnitt 6), oder soll die App Drive direkt über
-  dessen Schnittstelle ansprechen? Das bräuchte ein kostenloses Google-Cloud-Projekt des Projektinhabers und eine
-  Anmeldung mit dem Google-Konto in der App.
-- Abend-Kommentator: Soll er kommen? Dafür braucht jeder Nutzer einen eigenen Gemini-Schlüssel; die Zahlen des
-  Abends (auf Wunsch ohne echte Namen) gehen dann an Google.
-- Uhr (Wear OS): Hat der Hauptentwickler eine Uhr zum Testen? Der Abgleich mit dem Handy geht nur über Google Play
-  Services (nur in der Ausgabe `full`).
+- Wann gibt es eine Ausgabe ohne F-Droid (Ausgabe `full`), mit der die Uhr kommen kann?

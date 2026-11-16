@@ -14,7 +14,7 @@ Wer davon abweichen muss, ändert zuerst dieses Dokument. Was die App können so
 | Ganze Cent | Beträge sind `Int` in Cent. Kein Gleitkomma in der Abrechnung. Jedes Spiel ist ein Nullsummenspiel. In Euro formatiert wird nur in der Oberfläche (`:app`). |
 | Nichts geht verloren | Jede Eingabe wird sofort in einer Datenbank-Transaktion gespeichert. Fehler beim Lesen führen nie zum Absturz. |
 | Regelwerk je Abend | Jeder Abend trägt eine eigene Kopie des Regelwerks. Änderungen an der Vorlage verändern alte Abende nicht. |
-| Minimale Rechte | Derzeit keine einzige Berechtigung. `INTERNET` kommt erst mit dem Abend-Kommentator dazu. Die Sicherung schreibt über die Dateiauswahl von Android (Storage Access Framework) und braucht keine. |
+| Minimale Rechte | Einzige Berechtigung: `INTERNET`, nur für die freiwilligen Zusätze Abend-Kommentator und Sicherung in Google Drive. Die Sicherung in eine Datei schreibt über die Dateiauswahl von Android (Storage Access Framework) und braucht keine. |
 | Barrierefrei | Dunkles Design als Standard. Tippziele mindestens 48 dp, Hauptaktionen 56 dp und mehr, Schrift bis 200 %, hoher Kontrast, keine Information nur über Farbe, Diagramme zusätzlich als Text, `contentDescription` bzw. Semantik überall. |
 | Sprache | Oberfläche Deutsch, alle Texte in `strings*.xml`. Kommentare Deutsch. Bezeichner Englisch mit deutschen Fachbegriffen (Rufspiel, Laufende, Bock; Abend heißt `Evening`). |
 | Keine Namen | Namen von Personen stehen nie im Quelltext, in Tests, Issues oder Commit-Nachrichten. Tests verwenden Beispielnamen. |
@@ -25,7 +25,7 @@ Wer davon abweichen muss, ändert zuerst dieses Dokument. Was die App können so
 | Modul | Art | Paket | Inhalt |
 |---|---|---|---|
 | `:domain` | Kotlin/JVM | `io.github.q0ochen.schafkopf.domain` | Modelle, Regelwerk, `ScoreCalculator`, `PayoutCalculator`, Abend-Logik, `StatisticEngine`, Zusammenfassung, Ports |
-| `:data` | Kotlin/JVM | `io.github.q0ochen.schafkopf.data` | Sicherung als JSON, CSV, Netzanbindung des Sprachmodells, Dateiformat der ersten Testversionen (`FileStorage`) |
+| `:data` | Kotlin/JVM | `io.github.q0ochen.schafkopf.data` | Sicherung als JSON, CSV, Netzanbindungen (Sprachmodell, Google Drive REST v3), Dateiformat der ersten Testversionen (`FileStorage`) |
 | `:database` | Android-Bibliothek | `io.github.q0ochen.schafkopf.database` | Room: Tabellen, DAOs mit `Flow`, Repositories |
 | `:app` | Android-App | `io.github.q0ochen.schafkopf.app` | Compose-Oberfläche, ViewModels (MVVM), Navigation, Koin-Module, Android-Adapter |
 | `:wear` | Wear-OS-App (geplant) | `io.github.q0ochen.schafkopf.wear` | Kachel und Schnelleingabe auf der Uhr |
@@ -213,8 +213,18 @@ Beispiel in Google Drive (`DocumentAccess`, dauerhaftes Lese- und Schreibrecht).
 oder der Regel-Vorlage stößt `AutoBackupWorker` an (WorkManager, eindeutiger Auftrag, 3 Sekunden gebündelt, bei
 Fehlern mit wachsendem Abstand ab 30 Sekunden, höchstens 10 Versuche, beim nächsten Start erneut). Das Hochladen
 übernimmt die App des Anbieters, auch später ohne Netz. Ziel und Verlauf stehen nur auf dem Gerät
-(`AutoBackupStore`), nie in der Sicherung. Eine direkte Anbindung an die Schnittstelle von Google Drive (OAuth)
-bräuchte ein Google-Cloud-Projekt und ist nicht umgesetzt.
+(`AutoBackupStore`), nie in der Sicherung.
+
+Google Drive direkt (`AutoBackupKind.GOOGLE_DRIVE`): Anmeldung im Browser mit AppAuth (`app/drive/DriveAccount.kt`;
+OAuth 2.0 mit PKCE, Android-Client mit eigenem URI-Schema `io.github.q0ochen.schafkopf:/oauth2redirect`, Freigaben
+`openid`, `email`, `drive.file`), Aufrufe über `GoogleDriveClient` und `DriveBackup` (`:data`, Ordner
+`SchafkopfTracker_Backups`, Datei `schafkopf-sicherung.json`, Ersetzen per `PATCH`). Der Auftrag an WorkManager wartet
+auf Netz. Einrichtung des Google-Cloud-Projekts: [GOOGLE-CLOUD.md](GOOGLE-CLOUD.md).
+
+Geheimnisse (Schlüssel des Abend-Kommentators, Anmeldestand bei Google) liegen AES-GCM-verschlüsselt mit einem
+Schlüssel aus dem Android Keystore in `geheimnisse.xml` (`app/security`); diese Datei und das Ziel der automatischen
+Sicherung sind von der Datensicherung von Android ausgenommen (`res/xml/backup_rules.xml`,
+`data_extraction_rules.xml`).
 
 ### Sprachmodell (`:data`, Paket `data.llm`)
 
@@ -241,7 +251,9 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 - Navigation: eigener Stapel aus `Screen`-Werten (`Navigator`), je Eintrag ein eigener ViewModel-Speicher.
 - Bildschirme: Start, Neuer Abend, Abend, Spiel eintragen, Abschluss, Statistik (ein Abend oder alle Abende, oben
   wählbar; Vermögensverlauf als selbst gezeichnetes Liniendiagramm mit Tabelle als Alternative), Spieler,
-  Einstellungen, Regelwerk, Sicherung, Abend-Kommentator (geplant).
+  Einstellungen, Regelwerk, Sicherung, Abend-Kommentator.
+- Abend-Kommentator (`app/ai`): `Commentator` mit `SummaryService` und `TemplateSummary`; Zustimmung je Dienst
+  (`AiSettings.consentHost`), Platzhalter statt Namen als Standard, Standardmodell `gemini-flash-latest`.
 - Teilen: Abschluss und Statistik als Text (`ACTION_SEND`) und als Bild (Compose-Ansicht über `GraphicsLayer` als PNG
   im Cache, weitergegeben über `FileProvider`, nur der Ordner `cache/geteilt`).
 - Texte der Oberfläche stehen in `res/values/strings*.xml`; Beträge formatiert ausschließlich `:app`.

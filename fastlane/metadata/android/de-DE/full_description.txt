@@ -7,12 +7,13 @@
 <li><b>Regeln einstellbar:</b> Tarife, Laufende, Bockrunde, Topf-Teilung beim Einzelspiel; jeder Abend behält seine Regeln.</li>
 <li><b>Abschluss und Statistik:</b> Endstand und wer wem wie viel zahlt; Statistik für einen Abend oder alle Abende mit Vermögensverlauf, Spielarten, „Sollte er es lassen?“ beim Legen, Bock-König, Solo-Spezialist und Lieblingspartner.</li>
 <li><b>Teilen:</b> Abschluss und Statistik als Text oder als Bild, zum Beispiel an Signal oder Telegram.</li>
-<li><b>Sicherung:</b> als Datei speichern und einlesen (auch mit der Web-App fürs iPhone austauschbar) und auf Wunsch nach jeder Änderung automatisch in eine Datei, die man einmal wählt, zum Beispiel in Google Drive.</li>
+<li><b>Sicherung:</b> als Datei speichern und einlesen (auch mit der Web-App fürs iPhone austauschbar) und auf Wunsch nach jeder Änderung automatisch, direkt in Google Drive oder in eine Datei, die man einmal wählt.</li>
+<li><b>Abend-Kommentator:</b> eine witzige, leicht stichelnde Zusammenfassung des Abends auf Bairisch, aus Textbausteinen oder auf Wunsch von einem Sprachmodell (Google Gemini mit eigenem Schlüssel).</li>
 <li><b>Gemacht für schummrige Wirtshäuser:</b> dunkles Design, große Tasten, Bedienung mit Screenreader.</li>
 </ul>
 
-<p><b>Datenschutz:</b> Alles bleibt auf dem Gerät, außer man wählt für die Sicherung selbst einen Cloud-Speicher. Die App braucht kein Internet, kein Konto und hat keine Werbung und kein Tracking.</p>
+<p><b>Datenschutz:</b> Alles bleibt auf dem Gerät. Internet braucht die App nur für zwei freiwillige Zusätze: die Sicherung in Google Drive und den Abend-Kommentator mit Sprachmodell (sendet erst nach Zustimmung, standardmäßig ohne echte Namen). Kein eigener Server, keine Werbung, kein Tracking.</p>
 
-<p><b>Testversion:</b> Die Uhr-App und der Abend-Kommentator kommen noch. Fürs iPhone gibt es eine Web-App mit denselben Rechnungen.</p>
+<p><b>Testversion:</b> Die Uhr-App kommt später. Fürs iPhone gibt es eine Web-App mit denselben Rechnungen.</p>
 
 <p>Freie Software (CC0 1.0). Quellcode: <a href="https://github.com/q0ochen/SchafkopfTracker">github.com/q0ochen/SchafkopfTracker</a></p>

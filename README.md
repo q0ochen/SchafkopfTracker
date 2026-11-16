@@ -84,10 +84,12 @@ weg – deshalb ab und zu **Einstellungen → Sicherung speichern**. Dieselbe Da
 | Speichern auf dem Gerät (jede Eingabe sofort; Android: Room-Datenbank) | fertig |
 | Testversion für Android über eine eigene F-Droid-Paketquelle, Web-App fürs iPhone | eingerichtet |
 | Sicherung als Datei (speichern und einlesen, zwischen iPhone und Android austauschbar) | Android-App und Web-App |
-| Automatische Sicherung nach jeder Änderung in eine gewählte Datei, zum Beispiel in Google Drive | Android-App |
-| Abend-Kommentator (Gemini), Wear-OS-App | geplant, Entscheidungen offen |
+| Automatische Sicherung nach jeder Änderung, direkt in Google Drive oder in eine gewählte Datei | Android-App (Drive nach Einrichtung des Google-Cloud-Projekts) |
+| Abend-Kommentator: witzige Zusammenfassung des Abends (Gemini mit eigenem Schlüssel oder Textbausteine) | Android-App |
+| Wear-OS-App | aufgeschoben bis zu einer Ausgabe ohne F-Droid |
 
-Alles liegt nur auf dem Gerät. Kein Konto, kein Server, keine Werbung, keine Auswertung des Nutzungsverhaltens.
+Alles liegt nur auf dem Gerät, außer man schaltet die Sicherung in Google Drive oder den Abend-Kommentator mit
+Sprachmodell selbst ein. Kein eigener Server, keine Werbung, keine Auswertung des Nutzungsverhaltens.
 
 ## Regeln und Abrechnung
 

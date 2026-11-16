@@ -72,7 +72,7 @@ Welche Issues als Nächstes angegangen werden, ist mit dem Nutzer noch abzustimm
 - `database/` Android-Bibliothek: Room (Tabellen, DAOs mit `Flow`, Repositories, Einstellungen, `importMissing`).
 - `app/` Android: Compose-Oberfläche, ViewModels (MVVM), Koin-Module (`app/di/AppModule.kt`), automatische
   Sicherung (`app/backup`, WorkManager und Dateiauswahl), Übernahme der alten Dateien (`app/storage`).
-- `wear/` (geplant) Wear-OS-App.
+- `wear/` (aufgeschoben bis zu einer Ausgabe ohne F-Droid) Wear-OS-App.
 - `web/` Web-App fürs iPhone (TypeScript, Preact, kein Gradle-Modul): Port von `domain` (`web/src/core`) und vom
   Dateiformat aus `data` (`web/src/data/format`), beide mit Golden-Tests gegen den Kotlin-Code; eigene Oberfläche,
   Speicher in IndexedDB. Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 7; Befehle: `web/README.md`.
@@ -146,7 +146,7 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 525, `data` 233, `database` 16, `app` 61, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow
+  `domain` 525, `data` 241, `database` 16, `app` 81, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow
   „Android“ prüft Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
   Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
   `--rerun-tasks` anhängen.
@@ -243,8 +243,26 @@ alles auf dem Zweig `claude/gracious-keller-48tcn0` (Pull Request nach `main` nu
   mittendrin ab (App beendet, Speicher voll), ist die Datei bis zur nächsten erfolgreichen Sicherung unvollständig.
   Die Daten in der App selbst sind davon nicht betroffen.
 
-Als Nächstes: Rückmeldungen der Tester, Entscheidungen zu Schritt 6 (unten), dann abstimmen, welche der Issues #1
-bis #19 als erledigt gelten.
+## Stand am 16.11.2026 (nachts): Schritt 6 ohne Uhr
+
+Entscheidungen des Nutzers vom 16.11.2026: Die Sicherung soll Google Drive direkt ansprechen, über ein kostenloses
+Google-Cloud-Projekt; den Abend-Kommentator „wollen wir unbedingt einbauen“; die Uhr (Wear OS) wird aufgeschoben,
+bis es eine Ausgabe ohne F-Droid gibt (der Abgleich mit dem Handy braucht Google-Dienste). Der Hauptentwickler hat
+vermutlich eine Wear-OS-Uhr.
+
+- **Abend-Kommentator (#16):** im Abschluss; Gemini (Standardmodell `gemini-flash-latest`) oder ein eigener,
+  OpenAI-kompatibler Server; Zustimmung vor dem ersten Senden je Dienst; Platzhalter statt Namen als Standard;
+  Schlüssel verschlüsselt (Android Keystore, `app/security`); ohne Sprachmodell Textbausteine. Die App hat dafür
+  wieder die Internet-Berechtigung; F-Droid-Anti-Feature `NonFreeNet` eingetragen.
+- **Google Drive direkt (#15):** Anmeldung im Browser mit AppAuth (OAuth 2.0, PKCE, Android-Client mit eigenem
+  URI-Schema, nur `drive.file`), REST v3 über OkHttp (`data/drive`), Ordner `SchafkopfTracker_Backups`. Neben der
+  Sicherung in eine Datei. **Es fehlt noch die Client-ID** aus dem Google-Cloud-Projekt des Nutzers
+  (`app/src/main/res/values/google.xml`, Anleitung in `docs/GOOGLE-CLOUD.md`, dem Nutzer am 16.11.2026 geschickt);
+  solange sie leer ist, bietet die App Drive nicht an. Mit echtem Google noch nicht erprobt (in der Cloud-Umgebung
+  sind die Google-Adressen gesperrt, und eine Anmeldung im Browser geht dort nicht).
+
+Als Nächstes: Client-ID eintragen, sobald der Nutzer sie schickt, dann die Anmeldung auf einem echten Handy
+erproben; Rückmeldungen der Tester; abstimmen, welche der Issues #1 bis #19 als erledigt gelten.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
@@ -261,6 +279,7 @@ Dem Nutzer am 15.11.2026 als Fragen gestellt; Antworten hier nachtragen:
 Außerdem offen:
 
 - Google-Cloud-Projekt für die Drive-Sicherung, Gemini-Schlüssel: jeweils nur mit ausdrücklicher Zustimmung und
-  Mitwirkung des Nutzers. Am 16.11.2026 gefragt: Reicht die Drive-Sicherung über die Dateiauswahl? Soll der
-  Abend-Kommentator (Gemini, eigener Schlüssel) kommen? Hat der Hauptentwickler eine Wear-OS-Uhr zum Testen?
+  Mitwirkung des Nutzers. Am 16.11.2026 entschieden: Drive direkt über ein Google-Cloud-Projekt des Nutzers (er legt
+  es an und schickt die Client-ID), Abend-Kommentator ja (jeder Nutzer trägt seinen eigenen Gemini-Schlüssel in der
+  App ein; der Schlüssel kommt nie in den Chat oder ins Repository), Uhr später.
 - Einzelheiten der Bockrunde.
