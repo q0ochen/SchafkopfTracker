@@ -158,8 +158,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-Der neueste Stand liegt auf dem Zweig `claude/gracious-keller-48tcn0`; `main` enthält alles bis Pull Request #20
-(15.11.2026), `entwicklung` ist noch auf dem älteren Stand.
+Der neueste Stand liegt auf dem Zweig `claude/gracious-keller-48tcn0`; `main` enthält alles bis Pull Request #22
+(16.11.2026), `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -268,6 +268,11 @@ vermutlich eine Wear-OS-Uhr.
   ohne Browser stürzte die Anmeldung ab; doppeltes „Senden“ schickte zweimal; der Schritt nach der Anmeldung ging
   verloren, wenn Android die App beendet; Token wurden bei jedem Aufruf erneuert und gespeichert; Fehler des
   Schlüsselspeichers stürzten die App ab.
+
+Pull Request #23 nach `main` (Schritte 4 bis 6 ohne Uhr) am 16.11.2026 auf Wunsch des Nutzers angelegt; er schließt
+#6, #10, #12, #13 und #14. Offen bleiben #11 (es fehlen durchschnittlicher Gewinn oder Verlust je Spielart und ein
+Balken- oder Kreisdiagramm), #15 (Client-ID, Erprobung auf einem echten Handy) und #16 (Kommentar über alle Abende;
+AICore erst in einer Ausgabe ohne F-Droid).
 
 Als Nächstes: Client-ID eintragen, sobald der Nutzer sie schickt, dann die Anmeldung auf einem echten Handy
 erproben; Rückmeldungen der Tester; abstimmen, welche der Issues #1 bis #19 als erledigt gelten.
