@@ -67,9 +67,11 @@ Welche Issues als Nächstes angegangen werden, ist mit dem Nutzer noch abzustimm
 ## Aufbau
 
 - `domain/` reines Kotlin/JVM: Regelwerk, Abrechnung, Abend-Logik, Statistik (`StatisticEngine`), Zusammenfassung, Ports.
-- `data/` reines Kotlin/JVM: Sicherung (JSON), CSV, REST-Anbindungen (Sprachmodell, später Google Drive).
-- `database/` Android-Bibliothek: Room (Tabellen, DAOs mit `Flow`, Repositories).
-- `app/` Android: Compose-Oberfläche, ViewModels (MVVM), Koin-Module (`app/di/AppModule.kt`).
+- `data/` reines Kotlin/JVM: Sicherung (JSON), CSV, REST-Anbindung des Sprachmodells, `FileStorage` (Speicher der
+  ersten Testversionen, nur noch für die Übernahme).
+- `database/` Android-Bibliothek: Room (Tabellen, DAOs mit `Flow`, Repositories, Einstellungen, `importMissing`).
+- `app/` Android: Compose-Oberfläche, ViewModels (MVVM), Koin-Module (`app/di/AppModule.kt`), automatische
+  Sicherung (`app/backup`, WorkManager und Dateiauswahl), Übernahme der alten Dateien (`app/storage`).
 - `wear/` (geplant) Wear-OS-App.
 - `web/` Web-App fürs iPhone (TypeScript, Preact, kein Gradle-Modul): Port von `domain` (`web/src/core`) und vom
   Dateiformat aus `data` (`web/src/data/format`), beide mit Golden-Tests gegen den Kotlin-Code; eigene Oberfläche,
@@ -109,7 +111,7 @@ Git ist in Windows nicht installiert. Immer über das Hilfsskript bauen (es läs
 Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des Projekts (Java 17 oder neuer, besser 21):
 
 ```bash
-./gradlew :domain:test :data:test :domain:koverVerify --console=plain
+./gradlew :domain:test :data:test :domain:koverVerify :database:testDebugUnitTest --console=plain
 ```
 
 ```bash
@@ -144,8 +146,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 525, `data` 231, `app` 17, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow „Android“ prüft
-  Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
+  `domain` 525, `data` 233, `database` 16, `app` 59, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow
+  „Android“ prüft Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
   Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
   `--rerun-tasks` anhängen.
 - `docs/ORIGINAL-PROMPT.md` (die wörtliche Notiz) gibt es nur auf dem Rechner des Nutzers. Maßgeblich sind dann
@@ -161,8 +163,8 @@ Der neueste Stand liegt auf dem Zweig `claude/gracious-keller-48tcn0`; `main` en
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
-- Schritt 1: Module `domain`, `data`, `app` mit den Ausgaben `fdroid` und `full`, Koin, Kover; `database` (Room) liegt
-  vorbereitet im Ordner, ist aber noch nicht in `settings.gradle.kts` eingebunden (Schritt 4). `wear` kommt in Schritt 6.
+- Schritt 1: Module `domain`, `data`, `app` mit den Ausgaben `fdroid` und `full`, Koin, Kover; `database` (Room) ist
+  seit dem 16.11.2026 eingebunden (Schritt 4). `wear` kommt in Schritt 6.
 - Schritt 2: `ScoreCalculator`, `PayoutCalculator` (Schafkopf-Regel und Topf-Teilung), `RuleSet.standard()`,
   `EveningCalculator`, `SettleUp`, Ports, Zusammenfassung des Abends und die `StatisticEngine` (ein Abend und
   „ewige Tabelle“: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index mit Abzeichen,
@@ -198,14 +200,11 @@ Bekannte offene Punkte (noch nicht umgesetzt):
 - Das Regelwerk selbst wird nirgends auf Plausibilität geprüft (zum Beispiel Bock-Faktor 0); unsinnige Spielwerte
   werden aber erkannt und nicht gebucht.
 - Die Zusammenfassung des Abends nennt bei Über Kreuz weiterhin einen „Ansager“ (Feld `ansager` für das Sprachmodell).
-- Die Android-App hat noch keinen Statistik-Bildschirm und keine „Sicherung speichern/einlesen“ (die Web-App schon).
 - Vom Port des Dateiformats gemeldet (Kotlin, `data/storage`): Fehlt `rules` in einer Abend-Datei oder ist
   `defaultRules` ein leeres Objekt, gilt die Vorlage Sauspiel statt `RuleSet.standard()`; riesige Zahlen werden beim
   Lesen still zu falschen Werten; Datei und Sicherung lesen unterschiedlich streng; der Import prüft Namen,
   `colorIndex` und Augen nicht. Statistik-Summen laufen bei absurden Beträgen als `Int` über. Alles nur mit
   beschädigten oder von Hand veränderten Daten erreichbar.
-- Die Spielerfarben der Web-App (geprüfte Palette) weichen von denen der Android-App ab; die Android-Palette fällt
-  bei Rot-Grün-Schwäche durch (Paar 3/4) und sollte beim Statistik-Bildschirm überarbeitet werden.
 
 Erledigt am 15.11.2026 abends: Der Nutzer hat das Secret gesetzt (die F-Droid-Paketquelle ist seit Lauf 4 online,
 geprüft: Unterschrift passt zum Fingerabdruck) und GitHub Pages eingeschaltet. Pull Request #20 nach `main` ist auf
@@ -219,8 +218,26 @@ Am 16.11.2026 (Anmerkung des Hauptentwicklers über den Nutzer, Issue #21): Spie
 Web-App löschen, aber nur, wenn sie in keinem Abend vorkommen (`Evening.involves`, `PlayerRepository.delete`);
 neue Spieler bekommen die erste freie Farbe (`Player.nextColorIndex`).
 
-Als Nächstes: Rückmeldungen der Tester abwarten, abstimmen, welche der Issues #1 bis #19 als erledigt gelten, dann
-Schritt 4 bis 6 und die offenen Fragen unten.
+## Stand am 16.11.2026 (abends): Schritt 4 und 5 in der Android-App
+
+Auf die Frage des Nutzers „Dann müssen wir mal mit den Punkten 4 bis 6 weitermachen, oder?“ (16.11.2026) umgesetzt,
+alles auf dem Zweig `claude/gracious-keller-48tcn0` (Pull Request nach `main` nur auf Bitte des Nutzers):
+
+- **Schritt 5, Oberfläche:** Statistik-Bildschirm (Issues #10 bis #13; ein Abend oder alle Abende, oben wählbar;
+  Vermögensverlauf als selbst gezeichnetes Liniendiagramm mit Fadenkreuz und Tabelle), Abschluss mit „Wer zahlt
+  wem“, Teilen als Text und als Bild (#14). Spielerfarben: geprüfte Palette der Web-App, Namen in Textfarbe mit
+  farbigem Punkt. „Verlauf“ im Abend-Menü heißt jetzt „Statistik dieses Abends“.
+- **Schritt 4, Sicherung (#15):** Sicherung speichern und einlesen (mit Vorschau wie in der Web-App) und eine
+  automatische Sicherung in eine einmal gewählte Datei, zum Beispiel in Google Drive über die Dateiauswahl von Android
+  (WorkManager, kein Google-Cloud-Projekt, keine Internet-Berechtigung). Die direkte Drive-Anbindung über OAuth ist
+  offen (siehe unten).
+- **Schritt 4, Datenhaltung (#6):** Room ist eingebunden (auch die Einstellungen). Die JSON-Dateien der bisherigen
+  Testversionen übernimmt die App beim ersten Start einmalig (`LegacyFileImport`); der alte Ordner heißt danach
+  `daten-uebernommen` und bleibt liegen.
+- Noch nicht auf einem echten Gerät bedient; die Übernahme der alten Daten ist nur mit Robolectric getestet.
+
+Als Nächstes: Rückmeldungen der Tester, Entscheidungen zu Schritt 6 (unten), dann abstimmen, welche der Issues #1
+bis #19 als erledigt gelten.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
@@ -237,5 +254,6 @@ Dem Nutzer am 15.11.2026 als Fragen gestellt; Antworten hier nachtragen:
 Außerdem offen:
 
 - Google-Cloud-Projekt für die Drive-Sicherung, Gemini-Schlüssel: jeweils nur mit ausdrücklicher Zustimmung und
-  Mitwirkung des Nutzers.
+  Mitwirkung des Nutzers. Am 16.11.2026 gefragt: Reicht die Drive-Sicherung über die Dateiauswahl? Soll der
+  Abend-Kommentator (Gemini, eigener Schlüssel) kommen? Hat der Hauptentwickler eine Wear-OS-Uhr zum Testen?
 - Einzelheiten der Bockrunde.

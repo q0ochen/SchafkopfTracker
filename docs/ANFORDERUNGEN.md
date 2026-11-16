@@ -70,10 +70,17 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
 6. Teilen: Jede Statistik und jede Abend-Abrechnung lässt sich als formatierter Text und als Bild über das
    Teilen-Menü von Android weitergeben (Signal, Telegram und andere).
 
+Stand 16.11.2026: umgesetzt in der Android-App (Statistik, Abschluss, Teilen als Text und Bild) und in der Web-App
+(ohne Teilen als Bild).
+
 ## 6. Sicherung und Zusätze
 
 - **Google Drive:** Nach jedem Eintragen, Ändern oder Löschen wird im Hintergrund eine Sicherung auf Google Drive
   aktualisiert. Ohne Empfang wird sie nachgeholt. In den Einstellungen lässt sich eine Sicherung zurückspielen.
+  Stand 16.11.2026: umgesetzt über die Dateiauswahl von Android. Man wählt einmal eine Datei, zum Beispiel in Google
+  Drive (dafür muss die Drive-App auf dem Handy sein); danach schreibt die App nach jeder Änderung dorthin, und Drive
+  lädt sie hoch, auch später ohne Netz. „Sicherung einlesen“ spielt sie zurück. Ein Google-Cloud-Projekt ist dafür
+  nicht nötig.
 - **Abend-Kommentator:** Auf Wunsch schreibt ein Sprachmodell (Gemini, eigener Schlüssel) aus den Zahlen des Abends
   eine witzige, bairisch gefärbte und leicht stichelnde Zusammenfassung; auch sie lässt sich teilen.
   Ohne Schlüssel entsteht die Zusammenfassung aus Textbausteinen.
@@ -83,7 +90,8 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
 ## 7. Technik und Vertrieb
 
 - Android, vollständig in Kotlin, Oberfläche mit Jetpack Compose (Material 3). Zielgeräte: Pixel 11 Pro, Pixel Watch 4.
-- Clean Architecture (Presentation, Domain, Data) mit MVVM, Koin, Room mit `Flow`.
+- Clean Architecture (Presentation, Domain, Data) mit MVVM, Koin, Room mit `Flow` (seit 16.11.2026; die Daten der
+  ersten Testversionen werden beim ersten Start einmalig übernommen).
 - Tests: über 90 % Abdeckung im Domain Layer (JUnit 5, MockK, Turbine), dazu Tests für Datenbank, Repositories
   und Sicherung.
 - Veröffentlichung auf F-Droid: keine proprietären Bibliotheken in der Ausgabe `fdroid`, keine Tracker, kein
@@ -105,7 +113,8 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
 - Anmerkungen des Hauptentwicklers werden zu Issues; umgesetzt wird nach Abstimmung mit dem Projektinhaber
   (15.11.2026, siehe README).
 - Sprachmodell und Google Drive werden über offene Schnittstellen (REST, OAuth 2) angebunden, nicht über
-  proprietäre Bibliotheken (15.11.2026).
+  proprietäre Bibliotheken (15.11.2026). Für Google Drive gibt es bis zur Entscheidung unten die Lösung über die
+  Dateiauswahl von Android; sie kommt ganz ohne Bibliothek und ohne Google-Cloud-Projekt aus.
 
 ## Offene Entscheidungen
 
@@ -115,4 +124,10 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
 - Bockrunde im Einzelnen: Dauer (angenommen vier Spiele), erneutes Auslösen (angenommen: wird angehängt),
   ob das Blatt mit den 6 Nixern zusammengeworfen wird (angenommen: ja).
 - Laufende: Die Eingabe bietet Zahlen erst ab der Schwelle an (Rufspiel, Über Kreuz, Farbsolo ab 3; Wenz, Geier ab 2).
-- Google Drive braucht ein kostenloses Google-Cloud-Projekt des Projektinhabers.
+- Google Drive: Reicht die Sicherung über die Dateiauswahl (siehe Abschnitt 6), oder soll die App Drive direkt über
+  dessen Schnittstelle ansprechen? Das bräuchte ein kostenloses Google-Cloud-Projekt des Projektinhabers und eine
+  Anmeldung mit dem Google-Konto in der App.
+- Abend-Kommentator: Soll er kommen? Dafür braucht jeder Nutzer einen eigenen Gemini-Schlüssel; die Zahlen des
+  Abends (auf Wunsch ohne echte Namen) gehen dann an Google.
+- Uhr (Wear OS): Hat der Hauptentwickler eine Uhr zum Testen? Der Abgleich mit dem Handy geht nur über Google Play
+  Services (nur in der Ausgabe `full`).

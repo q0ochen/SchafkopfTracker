@@ -84,7 +84,7 @@ export function importSummary(preview: ImportPreview): string[] {
     preview.newEvenings.length > 0 ? `${count(preview.newEvenings.length, "neuer Abend kommt", "neue Abende kommen")} dazu.` : "Keine neuen Abende.",
   );
   if (preview.existingEvenings.length > 0) {
-    lines.push(`${count(preview.existingEvenings.length, "Abend ist", "Abende sind")} schon da und bleiben, wie sie sind.`);
+    lines.push(`${count(preview.existingEvenings.length, "Abend ist schon da und bleibt, wie er ist", "Abende sind schon da und bleiben, wie sie sind")}.`);
   }
   if (preview.invalidEvenings.length > 0) {
     lines.push(`${count(preview.invalidEvenings.length, "Abend wird", "Abende werden")} ausgelassen:`);

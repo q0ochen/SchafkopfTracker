@@ -5,7 +5,9 @@
     <!--
         Die App braucht derzeit kein Internet: Alles bleibt auf dem Gerät. Die Netzbibliothek (OkHttp, für die spätere
         KI-Zusammenfassung im Modul data) bringt die Berechtigung von selbst mit; sie wird hier wieder entfernt.
-        Erst wenn Abend-Kommentator oder Drive-Sicherung in die App kommen, diese Zeile löschen.
+        Auch die automatische Sicherung braucht sie nicht: Sie schreibt über die Dateiauswahl von Android, und das
+        Hochladen (zum Beispiel zu Google Drive) übernimmt die App des Anbieters.
+        Erst wenn der Abend-Kommentator in die App kommt, diese Zeile löschen.
     -->
     <uses-permission
         android:name="android.permission.INTERNET"

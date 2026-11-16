@@ -51,6 +51,8 @@ describe("Sicherung", () => {
       "1 neuer Spieler kommt dazu: Gast.",
       "Achtung: Gast heißt wie ein vorhandener Spieler, ist aber ein anderer und wird zusätzlich angelegt.",
     ]);
+    // Einzahl mit eigenem Verb (wie in der Android-App).
+    expect(importSummary({ ...empty, existingEvenings: [other] })).toEqual(["Keine neuen Abende.", "1 Abend ist schon da und bleibt, wie er ist."]);
     expect(importSummary({ ...empty, error: { kind: "NOT_A_BACKUP", message: "Das ist keine Sicherung." } })).toEqual([
       "Das ist keine Sicherung.",
     ]);

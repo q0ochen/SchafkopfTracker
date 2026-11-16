@@ -67,8 +67,8 @@ zusammengeführt ist.
    hat einen eigenen Speicher; was im Safari-Tab eingetragen wurde, ist dort nicht zu sehen.
 
 Alles bleibt auf dem iPhone, und die Web-App funktioniert auch ohne Empfang. Löscht man das Symbol, sind die Daten
-weg – deshalb ab und zu **Einstellungen → Sicherung speichern**. Dieselbe Datei kann die Android-App später
-einlesen.
+weg – deshalb ab und zu **Einstellungen → Sicherung speichern**. Dieselbe Datei liest die Android-App ein
+(**Einstellungen → Sicherung und Export → Sicherung einlesen**), und umgekehrt.
 
 ## Was die App kann (Stand der Entwicklung)
 
@@ -79,11 +79,13 @@ einlesen.
 | Abend-Liste mit laufendem Stand, Plätzen, Geber und Bock-Zähler | fertig |
 | Dunkles Design als Standard, große Tippflächen, Bedienung mit Screenreader | fertig |
 | Statistik für einen Abend und über alle Abende: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index, Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner | Rechenwerk fertig, getestet |
-| Statistik-Bildschirm mit Diagrammen, Abschluss mit „Wer zahlt wem“, Teilen als Text | in der Web-App fertig, in der Android-App geplant |
-| Speichern auf dem Gerät (jede Eingabe sofort) | fertig |
+| Statistik-Bildschirm mit Diagrammen, Abschluss mit „Wer zahlt wem“, Teilen als Text | Android-App und Web-App |
+| Teilen als Bild (Abschluss und Statistik) | Android-App |
+| Speichern auf dem Gerät (jede Eingabe sofort; Android: Room-Datenbank) | fertig |
 | Testversion für Android über eine eigene F-Droid-Paketquelle, Web-App fürs iPhone | eingerichtet |
-| Sicherung als Datei (speichern und einlesen, zwischen iPhone und Android austauschbar) | in der Web-App fertig, in der Android-App geplant |
-| Sicherung auf Google Drive, Stammtisch-Zusammenfassung, Wear-OS-App, Teilen als Bild | geplant |
+| Sicherung als Datei (speichern und einlesen, zwischen iPhone und Android austauschbar) | Android-App und Web-App |
+| Automatische Sicherung nach jeder Änderung in eine gewählte Datei, zum Beispiel in Google Drive | Android-App |
+| Abend-Kommentator (Gemini), Wear-OS-App | geplant, Entscheidungen offen |
 
 Alles liegt nur auf dem Gerät. Kein Konto, kein Server, keine Werbung, keine Auswertung des Nutzungsverhaltens.
 
@@ -139,7 +141,7 @@ Die Labels stehen in [.github/labels.json](.github/labels.json) und werden vom W
 ```
 domain/     Reines Kotlin: Regelwerk, Abrechnung, Abend-Logik, Statistik, Zusammenfassung + Tests
 data/       Reines Kotlin: Speicherung und Sicherung als JSON, CSV, Netzanbindungen + Tests
-database/   Room-Datenbank (SQLite): Tabellen, Abfragen, Repositories + Tests (noch nicht eingebunden)
+database/   Room-Datenbank (SQLite): Tabellen, Abfragen, Repositories + Tests
 app/        Android-App (Jetpack Compose): Oberfläche, ViewModels, Verdrahtung mit Koin
 web/        Web-App fürs iPhone (TypeScript, Preact): Rechenkern geprüft gegen den Kotlin-Kern + Tests
 fdroid/     Eigene F-Droid-Paketquelle für die Testversionen
