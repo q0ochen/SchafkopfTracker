@@ -9,13 +9,14 @@ rechnet aus, wer wie viel bekommt oder zahlt. Am Ende des Abends stehen Gewinner
 ## Android-Testversion
 
 Die Testversion wird bei jeder Änderung automatisch gebaut, getestet und im Emulator probehalber installiert. Neue
-Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten. Die App braucht
-kein Internet.
+Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten. Internet braucht
+die App nur für zwei freiwillige Zusätze: den Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in
+Google Drive.
 
 ### In F-Droid (empfohlen)
 
-Mit [F-Droid](https://f-droid.org) kommen neue Testversionen als normale Updates. Die Paketquelle ist erreichbar,
-sobald der Schlüssel bei GitHub hinterlegt ist ([docs/F-DROID.md](docs/F-DROID.md), Abschnitt 3).
+Mit [F-Droid](https://f-droid.org) kommen neue Testversionen als normale Updates (Einzelheiten:
+[docs/F-DROID.md](docs/F-DROID.md)).
 
 1. **F-Droid installieren:** auf [f-droid.org](https://f-droid.org) „F-Droid herunterladen“ antippen und die Datei
    öffnen (Erlaubnis zulassen; warnt Play Protect: **Weitere Details → Trotzdem installieren**).
@@ -57,8 +58,7 @@ man nicht neu installieren.
 ## iPhone: Web-App
 
 Fürs iPhone gibt es in der Testphase eine kostenlose **Web-App** mit denselben Rechnungen wie die Android-App
-(automatisch gegen den Rechenkern der Android-App geprüft). Sie ist online, sobald der Arbeitsstand in `main`
-zusammengeführt ist.
+(automatisch gegen den Rechenkern der Android-App geprüft). Sie zeigt den Stand von `main`.
 
 1. In **Safari** öffnen: **https://q0ochen.github.io/SchafkopfTracker/**
 2. Auf **Teilen** tippen (Quadrat mit Pfeil nach oben; je nach iOS-Version hinter den drei Punkten „…“) →

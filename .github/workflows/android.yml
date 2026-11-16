@@ -302,7 +302,7 @@ jobs:
 
           ### Hinweise
           - Testversion, mit dem öffentlichen Test-Schlüssel signiert. Neue Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten.
-          - Die App braucht kein Internet; alles bleibt auf dem Handy.
+          - Alles bleibt auf dem Handy. Internet braucht die App nur für zwei freiwillige Zusätze: den Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in Google Drive.
           - Prüfsumme (SHA-256) der APK: siehe \`SchafkopfTracker.apk.sha256\`.
           EOF
 
