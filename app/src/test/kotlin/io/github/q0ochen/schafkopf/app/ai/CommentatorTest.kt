@@ -9,7 +9,9 @@ import io.github.q0ochen.schafkopf.domain.ports.InMemorySecretStore
 import io.github.q0ochen.schafkopf.domain.ports.InMemorySettingsRepository
 import io.github.q0ochen.schafkopf.domain.ports.LlmError
 import io.github.q0ochen.schafkopf.domain.ports.LlmResult
+import io.github.q0ochen.schafkopf.domain.summary.HistoryFactsBuilder
 import io.github.q0ochen.schafkopf.domain.summary.SummaryFactsBuilder
+import io.github.q0ochen.schafkopf.domain.summary.SummaryPrompt
 import io.github.q0ochen.schafkopf.domain.summary.TemplateSummary
 import io.github.q0ochen.schafkopf.app.ui.common.Money
 import kotlinx.coroutines.flow.first
@@ -54,6 +56,38 @@ class CommentatorTest {
         assertEquals("geheim", factory.lastKey)
         val sent = factory.generator.prompts.single().second
         for (name in names.values) assertFalse("$name wurde gesendet", sent.contains(name))
+    }
+
+    @Test
+    fun `die Bilanz ueber alle Abende kommt ohne Sprachmodell aus Textbausteinen`() = runBlocking {
+        val evenings = listOf(TestEvenings.evening(), TestEvenings.evening(id = "abend-2"))
+        val (commentator, factory) = commentator(AiSettings(enabled = false))
+        val expected = TemplateSummary.renderHistory(HistoryFactsBuilder.build(evenings, names, Money, asMoney = true))
+        assertEquals(CommentaryOutcome.Done(Commentary(expected, CommentarySource.TEMPLATE)), commentator.writeHistory(evenings, names, true))
+        assertTrue(expected.startsWith("Schafkopf-Bilanz"))
+        assertTrue(factory.generator.prompts.isEmpty())
+    }
+
+    @Test
+    fun `die Bilanz geht mit eigener Anweisung und Platzhaltern an das Sprachmodell`() = runBlocking {
+        val evenings = listOf(TestEvenings.evening(), TestEvenings.evening(id = "abend-2"))
+        val (commentator, factory) = commentator(AiSettings(enabled = true, consentHost = gemini))
+        val outcome = commentator.writeHistory(evenings, names, asMoney = true)
+        assertEquals(CommentaryOutcome.Done(Commentary("Servus!", CommentarySource.AI, "gemini-test")), outcome)
+        val (system, sent) = factory.generator.prompts.single()
+        assertEquals(SummaryPrompt.HISTORY_SYSTEM_PROMPT, system)
+        assertTrue(sent.contains("\"abende\":2"))
+        for (name in names.values) assertFalse("$name wurde gesendet", sent.contains(name))
+    }
+
+    @Test
+    fun `auch fuer die Bilanz wird vor dem ersten Senden gefragt`() = runBlocking {
+        val (commentator, factory) = commentator(AiSettings(enabled = true))
+        assertEquals(
+            CommentaryOutcome.NeedsConsent(gemini, realNames = false),
+            commentator.writeHistory(listOf(TestEvenings.evening()), names, asMoney = true),
+        )
+        assertTrue(factory.generator.prompts.isEmpty())
     }
 
     @Test

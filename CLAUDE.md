@@ -146,7 +146,7 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 525, `data` 241, `database` 16, `app` 84, Web 133 Unit-Tests und 18 Oberflächen-Tests (der Workflow
+  `domain` 539, `data` 241, `database` 16, `app` 105, Web 136 Unit-Tests und 18 Oberflächen-Tests (der Workflow
   „Android“ prüft Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
   Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
   `--rerun-tasks` anhängen.
@@ -269,10 +269,26 @@ vermutlich eine Wear-OS-Uhr.
   verloren, wenn Android die App beendet; Token wurden bei jedem Aufruf erneuert und gespeichert; Fehler des
   Schlüsselspeichers stürzten die App ab.
 
-Pull Request #23 nach `main` (Schritte 4 bis 6 ohne Uhr) am 16.11.2026 auf Wunsch des Nutzers angelegt; er schließt
-#6, #10, #12, #13 und #14. Offen bleiben #11 (es fehlen durchschnittlicher Gewinn oder Verlust je Spielart und ein
-Balken- oder Kreisdiagramm), #15 (Client-ID, Erprobung auf einem echten Handy) und #16 (Kommentar über alle Abende;
-AICore erst in einer Ausgabe ohne F-Droid).
+Pull Request #23 nach `main` (Schritte 4 bis 6 ohne Uhr) am 16.11.2026 auf Wunsch des Nutzers angelegt und vom Nutzer
+um 18:01 mit dem Stand `327719b` zusammengeführt; geschlossen sind #6, #10, #12, #13 und #14. Danach wünschte der
+Nutzer, dass Claude den Pull Request beobachtet („Zu 1. ja“) und die Lücken schließt („Zu 2. ja“). Das Folgende liegt
+deshalb auf dem Zweig `claude/gracious-keller-48tcn0`, noch nicht in `main` (neuer Pull Request nur auf Bitte des
+Nutzers):
+
+- **#11:** Spielarten als Balkendiagramm in Android-App (`GameModeChart`, `BarScale`) und Web-App
+  (`web/src/ui/charts/GameModeChart.tsx`): je Spielart ein Abschnitt, je Spieler Balken für den Durchschnitt je
+  Spiel (Null in der Mitte, eigener Maßstab je Spielart, weil Soli ein Vielfaches bringen), daneben Durchschnitt und
+  Gewinnquote als Zahl. Ein gemeinsamer Maßstab war erst gebaut, machte aber Rufspiel-Balken zu Stummeln.
+- **#16:** Bilanz über alle Abende: `HistoryFactsBuilder` (auf der `StatisticEngine`), `HISTORY_SYSTEM_PROMPT`,
+  `SummaryPrompt.historyPayload`, `TemplateSummary.renderHistory`; in der Statistik unten „Kommentar schreiben
+  lassen“ (für einen Abend wie im Abschluss, für alle Abende die Bilanz). Abschluss und Statistik teilen sich den
+  Ablauf (`ui/ai/Commentary.kt`). Offen bleibt nur AICore (Sprachmodell auf dem Gerät), das Google-Dienste braucht
+  und wie die Uhr erst mit einer Ausgabe ohne F-Droid kommt; #16 bleibt deshalb offen.
+- Eine unabhängige Durchsicht (16.11.2026) fand drei kleine Punkte, alle behoben: Bei großer Schrift wurden Beträge
+  abgeschnitten (jetzt wachsen die Zahlenspalten des Diagramms mit, bei Platzmangel steht der Balken in einer eigenen
+  Zeile; die Tabellen der Statistik wachsen mit und lassen sich seitlich schieben); der Zustimmungstext nennt
+  Abendbericht und Bilanz, weil die Zustimmung je Dienst für beides gilt; ein Kommentar in `BarScale`.
+- Offen bleibt außerdem #15 (Client-ID, Erprobung auf einem echten Handy).
 
 Als Nächstes: Client-ID eintragen, sobald der Nutzer sie schickt, dann die Anmeldung auf einem echten Handy
 erproben; Rückmeldungen der Tester; abstimmen, welche der Issues #1 bis #19 als erledigt gelten.

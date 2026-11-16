@@ -43,6 +43,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.q0ochen.schafkopf.R
+import io.github.q0ochen.schafkopf.app.ui.ai.CommentaryConsentDialog
+import io.github.q0ochen.schafkopf.app.ui.ai.CommentarySection
+import io.github.q0ochen.schafkopf.app.ui.ai.CommentaryUi
 import io.github.q0ochen.schafkopf.app.ui.common.AmountText
 import io.github.q0ochen.schafkopf.app.ui.common.Money
 import io.github.q0ochen.schafkopf.app.ui.common.PlayerName
@@ -57,7 +60,6 @@ import io.github.q0ochen.schafkopf.app.ui.common.rememberCapture
 import io.github.q0ochen.schafkopf.app.ui.common.rememberShareActions
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
 import io.github.q0ochen.schafkopf.domain.model.EveningId
-import io.github.q0ochen.schafkopf.domain.rules.GameType
 import io.github.q0ochen.schafkopf.domain.stats.Statistics
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -126,6 +128,9 @@ fun StatisticsScreen(eveningId: String?, navigator: Navigator) {
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
+        (state.commentary as? CommentaryUi.NeedsConsent)?.let { consent ->
+            CommentaryConsentDialog(consent, onConsent = viewModel::consent, onDecline = viewModel::declineConsent)
+        }
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -152,7 +157,16 @@ fun StatisticsScreen(eveningId: String?, navigator: Navigator) {
                     }
                     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                         Details(state, stats)
-                        ShareButtons(share, modifier = Modifier.padding(top = 24.dp, bottom = 24.dp))
+                        ShareButtons(share, modifier = Modifier.padding(top = 24.dp))
+                        CommentarySection(
+                            commentary = state.commentary,
+                            onWrite = viewModel::writeCommentary,
+                            onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
+                            shareSubject = stringResource(
+                                if (state.selected == null) R.string.commentary_share_subject_all else R.string.commentary_share_subject,
+                            ),
+                            modifier = Modifier.padding(bottom = 24.dp),
+                        )
                     }
                 }
             }
@@ -330,38 +344,16 @@ private fun Details(state: StatisticsUiState, stats: Statistics) {
 
     HistoryTable(state, stats)
 
-    // Spielarten: nur die, die überhaupt gespielt wurden.
-    val typesPlayed = GameType.entries.filter { (history.gameTypeCounts[it] ?: 0) > 0 }
-    if (typesPlayed.isNotEmpty()) {
+    // Spielarten: nur die, die überhaupt gespielt wurden; je Spieler Durchschnitt und Gewinnquote als Balken.
+    val modeGroups = modeChartGroups(
+        stats = stats,
+        typeLabel = { resources.getString(it.labelRes()) },
+        name = state::name,
+        colorIndex = { state.colorIndex[it] ?: 0 },
+    )
+    if (modeGroups.isNotEmpty()) {
         SectionHeading(stringResource(R.string.stats_modes))
-        StatTable(
-            columns = listOf(TableColumn(stringResource(R.string.stats_col_player), 96.dp, numeric = false)) +
-                typesPlayed.map { TableColumn(stringResource(it.labelRes()), 76.dp) },
-            rows = stats.gameModes.map { modes ->
-                val name = state.name(modes.player)
-                val parts = typesPlayed.map { type ->
-                    val record = modes.asPlayer[type]
-                    val label = resources.getString(type.labelRes())
-                    if (record == null || record.games == 0) {
-                        resources.getString(R.string.stats_modes_item_none, label)
-                    } else {
-                        resources.getString(R.string.stats_modes_item, label, record.won, record.games)
-                    }
-                }
-                TableRow(
-                    description = resources.getString(R.string.share_stats_line, name, parts.joinToString(", ")),
-                    cells = listOf<@Composable () -> Unit>({ TextCell(name) }) + typesPlayed.map<GameType, @Composable () -> Unit> { type ->
-                        val record = modes.asPlayer[type]
-                        val text = if (record == null || record.games == 0) {
-                            stringResource(R.string.stats_none)
-                        } else {
-                            stringResource(R.string.stats_modes_cell, record.won, record.games)
-                        }
-                        { TextCell(text) }
-                    },
-                )
-            },
-        )
+        GameModeChart(modeGroups, asMoney)
         Hint(stringResource(R.string.stats_modes_hint))
     }
 

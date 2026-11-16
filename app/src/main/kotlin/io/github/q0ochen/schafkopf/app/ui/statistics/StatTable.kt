@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -41,14 +42,17 @@ class TableRow(val description: String, val cells: List<@Composable () -> Unit>)
 /**
  * Schlichte Tabelle für die Statistik. Ist sie breiter als der Bildschirm, lässt sie sich seitlich schieben.
  * Screenreader lesen jede Zeile als einen Satz vor; die Kopfzeile überspringen sie, weil jede Zeile ihre
- * Spaltennamen schon nennt.
+ * Spaltennamen schon nennt. Bei großer Schrift (Einstellung des Handys) wachsen die Spalten mit, damit kein Betrag
+ * abgeschnitten wird; die Tabelle lässt sich dann seitlich schieben.
  */
 @Composable
 fun StatTable(columns: List<TableColumn>, rows: List<TableRow>, modifier: Modifier = Modifier) {
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     BoxWithConstraints(modifier = modifier) {
-        val rest = columns.drop(1).fold(0.dp) { sum, column -> sum + column.width }
-        val firstWidth = maxOf(columns.first().width, maxWidth - rest)
-        val widths = listOf(firstWidth) + columns.drop(1).map { it.width }
+        val scaled = columns.map { it.width * fontScale }
+        val rest = scaled.drop(1).fold(0.dp) { sum, width -> sum + width }
+        val firstWidth = maxOf(scaled.first(), maxWidth - rest)
+        val widths = listOf(firstWidth) + scaled.drop(1)
         Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
             Row(
                 verticalAlignment = Alignment.Bottom,

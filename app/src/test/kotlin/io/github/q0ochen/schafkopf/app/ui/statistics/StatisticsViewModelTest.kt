@@ -1,12 +1,23 @@
 package io.github.q0ochen.schafkopf.app.ui.statistics
 
+import io.github.q0ochen.schafkopf.app.ai.Commentary
+import io.github.q0ochen.schafkopf.app.ai.CommentarySource
+import io.github.q0ochen.schafkopf.app.ai.Commentator
+import io.github.q0ochen.schafkopf.app.ai.FakeGeneratorFactory
+import io.github.q0ochen.schafkopf.app.ai.FakeTextGenerator
 import io.github.q0ochen.schafkopf.app.ui.TestEvenings
+import io.github.q0ochen.schafkopf.app.ui.ai.CommentaryUi
 import io.github.q0ochen.schafkopf.app.ui.awaitFirst
+import io.github.q0ochen.schafkopf.domain.model.AiSettings
+import io.github.q0ochen.schafkopf.domain.model.AppSettings
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.ports.InMemoryEveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.InMemoryPlayerRepository
+import io.github.q0ochen.schafkopf.domain.ports.InMemorySecretStore
+import io.github.q0ochen.schafkopf.domain.ports.InMemorySettingsRepository
 import io.github.q0ochen.schafkopf.domain.rules.RuleSet
+import io.github.q0ochen.schafkopf.domain.summary.SummaryPrompt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -41,10 +52,13 @@ class StatisticsViewModelTest {
     @After
     fun resetDispatcher() = Dispatchers.resetMain()
 
-    private fun viewModel(initial: String?) = StatisticsViewModel(
+    private val generator = FakeTextGenerator()
+
+    private fun viewModel(initial: String?, ai: AiSettings = AiSettings()) = StatisticsViewModel(
         initial?.let(::EveningId),
         InMemoryEveningRepository(listOf(older, newer)),
         InMemoryPlayerRepository(TestEvenings.players),
+        Commentator(InMemorySettingsRepository(AppSettings(ai = ai)), InMemorySecretStore("geheim"), FakeGeneratorFactory(generator)),
         dispatcher,
     )
 
@@ -82,5 +96,48 @@ class StatisticsViewModelTest {
         assertNull(missing.stats)
         assertNull(missing.selectedChoice)
         assertEquals("?", missing.name(PlayerId("unbekannt")))
+        // Ohne Auswertung gibt es auch nichts zu kommentieren.
+        viewModel.writeCommentary()
+        assertEquals(CommentaryUi.Idle, viewModel.state.value.commentary)
+    }
+
+    @Test
+    fun `ueber alle Abende schreibt der Kommentator die Bilanz, fuer einen Abend den Abendbericht`() = runTest(dispatcher) {
+        val viewModel = viewModel(null)
+        backgroundScope.launch { viewModel.state.collect {} }
+        viewModel.state.awaitFirst { !it.loading }
+
+        viewModel.writeCommentary()
+        val all = viewModel.state.awaitFirst { it.commentary is CommentaryUi.Ready }.commentary as CommentaryUi.Ready
+        assertTrue(all.commentary.text, all.commentary.text.startsWith("Schafkopf-Bilanz vom 01.11.2026 bis 14.11.2026"))
+        assertEquals(CommentarySource.TEMPLATE, all.commentary.source)
+
+        // Ein anderer Abend: Der Kommentar zur bisherigen Auswahl verschwindet.
+        viewModel.select(EveningId("alt"))
+        assertEquals(CommentaryUi.Idle, viewModel.state.awaitFirst { it.selected == EveningId("alt") && !it.loading }.commentary)
+        viewModel.writeCommentary()
+        val single = viewModel.state.awaitFirst { it.commentary is CommentaryUi.Ready }.commentary as CommentaryUi.Ready
+        assertTrue(single.commentary.text, single.commentary.text.startsWith("Schafkopf am 01.11.2026"))
+        assertTrue(generator.prompts.isEmpty())
+    }
+
+    @Test
+    fun `vor dem ersten Senden der Bilanz wird gefragt, danach schreibt das Sprachmodell einmal`() = runTest(dispatcher) {
+        val viewModel = viewModel(null, AiSettings(enabled = true))
+        backgroundScope.launch { viewModel.state.collect {} }
+        viewModel.state.awaitFirst { !it.loading }
+
+        viewModel.writeCommentary()
+        val asking = viewModel.state.awaitFirst { it.commentary is CommentaryUi.NeedsConsent }.commentary as CommentaryUi.NeedsConsent
+        viewModel.declineConsent()
+        assertEquals(CommentaryUi.Idle, viewModel.state.awaitFirst { it.commentary == CommentaryUi.Idle }.commentary)
+
+        viewModel.writeCommentary()
+        viewModel.state.awaitFirst { it.commentary is CommentaryUi.NeedsConsent }
+        viewModel.consent(asking.host)
+        viewModel.consent(asking.host)
+        val ready = viewModel.state.awaitFirst { it.commentary is CommentaryUi.Ready }.commentary as CommentaryUi.Ready
+        assertEquals(Commentary("Servus!", CommentarySource.AI, "gemini-test"), ready.commentary)
+        assertEquals(SummaryPrompt.HISTORY_SYSTEM_PROMPT, generator.prompts.single().first)
     }
 }

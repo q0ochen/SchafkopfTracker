@@ -51,4 +51,54 @@ class ChartMathTest {
         assertEquals(5, ChartMath.nearestIndex(200f, 50f, 300f, 10))
         assertEquals(0, ChartMath.nearestIndex(200f, 50f, 0f, 10))
     }
+
+    @Test
+    fun `Balken wachsen von der Null in der Mitte, der groesste Betrag bis an den Rand`() {
+        val scale = BarScale.of(listOf(-50, 150, 0))
+        assertEquals(BarScale(150), scale)
+        assertEquals(100f, scale.zero(200f))
+        assertEquals(100f..200f, scale.span(150, 200f, 3f))
+        assertEquals(50f..100f, scale.span(-75, 200f, 3f))
+        assertEquals(100f..150f, scale.span(75, 200f, 3f))
+        assertEquals(100f..100f, scale.span(0, 200f, 3f))
+    }
+
+    @Test
+    fun `ein Verlust kann der groesste Betrag sein`() {
+        val scale = BarScale.of(listOf(10, -40))
+        assertEquals(BarScale(40), scale)
+        assertEquals(0f..50f, scale.span(-40, 100f, 3f))
+        assertEquals(50f..62.5f, scale.span(10, 100f, 3f))
+    }
+
+    @Test
+    fun `ohne einen Wert ungleich null gibt es keinen Balken`() {
+        val empty = BarScale.of(emptyList())
+        assertEquals(BarScale(0), empty)
+        assertEquals(50f, empty.zero(100f))
+        assertEquals(50f..50f, empty.span(0, 100f, 3f))
+        assertEquals(BarScale(0), BarScale.of(listOf(0, 0)))
+    }
+
+    @Test
+    fun `ein kleiner Betrag bekommt die Mindestlaenge, aber hoechstens die halbe Breite`() {
+        val scale = BarScale.of(listOf(1, -1000))
+        assertEquals(50f..53f, scale.span(1, 100f, 3f))
+        assertEquals(47f..50f, scale.span(-1, 100f, 3f))
+        assertEquals(50f..100f, scale.span(5, 100f, 80f))
+        // Ein Wert außerhalb der Skala reicht nur bis an den Rand.
+        assertEquals(0f..50f, scale.span(-5000, 100f, 3f))
+    }
+
+    @Test
+    fun `riesige Betraege laufen nicht ueber`() {
+        val scale = BarScale.of(listOf(Int.MIN_VALUE, Int.MAX_VALUE))
+        assertEquals(BarScale(2_147_483_648L), scale)
+        assertEquals(0f..50f, scale.span(Int.MIN_VALUE, 100f, 3f))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `eine Skala mit negativem Betrag gibt es nicht`() {
+        BarScale(-1)
+    }
 }

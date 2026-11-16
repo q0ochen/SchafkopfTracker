@@ -4,6 +4,7 @@ import io.github.q0ochen.schafkopf.app.ui.common.Money
 import io.github.q0ochen.schafkopf.data.llm.EndpointPolicy
 import io.github.q0ochen.schafkopf.data.llm.GeminiTextGenerator
 import io.github.q0ochen.schafkopf.data.llm.OpenAiCompatibleTextGenerator
+import io.github.q0ochen.schafkopf.domain.evening.Evening
 import io.github.q0ochen.schafkopf.domain.evening.EveningState
 import io.github.q0ochen.schafkopf.domain.model.AiProvider
 import io.github.q0ochen.schafkopf.domain.model.AiSettings
@@ -13,6 +14,8 @@ import io.github.q0ochen.schafkopf.domain.ports.LlmResult
 import io.github.q0ochen.schafkopf.domain.ports.SecretStore
 import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
 import io.github.q0ochen.schafkopf.domain.ports.TextGenerator
+import io.github.q0ochen.schafkopf.domain.summary.FinishedSummary
+import io.github.q0ochen.schafkopf.domain.summary.HistoryFactsBuilder
 import io.github.q0ochen.schafkopf.domain.summary.SummaryFactsBuilder
 import io.github.q0ochen.schafkopf.domain.summary.SummaryService
 import io.github.q0ochen.schafkopf.domain.summary.TemplateSummary
@@ -61,7 +64,8 @@ sealed interface CommentaryOutcome {
 
 /**
  * Der Abend-Kommentator (Issue #16): Mit eingeschaltetem Sprachmodell schreibt es eine witzige Zusammenfassung des
- * Abends ([SummaryService]); sonst oder bei einem Fehler entsteht sie aus Textbausteinen ([TemplateSummary]).
+ * Abends oder eine Bilanz über alle Abende ([SummaryService]); sonst oder bei einem Fehler entsteht sie aus
+ * Textbausteinen ([TemplateSummary]).
  * Gesendet wird erst, wenn der Nutzer für genau diesen Dienst zugestimmt hat.
  */
 class Commentator(
@@ -69,15 +73,37 @@ class Commentator(
     private val secrets: SecretStore,
     private val generators: TextGeneratorFactory,
 ) {
+    /** Der Kommentar zu einem Abend. */
     suspend fun write(state: EveningState, names: Map<PlayerId, String>): CommentaryOutcome {
         val facts = SummaryFactsBuilder.build(state, names, Money)
-        val template = Commentary(TemplateSummary.render(facts), CommentarySource.TEMPLATE)
+        return write(TemplateSummary.render(facts)) { service, realNames -> service.generate(facts, realNames) }
+    }
+
+    /**
+     * Die Bilanz über alle Abende („ewige Tabelle“).
+     *
+     * @param asMoney Euro oder Punkte, wie in der Statistik über alle Abende.
+     */
+    suspend fun writeHistory(evenings: List<Evening>, names: Map<PlayerId, String>, asMoney: Boolean): CommentaryOutcome {
+        val facts = HistoryFactsBuilder.build(evenings, names, Money, asMoney)
+        return write(TemplateSummary.renderHistory(facts)) { service, realNames -> service.generateHistory(facts, realNames) }
+    }
+
+    /**
+     * Ohne Sprachmodell gibt es den Text aus Textbausteinen ([templateText]); sonst schreibt [generate], sobald für
+     * den gewählten Dienst die Zustimmung vorliegt.
+     */
+    private suspend fun write(
+        templateText: String,
+        generate: suspend (SummaryService, Boolean) -> LlmResult<FinishedSummary>,
+    ): CommentaryOutcome {
+        val template = Commentary(templateText, CommentarySource.TEMPLATE)
         val ai = settings.settings.first().ai
         if (!ai.enabled) return CommentaryOutcome.Done(template)
         val host = generators.host(ai) ?: return CommentaryOutcome.Failed(LlmError.INVALID_ENDPOINT, "", template)
         if (ai.consentHost != host) return CommentaryOutcome.NeedsConsent(host, ai.sendRealNames)
         val generator = generators.create(ai, secrets.apiKey())
-        return when (val result = SummaryService(generator).generate(facts, ai.sendRealNames)) {
+        return when (val result = generate(SummaryService(generator), ai.sendRealNames)) {
             is LlmResult.Success -> CommentaryOutcome.Done(Commentary(result.value.text, CommentarySource.AI, result.value.model))
             is LlmResult.Failure -> CommentaryOutcome.Failed(result.error, result.detail, template)
         }

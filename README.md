@@ -79,13 +79,13 @@ weg – deshalb ab und zu **Einstellungen → Sicherung speichern**. Dieselbe Da
 | Abend-Liste mit laufendem Stand, Plätzen, Geber und Bock-Zähler | fertig |
 | Dunkles Design als Standard, große Tippflächen, Bedienung mit Screenreader | fertig |
 | Statistik für einen Abend und über alle Abende: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index, Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner | Rechenwerk fertig, getestet |
-| Statistik-Bildschirm mit Diagrammen, Abschluss mit „Wer zahlt wem“, Teilen als Text | Android-App und Web-App |
+| Statistik-Bildschirm mit Diagrammen (Vermögensverlauf, Balken je Spielart), Abschluss mit „Wer zahlt wem“, Teilen als Text | Android-App und Web-App |
 | Teilen als Bild (Abschluss und Statistik) | Android-App |
 | Speichern auf dem Gerät (jede Eingabe sofort; Android: Room-Datenbank) | fertig |
 | Testversion für Android über eine eigene F-Droid-Paketquelle, Web-App fürs iPhone | eingerichtet |
 | Sicherung als Datei (speichern und einlesen, zwischen iPhone und Android austauschbar) | Android-App und Web-App |
 | Automatische Sicherung nach jeder Änderung, direkt in Google Drive oder in eine gewählte Datei | Android-App (Drive nach Einrichtung des Google-Cloud-Projekts) |
-| Abend-Kommentator: witzige Zusammenfassung des Abends (Gemini mit eigenem Schlüssel oder Textbausteine) | Android-App |
+| Abend-Kommentator: witzige Zusammenfassung des Abends oder Bilanz über alle Abende (Gemini mit eigenem Schlüssel oder Textbausteine) | Android-App |
 | Wear-OS-App | aufgeschoben bis zu einer Ausgabe ohne F-Droid |
 
 Alles liegt nur auf dem Gerät, außer man schaltet die Sicherung in Google Drive oder den Abend-Kommentator mit

@@ -93,8 +93,8 @@ object SummaryFactsBuilder {
         )
     }
 
-    /** Bündelt die Formatierung der Oberfläche mit der Einheit des Abends (Euro oder Punkte). */
-    private class Amounts(private val formatter: AmountFormatter, private val asMoney: Boolean) {
+    /** Bündelt die Formatierung der Oberfläche mit der Einheit (Euro oder Punkte). */
+    internal class Amounts(private val formatter: AmountFormatter, private val asMoney: Boolean) {
         /** Betrag ohne Plus, zum Beispiel ein Spielwert. */
         fun plain(cents: Int): String = formatter.format(cents, asMoney, false)
 
@@ -103,12 +103,12 @@ object SummaryFactsBuilder {
     }
 
     /** Namen und Ort stehen in der Zusammenfassung in einer Zeile: ohne Rand und ohne Zeilenumbrüche. */
-    private fun oneLine(text: String): String = text.trim().replace(WHITESPACE, " ")
+    internal fun oneLine(text: String): String = text.trim().replace(WHITESPACE, " ")
 
     private val WHITESPACE = Regex("\\s+")
 
     /** Datum im Format TT.MM.JJJJ, unabhängig von der Sprache des Geräts. */
-    private fun formatDate(instant: Instant, zone: ZoneId): String {
+    internal fun formatDate(instant: Instant, zone: ZoneId): String {
         val date = instant.atZone(zone).toLocalDate()
         return padded(date.dayOfMonth, 2) + "." + padded(date.monthValue, 2) + "." + padded(date.year, 4)
     }
@@ -155,6 +155,11 @@ object SummaryFactsBuilder {
     ): SummaryGame? {
         val top = stats.mostExpensiveGame ?: return null
         val game = digest.games.firstOrNull { it.entry.id == top.entryId } ?: return null
+        return summaryGame(game, playerOf, amounts)
+    }
+
+    /** Ein Spiel für die Zusammenfassung; `null`, wenn der Ansager nicht unter den Spielern ist. */
+    internal fun summaryGame(game: PlayedGame, playerOf: Map<PlayerId, SummaryPlayer>, amounts: Amounts): SummaryGame? {
         val entry = game.entry
         val declarer = playerOf[entry.declarer] ?: return null
         return SummaryGame(

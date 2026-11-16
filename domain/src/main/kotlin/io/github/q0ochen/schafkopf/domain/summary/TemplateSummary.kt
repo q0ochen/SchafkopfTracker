@@ -43,6 +43,109 @@ object TemplateSummary {
         return lines.joinToString("\n")
     }
 
+    /**
+     * Die Bilanz über alle Abende („ewige Tabelle“) ganz ohne KI, im selben Ton wie [render]: eine kurze Zeile je
+     * Rubrik, leere Rubriken entfallen. Genannt wird nur, was in den [HistoryFacts] steht. Die Formulierung hängt nur
+     * von der Zahl der Spiele ab: Dieselben Fakten ergeben immer denselben Text.
+     */
+    fun renderHistory(facts: HistoryFacts): String {
+        val lines = ArrayList<String>()
+        lines += historyHeader(facts)
+        if (facts.gamesPlayed == 0) {
+            lines += "No koa oanzigs Spiel auf'm Zettel – die ewige Tabelle is no leer."
+            return lines.joinToString("\n")
+        }
+        val evenings = if (facts.evenings == 1) "1 Abend" else "${facts.evenings} Abende"
+        val games = if (facts.gamesPlayed == 1) "1 Spiel" else "${facts.gamesPlayed} Spiele"
+        lines += "$evenings, $games um ${if (facts.asMoney) "Geld" else "Punkte"}."
+        if (facts.leader == null && facts.payer == null) lines += "Über olle Abende gsehn stehn alle gleich."
+        facts.leader?.takeIf { it.players.isNotEmpty() }?.let { lines += leaderLine(facts, it) }
+        facts.payer?.takeIf { it.players.isNotEmpty() }?.let { lines += sponsorLine(facts, it) }
+        if (facts.eveningWins.isNotEmpty()) {
+            lines += "Abendsiege: " + facts.eveningWins.joinToString(", ") { "${it.player.name} ${times(it.count)}" } + "."
+        }
+        facts.bockKing?.let { king ->
+            val games = if (king.games == 1) "1 Bockspiel" else "${king.games} Bockspielen"
+            lines += "Bock-König: ${king.player.name} mit ${facts.withUnit(king.balance, dative = true)} aus $games."
+        }
+        facts.soloSpecialist?.let {
+            lines += "Solo-Spezialist: ${it.player.name}, ${it.solos} von ${it.announced} Ansagen warn Einzelspiele."
+        }
+        facts.wallflower?.let {
+            lines += "Mauerblümchen: ${it.player.name} ruft liaber, nur ${it.solos} von ${it.announced} Ansagen warn Einzelspiele."
+        }
+        facts.favoritePartners?.let { pair ->
+            lines += "Lieblingspartner: ${pair.first.name} und ${pair.second.name}, ${pair.won} von ${pair.games} " +
+                "gemeinsamen Spielen gwonna, zamm ${facts.withUnit(pair.balance)}."
+        }
+        if (facts.safeBets.isNotEmpty()) lines += "Sichere Bank beim Legen: ${klopferRecords(facts, facts.safeBets)}."
+        if (facts.firestarters.isNotEmpty()) {
+            lines += "Brandstifter beim Legen: ${klopferRecords(facts, facts.firestarters)}. Liaber lassn!"
+        }
+        facts.mostExpensiveGame?.let { lines += expensiveGameLine(facts, it) }
+        facts.winStreak?.let { lines += "Längste Siegesserie: ${it.player.name} mit ${it.length} Spielen am Stück." }
+        if (facts.bockRounds > 0) lines += "Bockrunden insgesamt: ${facts.bockRounds}."
+        historyStandingsLine(facts)?.let { lines += it }
+        return lines.joinToString("\n")
+    }
+
+    private fun historyHeader(facts: HistoryFacts): String {
+        val first = facts.firstDate
+        val last = facts.lastDate
+        return when {
+            first == null || last == null -> "Schafkopf-Bilanz"
+            first == last -> "Schafkopf-Bilanz vom $first"
+            else -> "Schafkopf-Bilanz vom $first bis $last"
+        }
+    }
+
+    private fun leaderLine(facts: HistoryFacts, place: SummaryPlace): String {
+        val name = names(place.players)
+        val afterMit = facts.withUnit(place.balance, dative = true)
+        if (place.players.size > 1) return "An der Spitze stehn $name mit je $afterMit."
+        return pick(
+            facts.gamesPlayed,
+            "Spitzenreiter der ewigen Tabelle: $name mit $afterMit.",
+            "Ganz obn in der ewigen Tabelle: $name mit $afterMit.",
+        )
+    }
+
+    private fun sponsorLine(facts: HistoryFacts, place: SummaryPlace): String {
+        val name = names(place.players)
+        val balance = facts.withUnit(place.balance)
+        val afterMit = facts.withUnit(place.balance, dative = true)
+        if (place.players.size > 1) return "Am meisten zahlt ham bisher $name mit je $afterMit. Vergelt's Gott!"
+        return pick(
+            facts.gamesPlayed + 1,
+            "Größter Sponsor bisher: $name mit $afterMit. Vergelt's Gott!",
+            "Die Runde finanziert hat bisher vor allem $name: $balance. Dankschön!",
+        )
+    }
+
+    /** „C, 3-mal glegt, 2-mal gwonna, unterm Strich +7,40 €“; mehrere Spieler durch Strichpunkte getrennt. */
+    private fun klopferRecords(facts: HistoryFacts, records: List<KlopferRecord>): String =
+        records.joinToString("; ") {
+            "${it.player.name}, ${times(it.count)} glegt, ${times(it.won)} gwonna, unterm Strich ${facts.withUnit(it.balance)}"
+        }
+
+    private fun expensiveGameLine(facts: HistoryFacts, top: HistoryGame): String {
+        val game = top.game
+        val declarer = game.declarer.name
+        val partner = game.partner?.let { " mit ${it.name}" } ?: ""
+        val specials = if (game.specials.isEmpty()) "" else " (${game.specials.joinToString(", ")})"
+        val outcome = if (game.won) "gwonna" else "verlorn"
+        return "Teuerstes Spiel: am ${top.date} Nr. ${game.number}, ${game.type} von $declarer$partner$specials, " +
+            "$outcome – ${facts.withUnit(game.value)} je Zahlung, ${facts.withUnit(game.declarerAmount)} für $declarer."
+    }
+
+    /** Die ewige Tabelle in einer Zeile. Stehen alle gleich, ist sie schon in der Zeile „alle gleich“ gesagt. */
+    private fun historyStandingsLine(facts: HistoryFacts): String? {
+        val first = facts.standings.firstOrNull() ?: return null
+        if (facts.standings.all { it.balance == first.balance }) return null
+        val ranking = facts.standings.joinToString(", ") { "${it.rank}. ${it.player.name} ${facts.withUnit(it.balance)}" }
+        return "Ewige Tabelle: $ranking."
+    }
+
     private fun header(facts: SummaryFacts): String =
         "Schafkopf am ${facts.date}" + (facts.location?.let { ", $it" } ?: "")
 
@@ -193,7 +296,11 @@ object TemplateSummary {
      *
      * @param dative `true` hinter „mit“ und „bei“: Dort steht der Wemfall, also „mit +150 Punkten“.
      */
-    private fun SummaryFacts.withUnit(amount: String, dative: Boolean = false): String = when {
+    private fun SummaryFacts.withUnit(amount: String, dative: Boolean = false): String = unit(asMoney, amount, dative)
+
+    private fun HistoryFacts.withUnit(amount: String, dative: Boolean = false): String = unit(asMoney, amount, dative)
+
+    private fun unit(asMoney: Boolean, amount: String, dative: Boolean): String = when {
         asMoney -> amount
         amount.trimStart('+', MINUS, '-') == "1" -> "$amount Punkt"
         dative -> "$amount Punkten"

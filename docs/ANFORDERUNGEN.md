@@ -61,7 +61,9 @@ deren Zähler den Bock-Schalter vorbelegt; „zusammengeworfen“ als eigener Ei
 Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige Tabelle“):
 
 1. Finanz-Übersicht: Kontostand je Spieler als Tabelle und Vermögensverlauf über die Spiele als Liniendiagramm.
-2. Spielart-Analyse: Gewinnrate und durchschnittlicher Gewinn oder Verlust je Spieler und Spielart.
+2. Spielart-Analyse: Gewinnrate und durchschnittlicher Gewinn oder Verlust je Spieler und Spielart, als
+   Balkendiagramm (je Spielart ein Abschnitt, je Spieler ein Balken von der Null nach rechts oder links, daneben
+   Durchschnitt und Gewinnquote als Zahl; jede Spielart mit eigenem Maßstab).
 3. „Sollte-er-es-lassen?“-Index: wie oft jeder gelegt hat, Gewinnquote und Netto-Bilanz der gelegten Spiele,
    dazu ein humorvolles Abzeichen (zum Beispiel „Brandstifter“ oder „Sichere Bank“).
 4. Weitere Kennzahlen: Bock-König (wer in Bockspielen am meisten gewinnt), Solo-Spezialist und Mauerblümchen
@@ -71,7 +73,7 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
    Teilen-Menü von Android weitergeben (Signal, Telegram und andere).
 
 Stand 16.11.2026: umgesetzt in der Android-App (Statistik, Abschluss, Teilen als Text und Bild) und in der Web-App
-(ohne Teilen als Bild).
+(ohne Teilen als Bild); das Balkendiagramm je Spielart in beiden.
 
 ## 6. Sicherung und Zusätze
 
@@ -82,8 +84,11 @@ Stand 16.11.2026: umgesetzt in der Android-App (Statistik, Abschluss, Teilen als
   Datei aus der Dateiauswahl von Android. „Aus Google Drive einlesen“ spielt die Sicherung zurück.
 - **Abend-Kommentator:** Auf Wunsch schreibt ein Sprachmodell (Gemini, eigener Schlüssel) aus den Zahlen des Abends
   eine witzige, bairisch gefärbte und leicht stichelnde Zusammenfassung; auch sie lässt sich teilen.
-  Ohne Schlüssel entsteht die Zusammenfassung aus Textbausteinen. Stand 16.11.2026: in der Android-App umgesetzt
-  (Abschluss → „Kommentar schreiben lassen“; Einstellungen → Abend-Kommentator).
+  Ohne Schlüssel entsteht die Zusammenfassung aus Textbausteinen. Für alle Abende zusammen gibt es eine Bilanz
+  (Spitzenreiter, Abendsiege, Bock-König, Lieblingspartner, teuerstes Spiel und so weiter). Stand 16.11.2026: in der
+  Android-App umgesetzt (Abschluss oder Statistik → „Kommentar schreiben lassen“; Einstellungen →
+  Abend-Kommentator). Ein Sprachmodell auf dem Gerät (AICore) als Ausweichmöglichkeit braucht Google-Dienste und
+  kommt erst mit einer Ausgabe ohne F-Droid; bis dahin dienen die Textbausteine als Ausweg.
 - **Uhr (Wear OS):** eine Kachel mit dem Zwischenstand des laufenden Abends und der Schaltfläche „Neues Spiel“ sowie
   eine Schnelleingabe in Schritten für das runde Display; die Eingabe wird mit dem Handy abgeglichen.
   Aufgeschoben (Entscheidung vom 16.11.2026), bis es eine Ausgabe der App ohne F-Droid gibt.

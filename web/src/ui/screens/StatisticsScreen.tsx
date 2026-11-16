@@ -5,13 +5,13 @@
  */
 import type { ComponentChildren } from "preact";
 import { useMemo } from "preact/hooks";
-import type { Evening, GameType, PlayerId } from "../../core/model";
-import { GAME_TYPES } from "../../core/model";
+import type { Evening, PlayerId } from "../../core/model";
 import { StatisticEngine, type GelegtBadge, type Statistics } from "../../core/stats/StatisticEngine";
 import { BalanceChart, type ChartSeries } from "../charts/BalanceChart";
+import { GameModeChart, modeChartGroups } from "../charts/GameModeChart";
 import { Amount, Hint, PlayerName, SectionHeading, TopBar } from "../components";
 import { useAppState, useColors, useNames, useServices } from "../context";
-import { formatAmount, formatDate, formatPercent, GAME_TYPE_LABELS, plural } from "../format";
+import { formatAmount, formatDate, formatPercent, plural } from "../format";
 
 const BADGE_TEXTS: Readonly<Record<GelegtBadge, string>> = {
   STREICHHOLZ_SPARER: "Streichholz-Sparer: hat noch nie gelegt",
@@ -56,7 +56,7 @@ function StatisticsContent({
     colorIndex: color(id),
     values: stats.finance.balanceSeries.get(id) ?? [0],
   }));
-  const typesPlayed: GameType[] = GAME_TYPES.filter((type) => (history.gameTypeCounts.get(type) ?? 0) > 0);
+  const modeGroups = modeChartGroups(stats, name, color);
 
   // Tabelle zum Verlauf: bei einem Abend jedes Spiel, bei vielen Abenden der Stand nach jedem Abend.
   const lastPoint = Math.max(0, ...series.map((it) => it.values.length - 1));
@@ -146,35 +146,15 @@ function StatisticsContent({
         </details>
       ) : null}
 
-      {typesPlayed.length > 0 ? (
+      {modeGroups.length > 0 ? (
         <>
-          <SectionHeading>Selbst gespielt: gewonnen von gespielt</SectionHeading>
-          <div class="table-scroll">
-            <table class="stat-table">
-              <thead>
-                <tr>
-                  <th scope="col">Spieler</th>
-                  {typesPlayed.map((type) => (
-                    <th scope="col" key={type}>
-                      {GAME_TYPE_LABELS[type]}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {stats.gameModes.map((modes) => (
-                  <tr key={modes.player}>
-                    <th scope="row">{name(modes.player)}</th>
-                    {typesPlayed.map((type) => {
-                      const record = modes.asPlayer.get(type);
-                      return <td key={type}>{record && record.games > 0 ? `${record.won}/${record.games}` : "–"}</td>;
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Hint>Bei Über Kreuz zählen alle Spiele am Tisch, weil dort niemand ansagt.</Hint>
+          <SectionHeading>Spielarten: selbst gespielt</SectionHeading>
+          <GameModeChart groups={modeGroups} asMoney={asMoney} />
+          <Hint>
+            Der Balken zeigt den Durchschnitt je Spiel: nach rechts Gewinn, nach links Verlust; jede Spielart hat ihren
+            eigenen Maßstab. Gezählt sind nur selbst gespielte Spiele (als Ansager, Mitspieler oder Alleinspieler), bei
+            Über Kreuz alle Spiele am Tisch, weil dort niemand ansagt.
+          </Hint>
         </>
       ) : null}
 
