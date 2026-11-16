@@ -37,8 +37,7 @@
 
     <!-- Zustimmung vor dem ersten Senden -->
     <string name="ai_consent_title">Daten an %1$s senden?</string>
-    <string name="ai_consent_text">Für den Kommentar gehen Spielstände, Spielarten und besondere Spiele dieses Abends an %1$s. %2$s Im kostenlosen Tarif von Google dürfen die Texte zur Verbesserung der Dienste verwendet werden.</string>
-    <string name="ai_consent_text_all">Für die Bilanz gehen Spielstände, Auszeichnungen und besondere Spiele aller Abende an %1$s. %2$s Im kostenlosen Tarif von Google dürfen die Texte zur Verbesserung der Dienste verwendet werden.</string>
+    <string name="ai_consent_text">Für den Kommentar gehen Spielstände, Spielarten, Auszeichnungen und besondere Spiele an %1$s: für einen Abend dessen Zahlen, für die Bilanz die aller Abende. Die Zustimmung gilt für beides. %2$s Im kostenlosen Tarif von Google dürfen die Texte zur Verbesserung der Dienste verwendet werden.</string>
     <string name="ai_consent_names_on">Die echten Namen werden mitgeschickt.</string>
     <string name="ai_consent_names_off">Statt der Namen gehen Platzhalter mit.</string>
     <string name="ai_consent_yes">Senden</string>

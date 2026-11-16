@@ -1,10 +1,16 @@
 package io.github.q0ochen.schafkopf.app
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -153,11 +159,21 @@ class ScreenshotTest {
         }
     }
 
-    /** @param ready Ein Text, der erst mit den geladenen Daten erscheint; bis dahin wird gewartet. */
-    private fun show(themeMode: ThemeMode = ThemeMode.LIGHT, ready: String? = null, content: @Composable () -> Unit) {
+    /**
+     * @param ready Ein Text, der erst mit den geladenen Daten erscheint; bis dahin wird gewartet.
+     * @param fontScale Schriftgröße wie in den Einstellungen des Handys (1 = normal).
+     */
+    private fun show(
+        themeMode: ThemeMode = ThemeMode.LIGHT,
+        ready: String? = null,
+        fontScale: Float = 1f,
+        content: @Composable () -> Unit,
+    ) {
         compose.setContent {
-            SchafkopfTheme(themeMode) {
-                Surface(modifier = Modifier.fillMaxSize()) { content() }
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
+                SchafkopfTheme(themeMode) {
+                    Surface(modifier = Modifier.fillMaxSize()) { content() }
+                }
             }
         }
         compose.waitForIdle()
@@ -302,7 +318,24 @@ class ScreenshotTest {
         capture("23_statistik_spielarten_schmal_hell")
     }
 
-    private fun showModeChart(themeMode: ThemeMode) {
+    /** Große Schrift (doppelt so groß) auf einem schmalen Handy: Kein Betrag darf abgeschnitten werden. */
+    @Test
+    @Config(qualifiers = "w360dp-h1300dp-normal-long-notround-any-420dpi-keyshidden-nonav")
+    fun statistik_spielarten_grosse_schrift() {
+        seed(secondEvening = true)
+        showModeChart(ThemeMode.DARK, fontScale = 2f)
+        capture("25_statistik_spielarten_grosse_schrift")
+    }
+
+    /** Der Kontostand bei großer Schrift: Die Spalten wachsen mit, die Tabelle lässt sich seitlich schieben. */
+    @Test
+    fun statistik_grosse_schrift() {
+        seed(secondEvening = true)
+        show(ThemeMode.DARK, ready = "Kontostand", fontScale = 1.6f) { StatisticsScreen(null, Navigator()) }
+        capture("26_statistik_grosse_schrift")
+    }
+
+    private fun showModeChart(themeMode: ThemeMode, fontScale: Float = 1f) {
         val context = ApplicationProvider.getApplicationContext<TestSchafkopfApp>()
         val names = mapOf(sepp to "Sepp", hans to "Hans", kathi to "Kathi", vroni to "Vroni")
         val evenings = runBlocking { GlobalContext.get().get<EveningRepository>().evenings.first() }
@@ -312,7 +345,12 @@ class ScreenshotTest {
             name = { names.getValue(it) },
             colorIndex = { seating.indexOf(it) },
         )
-        show(themeMode) { GameModeChart(groups, asMoney = true, modifier = Modifier.padding(16.dp)) }
+        // Wie in der App in einer scrollbaren Spalte; was nicht ins Fenster passt, liegt dann einfach darunter.
+        show(themeMode, fontScale = fontScale) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                GameModeChart(groups, asMoney = true, modifier = Modifier.padding(16.dp))
+            }
+        }
     }
 
     @Test

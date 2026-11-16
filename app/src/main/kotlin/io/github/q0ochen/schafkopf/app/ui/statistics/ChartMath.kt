@@ -88,8 +88,8 @@ data class BarScale(val max: Long) {
     /**
      * Anfang und Ende des Balkens für [value] über die Breite [width]: von der Null nach rechts (Gewinn) oder links
      * (Verlust), beim größten Betrag bis an den Rand. Ein Wert ungleich 0 bekommt mindestens die Länge [minLength],
-     * damit auch ein kleiner Gewinn oder Verlust zu sehen ist, höchstens aber die halbe Breite. Bei 0 liegen Anfang
-     * und Ende auf der Null.
+     * damit auch ein kleiner Gewinn oder Verlust zu sehen ist, höchstens aber die halbe Breite. Bei 0 und in einer
+     * Skala ohne Betrag ([max] 0) liegen Anfang und Ende auf der Null.
      */
     fun span(value: Int, width: Float, minLength: Float): ClosedFloatingPointRange<Float> {
         val zero = zero(width)

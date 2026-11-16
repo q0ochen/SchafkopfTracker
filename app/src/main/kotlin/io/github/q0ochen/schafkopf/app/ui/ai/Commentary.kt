@@ -178,24 +178,18 @@ fun CommentarySection(
 }
 
 /**
- * Fragt vor dem ersten Senden an einen Dienst, ob gesendet werden darf.
- *
- * @param allEvenings `true`: Gesendet werden die Fakten aller Abende (die Bilanz), sonst die eines Abends.
+ * Fragt vor dem ersten Senden an einen Dienst, ob gesendet werden darf. Die Zustimmung gilt je Dienst, also für den
+ * Abendbericht und die Bilanz über alle Abende zugleich; der Text sagt das.
  */
 @Composable
-fun CommentaryConsentDialog(
-    consent: CommentaryUi.NeedsConsent,
-    allEvenings: Boolean,
-    onConsent: (String) -> Unit,
-    onDecline: () -> Unit,
-) {
+fun CommentaryConsentDialog(consent: CommentaryUi.NeedsConsent, onConsent: (String) -> Unit, onDecline: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDecline,
         title = { Text(stringResource(R.string.ai_consent_title, consent.host)) },
         text = {
             Text(
                 stringResource(
-                    if (allEvenings) R.string.ai_consent_text_all else R.string.ai_consent_text,
+                    R.string.ai_consent_text,
                     consent.host,
                     stringResource(if (consent.realNames) R.string.ai_consent_names_on else R.string.ai_consent_names_off),
                 ),

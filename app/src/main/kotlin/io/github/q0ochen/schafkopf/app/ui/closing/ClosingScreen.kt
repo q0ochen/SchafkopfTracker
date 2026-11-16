@@ -125,7 +125,7 @@ fun ClosingScreen(eveningId: String, navigator: Navigator) {
     }
 
     (state.commentary as? CommentaryUi.NeedsConsent)?.let { consent ->
-        CommentaryConsentDialog(consent, allEvenings = false, onConsent = viewModel::consent, onDecline = viewModel::declineConsent)
+        CommentaryConsentDialog(consent, onConsent = viewModel::consent, onDecline = viewModel::declineConsent)
     }
 }
 

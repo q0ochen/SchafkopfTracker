@@ -129,12 +129,7 @@ fun StatisticsScreen(eveningId: String?, navigator: Navigator) {
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         (state.commentary as? CommentaryUi.NeedsConsent)?.let { consent ->
-            CommentaryConsentDialog(
-                consent = consent,
-                allEvenings = state.selected == null,
-                onConsent = viewModel::consent,
-                onDecline = viewModel::declineConsent,
-            )
+            CommentaryConsentDialog(consent, onConsent = viewModel::consent, onDecline = viewModel::declineConsent)
         }
         Column(
             modifier = Modifier
