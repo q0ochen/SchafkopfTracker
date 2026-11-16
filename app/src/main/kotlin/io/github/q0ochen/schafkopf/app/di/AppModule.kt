@@ -1,6 +1,15 @@
 package io.github.q0ochen.schafkopf.app.di
 
+import android.content.Context
+import androidx.work.WorkManager
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupRunner
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupScheduler
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
+import io.github.q0ochen.schafkopf.app.backup.ContentResolverDocuments
+import io.github.q0ochen.schafkopf.app.backup.DocumentAccess
+import io.github.q0ochen.schafkopf.app.ui.backup.BackupViewModel
 import io.github.q0ochen.schafkopf.app.ui.board.BoardViewModel
+import io.github.q0ochen.schafkopf.data.backup.BackupService
 import io.github.q0ochen.schafkopf.app.ui.closing.ClosingViewModel
 import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsViewModel
 import io.github.q0ochen.schafkopf.data.storage.FileStorage
@@ -32,6 +41,10 @@ import java.util.UUID
  */
 const val STORAGE_FOLDER = "daten"
 
+/** Version der App, wie sie im Kopf jeder Sicherung steht. */
+private fun appVersion(context: Context): String =
+    runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
+
 /**
  * Kompositionswurzel der App: Hier und nur hier steht, welche Umsetzung hinter welchem Port steckt.
  * Alle Klassen bekommen ihre Abhängigkeiten über den Konstruktor; Koin setzt sie zusammen.
@@ -54,6 +67,13 @@ val appModule = module {
     single<SecretStore> { InMemorySecretStore() }
 
     single { EveningEditor(get(), get(), get()) }
+
+    // Sicherung: als Datei und automatisch in eine einmal gewählte Datei (zum Beispiel in Google Drive).
+    single { BackupService(get<PlayerRepository>(), get<EveningRepository>(), get<SettingsRepository>(), get(), appVersion(androidContext()), Dispatchers.Default) }
+    single<DocumentAccess> { ContentResolverDocuments(androidContext()) }
+    single { AutoBackupStore(androidContext()) }
+    single { AutoBackupRunner(get(), get(), get(), get()) }
+    single { AutoBackupScheduler({ WorkManager.getInstance(androidContext()) }, get()) }
 
     viewModel { StartViewModel(get(), get()) }
     viewModel { NewEveningViewModel(get(), get(), get(), get(), get()) }
@@ -84,5 +104,6 @@ val appModule = module {
         )
     }
     viewModel { SettingsViewModel(get()) }
+    viewModel { BackupViewModel(get(), get(), get(), get(), get(), get(), get()) }
     viewModel { PlayersViewModel(get(), get(), get()) }
 }

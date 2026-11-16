@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sicherung als Datei -->
+    <string name="backup_file_heading">Sicherung als Datei</string>
+    <string name="backup_file_hint">Alle Spieler, alle Abende und die Regeln für neue Abende in einer Datei. Damit lässt sich alles auf einem anderen Handy oder in der Web-App einlesen.</string>
+    <string name="backup_save">Sicherung speichern</string>
+    <string name="backup_load">Sicherung einlesen</string>
+    <string name="backup_saved">Sicherung gespeichert.</string>
+    <string name="backup_save_failed">Die Sicherung ließ sich nicht speichern.</string>
+    <string name="backup_read_failed">Die Datei ließ sich nicht lesen.</string>
+    <string name="backup_too_big">Diese Datei ist zu groß für eine Sicherung des Schafkopf Trackers.</string>
+
+    <!-- Automatische Sicherung -->
+    <string name="backup_auto_heading">Automatische Sicherung</string>
+    <string name="backup_auto_hint">Nach jeder Änderung schreibt die App die Sicherung von selbst in eine Datei, die du einmal auswählst. Wählst du dort Google Drive, liegt die Sicherung in deinem Drive (dafür muss die Google-Drive-App auf dem Handy sein). Ohne Netz lädt Drive sie hoch, sobald wieder Empfang da ist.</string>
+    <string name="backup_auto_off">Ausgeschaltet.</string>
+    <string name="backup_auto_target">Datei: %1$s</string>
+    <string name="backup_auto_last">Zuletzt gesichert: %1$s</string>
+    <string name="backup_auto_never">Noch nicht gesichert.</string>
+    <string name="backup_auto_error_access">Am %1$s ging es nicht: Die App darf die Datei nicht mehr schreiben. Bitte den Speicherort neu wählen.</string>
+    <string name="backup_auto_error_write">Am %1$s ging es nicht: Die Datei ließ sich nicht schreiben. Die App versucht es von selbst weiter.</string>
+    <string name="backup_auto_choose">Speicherort wählen</string>
+    <string name="backup_auto_change">Anderen Speicherort wählen</string>
+    <string name="backup_auto_now">Jetzt sichern</string>
+    <string name="backup_auto_disable">Ausschalten</string>
+    <string name="backup_auto_restore">Aus dieser Datei einlesen</string>
+    <string name="backup_auto_file_name">schafkopf-sicherung.json</string>
+    <string name="backup_auto_unnamed">gewählte Datei</string>
+    <string name="backup_auto_access_refused">Auf diese Datei darf die App nicht dauerhaft schreiben. Bitte einen anderen Speicherort wählen.</string>
+    <string name="backup_auto_enabled">Automatische Sicherung eingeschaltet.</string>
+    <string name="backup_auto_disabled">Automatische Sicherung ausgeschaltet.</string>
+
+    <!-- Sicherung einlesen -->
+    <string name="backup_import_title">Sicherung einlesen?</string>
+    <string name="backup_import_unreadable_title">Sicherung nicht lesbar</string>
+    <string name="backup_import_created">Erstellt am %1$s</string>
+    <string name="backup_import_created_version">Erstellt am %1$s (Version %2$s)</string>
+    <plurals name="backup_import_new_evenings">
+        <item quantity="one">%1$d neuer Abend kommt dazu.</item>
+        <item quantity="other">%1$d neue Abende kommen dazu.</item>
+    </plurals>
+    <string name="backup_import_no_new_evenings">Keine neuen Abende.</string>
+    <plurals name="backup_import_existing_evenings">
+        <item quantity="one">%1$d Abend ist schon da und bleibt, wie er ist.</item>
+        <item quantity="other">%1$d Abende sind schon da und bleiben, wie sie sind.</item>
+    </plurals>
+    <plurals name="backup_import_invalid_evenings">
+        <item quantity="one">%1$d Abend wird ausgelassen:</item>
+        <item quantity="other">%1$d Abende werden ausgelassen:</item>
+    </plurals>
+    <string name="backup_import_invalid_line">– %1$s</string>
+    <plurals name="backup_import_new_players">
+        <item quantity="one">%1$d neuer Spieler kommt dazu: %2$s.</item>
+        <item quantity="other">%1$d neue Spieler kommen dazu: %2$s.</item>
+    </plurals>
+    <plurals name="backup_import_same_name">
+        <item quantity="one">Achtung: %1$s heißt wie ein vorhandener Spieler, ist aber ein anderer und wird zusätzlich angelegt.</item>
+        <item quantity="other">Achtung: %1$s heißen wie vorhandene Spieler, sind aber andere und werden zusätzlich angelegt.</item>
+    </plurals>
+    <string name="backup_import_take_names">Spieler wie in der Sicherung benennen: %1$s</string>
+    <string name="backup_import_rename">%1$s → %2$s</string>
+    <string name="backup_import_take_rules">Regeln für neue Abende aus der Sicherung übernehmen („%1$s“)</string>
+    <string name="backup_import_nothing_new">Alles aus dieser Sicherung ist schon da.</string>
+    <string name="backup_import_confirm">Einlesen</string>
+    <string name="backup_import_done">Sicherung eingelesen.</string>
+</resources>

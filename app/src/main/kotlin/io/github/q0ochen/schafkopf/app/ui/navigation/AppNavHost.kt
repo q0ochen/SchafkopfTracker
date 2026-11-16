@@ -22,6 +22,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.q0ochen.schafkopf.R
+import io.github.q0ochen.schafkopf.app.ui.backup.BackupScreen
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
 import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
@@ -84,7 +85,7 @@ fun AppNavHost() {
                 Screen.Settings -> SettingsScreen(navigator)
                 is Screen.Rules -> RulesScreen(screen.eveningId, navigator)
                 Screen.AiSettings -> ComingSoonScreen(R.string.start_settings, navigator)
-                Screen.Backup -> ComingSoonScreen(R.string.start_settings, navigator)
+                Screen.Backup -> BackupScreen(navigator)
             }
         }
     }

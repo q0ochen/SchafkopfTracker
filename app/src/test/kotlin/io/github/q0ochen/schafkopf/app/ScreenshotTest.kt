@@ -15,6 +15,8 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
+import io.github.q0ochen.schafkopf.app.ui.backup.BackupScreen
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
 import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
 import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsScreen
@@ -257,6 +259,17 @@ class ScreenshotTest {
         capture("16_statistik_tabelle_dunkel")
         compose.onNodeWithText("Rekorde je Spieler").performScrollTo()
         capture("17_statistik_rekorde_dunkel")
+    }
+
+    @Test
+    fun sicherung_dunkel() {
+        seed()
+        GlobalContext.get().get<AutoBackupStore>().apply {
+            setTarget("content://drive/1", "schafkopf-sicherung.json")
+            recordSuccess(start.plusSeconds(3 * 3600L))
+        }
+        show(ThemeMode.DARK) { BackupScreen(Navigator()) }
+        capture("19_sicherung_dunkel")
     }
 
     @Test

@@ -1,6 +1,9 @@
 package io.github.q0ochen.schafkopf.app
 
 import android.app.Application
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupError
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupScheduler
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
 import io.github.q0ochen.schafkopf.app.di.appModule
 import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
@@ -26,6 +29,17 @@ class SchafkopfApp : Application() {
             modules(appModule)
         }
         applicationScope.launch { ensureDefaultPlayers(get()) }
+        startAutoBackup()
+    }
+
+    /**
+     * Automatische Sicherung: Jede Änderung stößt eine Sicherung an. Ging der letzte Versuch schief (zum Beispiel
+     * weil die Versuche im Hintergrund ausgeschöpft waren), gibt es beim Start der App einen neuen.
+     */
+    private fun startAutoBackup() {
+        val scheduler: AutoBackupScheduler = get()
+        scheduler.watch(applicationScope, AutoBackupScheduler.changesOf(get(), get(), get()))
+        if (get<AutoBackupStore>().status.value.lastError == AutoBackupError.WRITE_FAILED) scheduler.request()
     }
 
     companion object {
