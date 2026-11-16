@@ -10,6 +10,9 @@ import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import io.github.q0ochen.schafkopf.R
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupError
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupKind
+import io.github.q0ochen.schafkopf.app.drive.FakeDriveAccount
+import io.github.q0ochen.schafkopf.app.drive.FakeDriveServer
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupRunner
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupScheduler
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
@@ -71,7 +74,13 @@ class BackupViewModelTest {
     }
 
     /** Ein Gerät: Ablagen, Sicherungsdienst und ViewModel. */
-    private inner class Device(players: List<Player>, evenings: List<Evening>, val documents: FakeDocuments = FakeDocuments()) {
+    private inner class Device(
+        players: List<Player>,
+        evenings: List<Evening>,
+        val documents: FakeDocuments = FakeDocuments(),
+        val driveServer: FakeDriveServer = FakeDriveServer(),
+        val account: FakeDriveAccount = FakeDriveAccount(),
+    ) {
         val players = InMemoryPlayerRepository(players)
         val evenings = InMemoryEveningRepository(evenings)
         val settings = InMemorySettingsRepository(AppSettings())
@@ -82,10 +91,13 @@ class BackupViewModelTest {
             WorkManagerTestInitHelper.initializeTestWorkManager(context, config)
             WorkManager.getInstance(context)
         }
+        val driveBackup = driveServer.backup { kotlinx.coroutines.runBlocking { account.accessToken() } }
         val viewModel = BackupViewModel(
             backup, this.players, settings, documents, store,
-            AutoBackupRunner(backup, store, documents, clock),
+            AutoBackupRunner(backup, store, documents, driveBackup, clock),
             AutoBackupScheduler({ workManager }, store),
+            account,
+            driveBackup,
         )
     }
 
@@ -209,6 +221,66 @@ class BackupViewModelTest {
         assertEquals(second, device.viewModel.state.value.message)
         device.viewModel.messageShown(second)
         assertNull(device.viewModel.state.awaitFirst { it.message == null }.message)
+    }
+
+    @Test
+    fun `Google Drive - anmelden, automatisch sichern, auf neuem Geraet einlesen, ausschalten`() = runTest(dispatcher) {
+        val drive = FakeDriveServer()
+        val old = Device(TestEvenings.players, listOf(TestEvenings.evening()), driveServer = drive)
+        backgroundScope.launch { old.viewModel.state.collect {} }
+        assertTrue(old.viewModel.state.awaitFirst { it.driveConfigured }.driveConfigured)
+
+        // Erst anmelden, dann einschalten: Die erste Sicherung landet sofort in Drive.
+        old.viewModel.signInIntent(AfterSignIn.ENABLE_AUTO)
+        old.viewModel.completeSignIn(null)
+        val on = old.viewModel.state.awaitFirst { it.message?.res == R.string.backup_auto_enabled && !it.busy }
+        assertEquals(AutoBackupKind.GOOGLE_DRIVE, on.auto.kind)
+        assertEquals("runde@example.com", on.auto.targetName)
+        assertTrue(drive.files.values.single().contains("schafkopf-tracker-backup"))
+
+        // Neues Handy, dasselbe Google-Konto: aus Drive einlesen.
+        val fresh = Device(placeholders, emptyList(), driveServer = drive, account = FakeDriveAccount(signedIn = true))
+        backgroundScope.launch { fresh.viewModel.state.collect {} }
+        fresh.viewModel.restoreFromDrive()
+        val pending = fresh.viewModel.state.awaitFirst { it.pending != null }.pending!!
+        assertEquals(1, pending.preview.newEveningCount)
+        fresh.viewModel.dismissImport()
+
+        old.viewModel.clearMessage()
+        old.viewModel.disableAuto()
+        old.viewModel.state.awaitFirst { !it.auto.enabled }
+        assertTrue(old.account.signedOut)
+    }
+
+    @Test
+    fun `Google Drive - gescheiterte Anmeldung, noch keine Sicherung, Fehler beim Lesen`() = runTest(dispatcher) {
+        val device = Device(TestEvenings.players, emptyList())
+        backgroundScope.launch { device.viewModel.state.collect {} }
+        device.account.signInSucceeds = false
+        device.viewModel.signInIntent(AfterSignIn.RESTORE)
+        device.viewModel.completeSignIn(null)
+        assertEquals(
+            R.string.backup_drive_sign_in_failed,
+            device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_drive_sign_in_failed }.message?.res,
+        )
+        device.viewModel.clearMessage()
+
+        device.account.signInSucceeds = true
+        device.viewModel.signInIntent(AfterSignIn.RESTORE)
+        device.viewModel.completeSignIn(null)
+        assertEquals(R.string.backup_drive_none, device.viewModel.state.awaitFirst { it.message?.res == R.string.backup_drive_none }.message?.res)
+        device.viewModel.clearMessage()
+
+        device.driveServer.failWith = 503
+        device.viewModel.restoreFromDrive()
+        assertEquals(R.string.drive_error_server, device.viewModel.state.awaitFirst { it.message?.res == R.string.drive_error_server }.message?.res)
+    }
+
+    @Test
+    fun `ohne Client-ID bietet die App Google Drive nicht an`() = runTest(dispatcher) {
+        val device = Device(TestEvenings.players, emptyList(), account = FakeDriveAccount(configured = false))
+        backgroundScope.launch { device.viewModel.state.collect {} }
+        assertFalse(device.viewModel.state.awaitFirst { true }.driveConfigured)
     }
 
     @Test

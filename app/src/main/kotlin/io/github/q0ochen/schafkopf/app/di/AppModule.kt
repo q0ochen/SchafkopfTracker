@@ -9,6 +9,8 @@ import io.github.q0ochen.schafkopf.app.backup.AutoBackupScheduler
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
 import io.github.q0ochen.schafkopf.app.backup.ContentResolverDocuments
 import io.github.q0ochen.schafkopf.app.backup.DocumentAccess
+import io.github.q0ochen.schafkopf.app.drive.AppAuthDriveAccount
+import io.github.q0ochen.schafkopf.app.drive.DriveAccount
 import io.github.q0ochen.schafkopf.app.ui.backup.BackupViewModel
 import io.github.q0ochen.schafkopf.app.ui.board.BoardViewModel
 import io.github.q0ochen.schafkopf.app.security.AndroidKeystoreCipher
@@ -18,7 +20,10 @@ import io.github.q0ochen.schafkopf.app.storage.JsonRulesCodec
 import io.github.q0ochen.schafkopf.app.ui.ai.AiSettingsViewModel
 import io.github.q0ochen.schafkopf.app.storage.JsonSettingsCodec
 import io.github.q0ochen.schafkopf.app.storage.LegacyFileImport
+import io.github.q0ochen.schafkopf.R
 import io.github.q0ochen.schafkopf.data.backup.BackupService
+import io.github.q0ochen.schafkopf.data.drive.DriveBackup
+import io.github.q0ochen.schafkopf.data.drive.GoogleDriveClient
 import io.github.q0ochen.schafkopf.data.llm.defaultHttpClient
 import io.github.q0ochen.schafkopf.database.RoomEveningRepository
 import io.github.q0ochen.schafkopf.database.RoomPlayerRepository
@@ -87,7 +92,17 @@ val appModule = module {
     single { BackupService(get<PlayerRepository>(), get<EveningRepository>(), get<SettingsRepository>(), get(), appVersion(androidContext()), Dispatchers.Default) }
     single<DocumentAccess> { ContentResolverDocuments(androidContext()) }
     single { AutoBackupStore(androidContext()) }
-    single { AutoBackupRunner(get(), get(), get(), get()) }
+    // Google Drive direkt: Anmeldung im Browser (AppAuth), Aufrufe der Drive-Schnittstelle über OkHttp.
+    single<DriveAccount> {
+        AppAuthDriveAccount(
+            context = androidContext(),
+            values = get(),
+            clientId = androidContext().getString(R.string.google_client_id).trim(),
+            redirectScheme = androidContext().packageName,
+        )
+    }
+    single { DriveBackup(GoogleDriveClient(get(), { get<DriveAccount>().accessToken() })) }
+    single { AutoBackupRunner(get(), get(), get(), get(), get()) }
     single { AutoBackupScheduler({ WorkManager.getInstance(androidContext()) }, get()) }
 
     viewModel { StartViewModel(get(), get()) }
@@ -120,6 +135,6 @@ val appModule = module {
         )
     }
     viewModel { SettingsViewModel(get()) }
-    viewModel { BackupViewModel(get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { BackupViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     viewModel { PlayersViewModel(get(), get(), get()) }
 }

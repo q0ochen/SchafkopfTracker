@@ -5,12 +5,19 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.q0ochen.schafkopf.R
+import android.content.Intent
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupKind
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupOutcome
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupRunner
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupScheduler
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStatus
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
 import io.github.q0ochen.schafkopf.app.backup.DocumentAccess
+import io.github.q0ochen.schafkopf.app.drive.DriveAccount
+import io.github.q0ochen.schafkopf.app.drive.DriveSignIn
+import io.github.q0ochen.schafkopf.app.drive.messageRes
+import io.github.q0ochen.schafkopf.data.drive.DriveBackup
+import io.github.q0ochen.schafkopf.data.drive.DriveResult
 import io.github.q0ochen.schafkopf.data.backup.BackupService
 import io.github.q0ochen.schafkopf.data.backup.ImportPreview
 import io.github.q0ochen.schafkopf.domain.model.Player
@@ -50,6 +57,8 @@ data class BackupUiState(
     val defaultRules: RuleSet? = null,
     val busy: Boolean = false,
     val message: BackupMessage? = null,
+    val driveConfigured: Boolean = false,
+    val drive: DriveSignIn = DriveSignIn(),
 ) {
     /** Enthält die wartende Sicherung eine andere Vorlage des Regelwerks? */
     val rulesDiffer: Boolean
@@ -58,9 +67,12 @@ data class BackupUiState(
 
 private data class LocalState(val pending: PendingImport? = null, val busy: Boolean = false, val message: BackupMessage? = null)
 
+/** Was nach der Anmeldung bei Google geschehen soll. */
+enum class AfterSignIn { ENABLE_AUTO, RESTORE }
+
 /**
- * Sicherung als Datei speichern und einlesen, dazu die automatische Sicherung in eine einmal gewählte Datei
- * (zum Beispiel in Google Drive, siehe [DocumentAccess]).
+ * Sicherung als Datei speichern und einlesen, dazu die automatische Sicherung: direkt in Google Drive (mit Anmeldung,
+ * siehe [DriveAccount]) oder in eine einmal gewählte Datei (siehe [DocumentAccess]).
  */
 class BackupViewModel(
     private val backup: BackupService,
@@ -70,12 +82,15 @@ class BackupViewModel(
     private val store: AutoBackupStore,
     private val runner: AutoBackupRunner,
     private val scheduler: AutoBackupScheduler,
+    private val driveAccount: DriveAccount,
+    private val driveBackup: DriveBackup,
 ) : ViewModel() {
 
     private val local = MutableStateFlow(LocalState())
+    private var afterSignIn: AfterSignIn? = null
 
     val state: StateFlow<BackupUiState> =
-        combine(local, store.status, players.players, settings.settings) { mine, auto, allPlayers, appSettings ->
+        combine(local, store.status, players.players, settings.settings, driveAccount.status) { mine, auto, allPlayers, appSettings, drive ->
             BackupUiState(
                 auto = auto,
                 pending = mine.pending,
@@ -83,8 +98,66 @@ class BackupViewModel(
                 defaultRules = appSettings.defaultRules,
                 busy = mine.busy,
                 message = mine.message,
+                driveConfigured = driveAccount.configured,
+                drive = drive,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackupUiState(auto = store.status.value))
+
+    init {
+        viewModelScope.launch { driveAccount.load() }
+    }
+
+    /** Die Anmeldung bei Google im Browser; danach geschieht [action]. */
+    fun signInIntent(action: AfterSignIn): Intent {
+        afterSignIn = action
+        return driveAccount.signInIntent()
+    }
+
+    /** Ergebnis der Anmeldung; bei Erfolg geht es mit dem vorgemerkten Schritt weiter. */
+    fun completeSignIn(result: Intent?) {
+        val action = afterSignIn
+        afterSignIn = null
+        viewModelScope.launch {
+            if (!driveAccount.completeSignIn(result)) {
+                say(R.string.backup_drive_sign_in_failed)
+                return@launch
+            }
+            when (action) {
+                AfterSignIn.ENABLE_AUTO -> enableDrive()
+                AfterSignIn.RESTORE -> restoreFromDrive()
+                null -> Unit
+            }
+        }
+    }
+
+    /** Automatisch nach Google Drive sichern (Anmeldung vorausgesetzt); die erste Sicherung folgt sofort. */
+    fun enableDrive() {
+        val previous = store.status.value
+        if (previous.kind == AutoBackupKind.DOCUMENT) previous.target?.let(documents::releaseAccess)
+        store.setTarget(AutoBackupStatus.DRIVE_TARGET, driveAccount.status.value.email, AutoBackupKind.GOOGLE_DRIVE)
+        backupNow(enabled = true)
+    }
+
+    /** Liest die neueste Sicherung aus Google Drive (Anmeldung vorausgesetzt) und zeigt, was das Einlesen bewirkt. */
+    fun restoreFromDrive() = work {
+        val file = when (val latest = driveBackup.latest()) {
+            is DriveResult.Failure -> {
+                say(latest.error.messageRes())
+                return@work
+            }
+            is DriveResult.Success -> latest.value ?: run {
+                say(R.string.backup_drive_none)
+                return@work
+            }
+        }
+        when (val text = driveBackup.read(file)) {
+            is DriveResult.Failure -> say(text.error.messageRes())
+            is DriveResult.Success -> {
+                val preview = backup.preview(text.value)
+                local.update { it.copy(pending = PendingImport(text.value, preview)) }
+            }
+        }
+    }
 
     /** Schreibt eine Sicherung in die eben gewählte Datei. */
     fun exportTo(uri: String) = work {
@@ -155,26 +228,34 @@ class BackupViewModel(
         backupNow(enabled = true)
     }
 
-    /** Sichert sofort in die gewählte Datei und meldet, wie es lief. */
+    /** Sichert sofort in die gewählte Datei oder nach Drive und meldet, wie es lief. */
     fun backupNow(enabled: Boolean = false) = work {
         when (runner.run()) {
             AutoBackupOutcome.SAVED -> say(if (enabled) R.string.backup_auto_enabled else R.string.backup_saved)
-            AutoBackupOutcome.ACCESS_LOST -> Unit // steht im Status, mit der Bitte, neu zu wählen
+            // Steht im Status, mit der Bitte, neu zu wählen oder neu zu verbinden.
+            AutoBackupOutcome.ACCESS_LOST, AutoBackupOutcome.SIGN_IN_REQUIRED -> Unit
             AutoBackupOutcome.FAILED -> scheduler.request() // steht im Status; der Hintergrund versucht es weiter
             AutoBackupOutcome.NO_TARGET -> Unit
         }
     }
 
+    /** Schaltet die automatische Sicherung aus; bei Google Drive meldet die App sich dabei auch ab. */
     fun disableAuto() {
-        store.status.value.target?.let(documents::releaseAccess)
+        val status = store.status.value
+        if (status.kind == AutoBackupKind.GOOGLE_DRIVE) {
+            viewModelScope.launch { driveAccount.signOut() }
+        } else {
+            status.target?.let(documents::releaseAccess)
+        }
         store.setTarget(null, null)
         scheduler.cancel()
         say(R.string.backup_auto_disabled)
     }
 
-    /** Liest die Sicherung aus der Datei der automatischen Sicherung, zum Beispiel auf einem neuen Handy. */
+    /** Liest die Sicherung vom Ziel der automatischen Sicherung, zum Beispiel auf einem neuen Handy. */
     fun restoreFromAuto() {
-        store.status.value.target?.let(::readFrom)
+        val status = store.status.value
+        if (status.kind == AutoBackupKind.GOOGLE_DRIVE) restoreFromDrive() else status.target?.let(::readFrom)
     }
 
     /** Die Meldung ist gezeigt worden. Eine inzwischen neuere Meldung bleibt stehen. */

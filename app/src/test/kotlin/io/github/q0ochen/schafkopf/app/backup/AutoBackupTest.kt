@@ -13,6 +13,7 @@ import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.testing.WorkManagerTestInitHelper
 import io.github.q0ochen.schafkopf.app.TestSchafkopfApp
+import io.github.q0ochen.schafkopf.app.drive.FakeDriveServer
 import io.github.q0ochen.schafkopf.app.ui.TestEvenings
 import io.github.q0ochen.schafkopf.data.backup.BackupService
 import io.github.q0ochen.schafkopf.domain.model.AppSettings
@@ -102,7 +103,7 @@ class AutoBackupTest {
     fun `ein Versuch schreibt die Sicherung oder haelt fest, warum es nicht ging`() = runBlocking {
         val store = AutoBackupStore(context)
         val documents = FakeDocuments()
-        val runner = AutoBackupRunner(backupService(), store, documents, clock)
+        val runner = AutoBackupRunner(backupService(), store, documents, FakeDriveServer().backup { null }, clock)
         assertEquals(AutoBackupOutcome.NO_TARGET, runner.run())
 
         store.setTarget("mem://sicherung.json", "sicherung.json")
@@ -126,6 +127,50 @@ class AutoBackupTest {
         documents.failWrites = null
         assertEquals(AutoBackupOutcome.SAVED, runner.run())
         assertNull(store.status.value.lastError)
+    }
+
+    @Test
+    fun `nach Google Drive sichern, mit Netzfehler und abgelaufener Anmeldung`() = runBlocking {
+        val store = AutoBackupStore(context)
+        val drive = FakeDriveServer()
+        var token: String? = "TOKEN"
+        val runner = AutoBackupRunner(backupService(), store, FakeDocuments(), drive.backup { token }, clock)
+        store.setTarget(AutoBackupStatus.DRIVE_TARGET, "runde@example.com", AutoBackupKind.GOOGLE_DRIVE)
+        assertEquals(AutoBackupKind.GOOGLE_DRIVE, AutoBackupStore(context).status.value.kind)
+
+        assertEquals(AutoBackupOutcome.SAVED, runner.run())
+        assertTrue(drive.files.values.single().contains("schafkopf-tracker-backup"))
+        assertEquals("Bearer TOKEN", drive.authorizations.first())
+        // Die zweite Sicherung ersetzt dieselbe Datei.
+        assertEquals(AutoBackupOutcome.SAVED, runner.run())
+        assertEquals(1, drive.files.size)
+
+        drive.offline = true
+        assertEquals(AutoBackupOutcome.FAILED, runner.run())
+        assertEquals(AutoBackupError.WRITE_FAILED, store.status.value.lastError)
+        drive.offline = false
+
+        token = null
+        assertEquals(AutoBackupOutcome.SIGN_IN_REQUIRED, runner.run())
+        assertEquals(AutoBackupError.SIGN_IN_REQUIRED, store.status.value.lastError)
+        token = "TOKEN"
+        drive.failWith = 401
+        assertEquals(AutoBackupOutcome.SIGN_IN_REQUIRED, runner.run())
+    }
+
+    @Test
+    fun `nach Google Drive wird erst gesichert, wenn Netz da ist`() {
+        val workManager = testWorkManager()
+        val store = AutoBackupStore(context)
+        store.setTarget(AutoBackupStatus.DRIVE_TARGET, null, AutoBackupKind.GOOGLE_DRIVE)
+        AutoBackupScheduler({ workManager }, store).request()
+        val job = workManager.getWorkInfosForUniqueWork(AutoBackupScheduler.WORK_NAME).get().single()
+        assertEquals(androidx.work.NetworkType.CONNECTED, job.constraints.requiredNetworkType)
+
+        store.setTarget("mem://datei.json", null)
+        AutoBackupScheduler({ workManager }, store).request()
+        val fileJob = workManager.getWorkInfosForUniqueWork(AutoBackupScheduler.WORK_NAME).get().last { it.state == WorkInfo.State.ENQUEUED }
+        assertEquals(androidx.work.NetworkType.NOT_REQUIRED, fileJob.constraints.requiredNetworkType)
     }
 
     @Test

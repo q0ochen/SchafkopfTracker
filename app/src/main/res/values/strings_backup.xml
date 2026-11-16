@@ -12,7 +12,27 @@
 
     <!-- Automatische Sicherung -->
     <string name="backup_auto_heading">Automatische Sicherung</string>
-    <string name="backup_auto_hint">Nach jeder Änderung schreibt die App die Sicherung von selbst in eine Datei, die du einmal auswählst. Wählst du dort Google Drive, liegt die Sicherung in deinem Drive (dafür muss die Google-Drive-App auf dem Handy sein). Ohne Netz lädt Drive sie hoch, sobald wieder Empfang da ist.</string>
+    <string name="backup_auto_hint">Nach jeder Änderung sichert die App von selbst: direkt in dein Google Drive (Ordner „SchafkopfTracker_Backups“) oder in eine Datei, die du einmal auswählst. Ohne Netz holt sie es nach, sobald wieder Empfang da ist.</string>
+    <string name="backup_auto_drive">In Google Drive sichern</string>
+    <string name="backup_auto_file">In eine Datei sichern</string>
+    <string name="backup_auto_drive_target">Google Drive: %1$s (Ordner SchafkopfTracker_Backups)</string>
+    <string name="backup_auto_drive_target_unknown">Google Drive (Ordner SchafkopfTracker_Backups)</string>
+    <string name="backup_auto_drive_missing">Die Sicherung direkt in Google Drive ist in dieser Version noch nicht eingerichtet.</string>
+    <string name="backup_auto_error_sign_in">Am %1$s ging es nicht: Die Anmeldung bei Google gilt nicht mehr. Bitte neu verbinden.</string>
+    <string name="backup_drive_reconnect">Neu mit Google verbinden</string>
+    <string name="backup_drive_restore">Aus Google Drive einlesen</string>
+    <string name="backup_drive_none">In Google Drive gibt es noch keine Sicherung dieser App.</string>
+    <string name="backup_drive_sign_in_failed">Die Anmeldung bei Google hat nicht geklappt.</string>
+
+    <!-- Fehler von Google Drive -->
+    <string name="drive_error_sign_in">Die Anmeldung bei Google gilt nicht mehr. Bitte neu verbinden.</string>
+    <string name="drive_error_access">Google verweigert den Zugriff auf Drive.</string>
+    <string name="drive_error_storage_full">Der Speicherplatz in Google Drive ist voll.</string>
+    <string name="drive_error_rate">Zu viele Anfragen an Google Drive. Bitte später noch einmal versuchen.</string>
+    <string name="drive_error_not_found">Die Sicherung gibt es in Google Drive nicht mehr.</string>
+    <string name="drive_error_server">Google Drive ist gerade nicht erreichbar. Bitte später noch einmal versuchen.</string>
+    <string name="drive_error_network">Keine Verbindung zum Internet.</string>
+    <string name="drive_error_unknown">Unbekannter Fehler bei Google Drive.</string>
     <string name="backup_auto_off">Ausgeschaltet.</string>
     <string name="backup_auto_target">Datei: %1$s</string>
     <string name="backup_auto_last">Zuletzt gesichert: %1$s</string>

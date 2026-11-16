@@ -4,12 +4,17 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import androidx.work.BackoffPolicy
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import io.github.q0ochen.schafkopf.data.backup.BackupService
+import io.github.q0ochen.schafkopf.data.drive.DriveBackup
+import io.github.q0ochen.schafkopf.data.drive.DriveError
+import io.github.q0ochen.schafkopf.data.drive.DriveResult
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
@@ -37,10 +42,22 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
+/** Wohin automatisch gesichert wird. */
+enum class AutoBackupKind {
+    /** In eine Datei aus der Dateiauswahl von Android (auf dem Gerät oder bei einem Cloud-Dienst mit eigener App). */
+    DOCUMENT,
+
+    /** Direkt in Google Drive (Ordner `SchafkopfTracker_Backups`), mit Anmeldung bei Google. */
+    GOOGLE_DRIVE,
+}
+
 /** Warum die letzte automatische Sicherung nicht geklappt hat. Die Texte dazu stehen in der Oberfläche. */
 enum class AutoBackupError {
     /** Die App darf die Datei nicht mehr schreiben (Recht entzogen, Datei gelöscht oder verschoben). */
     ACCESS_LOST,
+
+    /** Die Anmeldung bei Google gilt nicht mehr: neu verbinden. */
+    SIGN_IN_REQUIRED,
 
     /** Schreiben ging gerade nicht, zum Beispiel ohne Netz beim Cloud-Dienst; die App versucht es weiter. */
     WRITE_FAILED,
@@ -49,8 +66,10 @@ enum class AutoBackupError {
 /**
  * Stand der automatischen Sicherung.
  *
- * @property target Die Datei, in die gesichert wird (Adresse aus der Dateiauswahl); `null`: ausgeschaltet.
- * @property targetName Ihr Name, wie der Anbieter ihn zeigt.
+ * @property target Die Datei, in die gesichert wird (Adresse aus der Dateiauswahl), oder [DRIVE_TARGET];
+ *   `null`: ausgeschaltet.
+ * @property targetName Ihr Name, wie der Anbieter ihn zeigt, bei Google Drive das Konto.
+ * @property kind Datei oder Google Drive.
  * @property lastSuccess Wann zuletzt erfolgreich gesichert wurde.
  * @property lastError Was beim letzten Versuch schiefging; `null`, wenn er geklappt hat.
  * @property lastErrorAt Wann das war.
@@ -58,11 +77,17 @@ enum class AutoBackupError {
 data class AutoBackupStatus(
     val target: String? = null,
     val targetName: String? = null,
+    val kind: AutoBackupKind = AutoBackupKind.DOCUMENT,
     val lastSuccess: Instant? = null,
     val lastError: AutoBackupError? = null,
     val lastErrorAt: Instant? = null,
 ) {
     val enabled: Boolean get() = target != null
+
+    companion object {
+        /** Ziel „Google Drive“; es gibt dort keine Datei-Adresse wie bei der Dateiauswahl. */
+        const val DRIVE_TARGET = "google-drive"
+    }
 }
 
 /**
@@ -77,12 +102,21 @@ class AutoBackupStore(context: Context) {
     val status: StateFlow<AutoBackupStatus> = state.asStateFlow()
 
     /** Neues Ziel (oder `null` zum Ausschalten); der bisherige Verlauf gilt dann nicht mehr. */
-    fun setTarget(uri: String?, name: String?) {
+    fun setTarget(uri: String?, name: String?, kind: AutoBackupKind = AutoBackupKind.DOCUMENT) {
         prefs.edit {
             clear()
-            if (uri != null) putString(KEY_TARGET, uri)
-            if (uri != null && name != null) putString(KEY_NAME, name)
+            if (uri != null) {
+                putString(KEY_TARGET, uri)
+                putString(KEY_KIND, kind.name)
+                if (name != null) putString(KEY_NAME, name)
+            }
         }
+        state.value = read()
+    }
+
+    /** Der angezeigte Name des Ziels hat sich geändert (zum Beispiel das Google-Konto). */
+    fun setTargetName(name: String?) {
+        prefs.edit { if (name == null) remove(KEY_NAME) else putString(KEY_NAME, name) }
         state.value = read()
     }
 
@@ -106,6 +140,8 @@ class AutoBackupStore(context: Context) {
     private fun read() = AutoBackupStatus(
         target = prefs.getString(KEY_TARGET, null),
         targetName = prefs.getString(KEY_NAME, null),
+        kind = prefs.getString(KEY_KIND, null)?.let { name -> AutoBackupKind.entries.firstOrNull { it.name == name } }
+            ?: AutoBackupKind.DOCUMENT,
         lastSuccess = prefs.instant(KEY_SUCCESS),
         lastError = prefs.getString(KEY_ERROR, null)?.let { name -> AutoBackupError.entries.firstOrNull { it.name == name } },
         lastErrorAt = prefs.instant(KEY_ERROR_AT),
@@ -117,6 +153,7 @@ class AutoBackupStore(context: Context) {
     private companion object {
         const val KEY_TARGET = "ziel"
         const val KEY_NAME = "name"
+        const val KEY_KIND = "art"
         const val KEY_SUCCESS = "zuletzt"
         const val KEY_ERROR = "fehler"
         const val KEY_ERROR_AT = "fehler_am"
@@ -124,22 +161,25 @@ class AutoBackupStore(context: Context) {
 }
 
 /** Ergebnis eines Sicherungsversuchs. */
-enum class AutoBackupOutcome { SAVED, NO_TARGET, ACCESS_LOST, FAILED }
+enum class AutoBackupOutcome { SAVED, NO_TARGET, ACCESS_LOST, SIGN_IN_REQUIRED, FAILED }
 
-/** Schreibt die Sicherung in die gewählte Datei und hält fest, wie es lief. */
+/** Schreibt die Sicherung in die gewählte Datei oder nach Google Drive und hält fest, wie es lief. */
 class AutoBackupRunner(
     private val backup: BackupService,
     private val store: AutoBackupStore,
     private val documents: DocumentAccess,
+    private val drive: DriveBackup,
     private val clock: Clock,
 ) {
     /** Zwei Versuche zugleich (Hintergrund und „Jetzt sichern“) schreiben nacheinander, nie durcheinander. */
     private val lock = Mutex()
 
     suspend fun run(): AutoBackupOutcome = lock.withLock {
-        val target = store.status.value.target ?: return@withLock AutoBackupOutcome.NO_TARGET
+        val status = store.status.value
+        val target = status.target ?: return@withLock AutoBackupOutcome.NO_TARGET
         try {
             val json = backup.exportJson()
+            if (status.kind == AutoBackupKind.GOOGLE_DRIVE) return@withLock toDrive(json)
             // Einmal begonnen, wird die Datei fertig geschrieben, auch wenn inzwischen ein neuerer Auftrag ansteht.
             withContext(NonCancellable) { documents.write(target, json) }
             store.recordSuccess(clock.instant())
@@ -158,6 +198,25 @@ class AutoBackupRunner(
             AutoBackupOutcome.FAILED
         }
     }
+
+    /** Hochladen nach Drive: Der neue Inhalt gilt erst, wenn er vollständig angekommen ist. */
+    private suspend fun toDrive(json: String): AutoBackupOutcome =
+        when (val result = withContext(NonCancellable) { drive.save(json) }) {
+            is DriveResult.Success -> {
+                store.recordSuccess(clock.instant())
+                AutoBackupOutcome.SAVED
+            }
+            is DriveResult.Failure -> when (result.error) {
+                DriveError.SIGN_IN_REQUIRED, DriveError.ACCESS_DENIED -> {
+                    store.recordFailure(AutoBackupError.SIGN_IN_REQUIRED, clock.instant())
+                    AutoBackupOutcome.SIGN_IN_REQUIRED
+                }
+                else -> {
+                    store.recordFailure(AutoBackupError.WRITE_FAILED, clock.instant())
+                    AutoBackupOutcome.FAILED
+                }
+            }
+        }
 }
 
 /**
@@ -177,9 +236,13 @@ class AutoBackupScheduler(private val workManager: () -> WorkManager, private va
      *   an Versuchen; nur wenn keiner wartet, kommt ein neuer dazu.
      */
     fun request(delay: Duration = DEBOUNCE, replace: Boolean = true) {
-        if (!store.status.value.enabled) return
+        val status = store.status.value
+        if (!status.enabled) return
+        // Nach Drive erst, wenn Netz da ist; WorkManager holt das von selbst nach.
+        val network = if (status.kind == AutoBackupKind.GOOGLE_DRIVE) NetworkType.CONNECTED else NetworkType.NOT_REQUIRED
         val request = OneTimeWorkRequestBuilder<AutoBackupWorker>()
             .setInitialDelay(delay.toMillis(), TimeUnit.MILLISECONDS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(network).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_SECONDS, TimeUnit.SECONDS)
             .build()
         val policy = if (replace) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
@@ -213,8 +276,8 @@ class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
     override suspend fun doWork(): Result = when (runner.run()) {
         AutoBackupOutcome.SAVED, AutoBackupOutcome.NO_TARGET -> Result.success()
-        // Ohne Recht auf die Datei hilft Warten nicht; die Oberfläche bittet darum, sie neu zu wählen.
-        AutoBackupOutcome.ACCESS_LOST -> Result.failure()
+        // Ohne Recht auf die Datei oder ohne Anmeldung hilft Warten nicht; die Oberfläche bittet darum, neu zu wählen.
+        AutoBackupOutcome.ACCESS_LOST, AutoBackupOutcome.SIGN_IN_REQUIRED -> Result.failure()
         AutoBackupOutcome.FAILED -> if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
     }
 

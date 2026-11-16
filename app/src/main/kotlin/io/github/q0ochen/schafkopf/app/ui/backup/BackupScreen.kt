@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.q0ochen.schafkopf.R
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupError
+import io.github.q0ochen.schafkopf.app.backup.AutoBackupKind
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStatus
 import io.github.q0ochen.schafkopf.app.ui.common.SectionHeading
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
@@ -66,6 +67,20 @@ fun BackupScreen(navigator: Navigator) {
     }
     val chooseAuto = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { viewModel.chooseAutoTarget(it.toString()) }
+    }
+    val signIn = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        viewModel.completeSignIn(result.data)
+    }
+    // Mit Google verbinden, falls nötig, und dann [action] ausführen.
+    fun withDrive(action: AfterSignIn) {
+        if (state.drive.signedIn) {
+            when (action) {
+                AfterSignIn.ENABLE_AUTO -> viewModel.enableDrive()
+                AfterSignIn.RESTORE -> viewModel.restoreFromDrive()
+            }
+        } else {
+            signIn.launch(viewModel.signInIntent(action))
+        }
     }
 
     // Erst zeigen, dann als gezeigt melden: Würde die Meldung vorher gelöscht, bräche das ihre Anzeige sofort ab.
@@ -106,6 +121,16 @@ fun BackupScreen(navigator: Navigator) {
                     .fillMaxWidth()
                     .heightIn(min = 56.dp),
             ) { Text(stringResource(R.string.backup_load), style = MaterialTheme.typography.titleMedium) }
+            val driveIsAuto = state.auto.enabled && state.auto.kind == AutoBackupKind.GOOGLE_DRIVE
+            if (state.driveConfigured && !driveIsAuto) {
+                OutlinedButton(
+                    enabled = !state.busy,
+                    onClick = { withDrive(AfterSignIn.RESTORE) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp),
+                ) { Text(stringResource(R.string.backup_drive_restore), style = MaterialTheme.typography.titleMedium) }
+            }
 
             HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
             SectionHeading(stringResource(R.string.backup_auto_heading))
@@ -113,14 +138,34 @@ fun BackupScreen(navigator: Navigator) {
             AutoStatus(state.auto)
             val fileName = stringResource(R.string.backup_auto_file_name)
             if (!state.auto.enabled) {
-                Button(
+                if (state.driveConfigured) {
+                    Button(
+                        enabled = !state.busy,
+                        onClick = { withDrive(AfterSignIn.ENABLE_AUTO) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp),
+                    ) { Text(stringResource(R.string.backup_auto_drive), style = MaterialTheme.typography.titleMedium) }
+                } else {
+                    Hint(stringResource(R.string.backup_auto_drive_missing))
+                }
+                OutlinedButton(
                     enabled = !state.busy,
                     onClick = { chooseAuto.launch(fileName) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 56.dp),
-                ) { Text(stringResource(R.string.backup_auto_choose), style = MaterialTheme.typography.titleMedium) }
+                ) { Text(stringResource(R.string.backup_auto_file), style = MaterialTheme.typography.titleMedium) }
             } else {
+                if (state.auto.lastError == AutoBackupError.SIGN_IN_REQUIRED) {
+                    Button(
+                        enabled = !state.busy,
+                        onClick = { signIn.launch(viewModel.signInIntent(AfterSignIn.ENABLE_AUTO)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp),
+                    ) { Text(stringResource(R.string.backup_drive_reconnect), style = MaterialTheme.typography.titleMedium) }
+                }
                 Button(
                     enabled = !state.busy,
                     onClick = { viewModel.backupNow() },
@@ -134,7 +179,13 @@ fun BackupScreen(navigator: Navigator) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
-                ) { Text(stringResource(R.string.backup_auto_restore)) }
+                ) {
+                    Text(
+                        stringResource(
+                            if (state.auto.kind == AutoBackupKind.GOOGLE_DRIVE) R.string.backup_drive_restore else R.string.backup_auto_restore,
+                        ),
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     TextButton(
                         enabled = !state.busy,
@@ -168,7 +219,12 @@ private fun AutoStatus(status: AutoBackupStatus) {
             return@Column
         }
         Text(
-            stringResource(R.string.backup_auto_target, status.targetName ?: stringResource(R.string.backup_auto_unnamed)),
+            text = when {
+                status.kind == AutoBackupKind.GOOGLE_DRIVE && status.targetName != null ->
+                    stringResource(R.string.backup_auto_drive_target, status.targetName)
+                status.kind == AutoBackupKind.GOOGLE_DRIVE -> stringResource(R.string.backup_auto_drive_target_unknown)
+                else -> stringResource(R.string.backup_auto_target, status.targetName ?: stringResource(R.string.backup_auto_unnamed))
+            },
             style = MaterialTheme.typography.bodyLarge,
         )
         Text(
@@ -184,6 +240,7 @@ private fun AutoStatus(status: AutoBackupStatus) {
                 text = stringResource(
                     when (error) {
                         AutoBackupError.ACCESS_LOST -> R.string.backup_auto_error_access
+                        AutoBackupError.SIGN_IN_REQUIRED -> R.string.backup_auto_error_sign_in
                         AutoBackupError.WRITE_FAILED -> R.string.backup_auto_error_write
                     },
                     formatDateTime(errorAt),
