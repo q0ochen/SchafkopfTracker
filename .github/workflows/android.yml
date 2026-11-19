@@ -310,7 +310,7 @@ jobs:
 
           ### Hinweise
           - Testversion, mit dem öffentlichen Test-Schlüssel signiert. Neue Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten.
-          - Alles bleibt auf dem Handy. Internet braucht die App nur für zwei freiwillige Zusätze: den Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in Google Drive.
+          - Ohne die freiwilligen Zusätze bleibt alles auf dem Handy. Internet braucht die App nur für sie: die gemeinsame Runde (alle tragen vom eigenen Handy ein), den Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in Google Drive.
           - Prüfsumme (SHA-256) der APK: siehe \`SchafkopfTracker.apk.sha256\`.
           EOF
 
@@ -319,8 +319,13 @@ jobs:
         run: |
           TITEL="Testversion (Android)"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            # Tag auf den aktuellen Stand verschieben, Text erneuern.
-            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true
+            # Tag auf den aktuellen Stand verschieben, Text erneuern. Das Verschieben ist nur Zierde und darf scheitern:
+            # Am 19.11.2026 verweigerte GitHub es mit HTTP 403, als der Stand eine Workflow-Datei änderte und beim
+            # Veröffentlichen schon ein neuerer Stand auf dem Zweig lag (drei Läufe davor und danach, bei denen der
+            # Stand noch der neueste war, gingen durch). Die Testversion wird trotzdem ersetzt; ihr Text nennt den
+            # Code-Stand.
+            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true ||
+              echo "::warning::Der Tag $TAG ließ sich nicht auf ${GITHUB_SHA::7} verschieben. Die Testversion wird trotzdem ersetzt."
             gh release edit "$TAG" --title "$TITEL" --notes-file notes.md --prerelease
           else
             gh release create "$TAG" --target "$GITHUB_SHA" --title "$TITEL" --notes-file notes.md --prerelease
