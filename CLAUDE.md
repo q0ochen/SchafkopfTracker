@@ -298,6 +298,50 @@ deshalb mit einem eigenen Pull Request #24 (auf Wunsch des Nutzers, „Ja. Neuen
 Als Nächstes: Client-ID eintragen, sobald der Nutzer sie schickt, dann die Anmeldung auf einem echten Handy
 erproben; Rückmeldungen der Tester; abstimmen, welche der Issues #1 bis #19 als erledigt gelten.
 
+## Stand am 19.11.2026: Ideen für die nächste Stufe (noch nicht freigegeben)
+
+Der Nutzer hat am 19.11.2026 in einer Sprachnachricht zwei Ideen genannt und um ein Brainstorming gebeten.
+**Umgesetzt wird erst nach seinem ausdrücklichen Okay**; er wartet auf die Rückmeldung des Hauptentwicklers.
+Termin: Bis zum 12.12.2026 soll die App „einigermaßen gut“ sein.
+
+1. **Gemeinsame Runde** „so ähnlich wie bei Drink With Me“: Alle vier melden sich mit ihrem Google-Konto an, es gibt
+   eine Gruppe auf einem Supabase-Server, und jeder trägt von seinem Handy ein (zum Beispiel, wer gegeben hat, während
+   der Nächste mischt).
+2. **Spracheingabe** zum Eintragen eines Spiels.
+
+Überlegungen dazu (dem Nutzer am 19.11.2026 vorgestellt, nichts davon entschieden):
+
+- Bausteine aus DrinkWithMe übernehmen (gleiche Leitplanken, CC0): Supabase Free in Frankfurt, Zugriffsregeln mit
+  pgTAP-Tests, nur der Google-Anbieter, Anmeldung per PKCE im Browser ohne Bibliothek (dort `android/app/…/supabase/`:
+  `Pkce`, `AuthApi`, `SessionStore`, `SupabaseHttp`; Web `web/src/social/supabaseAuth.ts`). Zustimmungsbildschirm
+  „In Produktion“ mit nur Name und E-Mail statt Testnutzern: Im Testmodus läuft die Anmeldung nach 7 Tagen ab.
+- Eigenes Supabase-Projekt (kostenlos sind zwei erlaubt; zwei Repositories können nicht dieselbe Folge von
+  Migrationen pflegen). Kostenlose Projekte pausieren nach etwa 7 Tagen ohne Nutzung. Deshalb „lokal zuerst“: Das
+  Handy bleibt vollständig, abgeglichen wird im Hintergrund mit einer Liste wartender Änderungen; ein pausierter oder
+  unerreichbarer Server darf einen Abend nie aufhalten.
+- Das Datenmodell passt: nur Tatsachen, jeder Eintrag mit eigener Kennung, beim Ändern bleiben Kennung und
+  `recordedAt`; alle Änderungen laufen über `EveningEditor.update` (Web: `store.updateEvening`). Auf dem Server eine
+  Zeile je Eintrag (Inhalt im Format der Sicherung), Löschen als Markierung, bei demselben Eintrag gewinnt die letzte
+  Änderung. Die Reihenfolge braucht einen Positionswert, der nie kleiner ist als der größte bekannte (die Uhren der
+  Handys gehen verschieden; von der Reihenfolge hängen Geber und Bock-Zähler ab). Das Zusammenführen als reine
+  Funktion in `domain` mit Tests (die Reihenfolge der Abgleiche darf das Ergebnis nicht ändern), Port nach `web/`.
+- Die vorbelegten Spieler haben auf jedem Gerät dieselben Kennungen (`spieler-1` bis `spieler-4`): Wer einer Runde
+  beitritt, übernimmt deren Daten (die eigenen vorher als Sicherung anbieten). Konto und Spieler getrennt halten
+  („Das bin ich“), weil nicht jeder Mitspieler ein Konto braucht.
+- Hauptrisiko am Tisch sind doppelt eingetragene Spiele. Vorschlag „Der Geber schreibt“: `EveningState.nextDealer`
+  und die Zuordnung Konto → Spieler; Hinweis „X trägt gerade ein“, Warnung bei gleichem Spiel kurz hintereinander;
+  übernehmen darf jeder.
+- Namen und Beträge lägen damit erstmals auf einem Server (bisher nur auf den Geräten): braucht die Zustimmung des
+  Nutzers. Die Drive-Sicherung (#15) würde zur Nebensache.
+- Spracheingabe: Kern ist ein Parser Text → `GameDraft` (reine Logik in Kotlin, Port nach `web/`), Abgleich ähnlich
+  klingender Wörter mit Kölner Phonetik und Jaro-Winkler wie in DrinkWithMe (`android/core/…/voice/`); nie ohne
+  Bestätigung buchen. Android: Mikrofon-Knopf über `RecognizerIntent` ohne Berechtigung (dort `VoiceInput.kt`).
+  iPhone: `SpeechRecognition` ist in Home-Bildschirm-Apps unzuverlässig, deshalb ein Textfeld, in das man mit der
+  Diktiertaste der Tastatur spricht. Ein Spiel braucht heute 3 bis 5 Tipps: Der Gewinn ist eher Spaß als Zeit.
+- Der Nutzer berichtet, dass das App-Symbol auf seinem iPhone den Browser öffnet (bei welcher der beiden Web-Apps,
+  ist offen). Unsere Web-App ist auf `display: standalone` eingestellt; vermutlich war beim Hinzufügen „Als Web-App
+  öffnen“ aus. Auf einem echten iPhone nicht geprüft.
+
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
 Dem Nutzer am 15.11.2026 als Fragen gestellt; Antworten hier nachtragen:
