@@ -217,9 +217,11 @@ class SupabaseLiveTest {
         val gone = errorOf { SupabaseAuthApi(http).refresh(beforeSignOut) }
         assertEquals(RoundError.SIGNED_OUT, gone?.error)
         assertEquals(AuthApi.SESSION_GONE, gone?.detail)
+        // Ein Token, das der Server nie ausgegeben hat, lehnt er schon wegen seiner Form ab („validation_failed“):
+        // Die App bittet dann um eine neue Anmeldung, wirft die gespeicherte Sitzung aber nicht von sich aus weg.
         val unknown = errorOf { SupabaseAuthApi(http).refresh("dieses-token-gab-es-nie") }
         assertEquals(RoundError.SIGNED_OUT, unknown?.error)
-        assertEquals(AuthApi.SESSION_GONE, unknown?.detail)
+        assertNotEquals(AuthApi.SESSION_GONE, unknown?.detail)
         assertEquals(RoundError.SIGNED_OUT, errorOf { account.api.myRounds() }?.error)
     }
 
