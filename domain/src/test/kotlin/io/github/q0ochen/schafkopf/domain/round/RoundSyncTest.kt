@@ -580,6 +580,28 @@ class RoundSyncTest {
     }
 
     @Test
+    fun `was eine Runde abgelehnt hat, wird in einer neuen Runde wieder versucht`() = runTest {
+        round()
+        val huge = two.startEvening("riesig")
+        two.editor.update(huge) { evening ->
+            evening.copy(entries = List(InMemoryRoundServer.MAX_ENTRIES + 1) { game("g$it", it.toLong()) })
+        }
+        assertEquals(1, (two.sync.sync() as SyncOutcome.Synced).refused)
+        two.session.calls.clear()
+        two.sync.sync()
+        assertFalse("saveEvening" in two.session.calls)
+
+        // Handy zwei verlässt die Runde und legt mit seinen Daten eine eigene an: Dort wird alles neu versucht.
+        two.connection.leave()
+        two.session.calls.clear()
+        val outcome = two.connection.create("Eigene Runde", two.userId, PLACEHOLDERS) as SyncOutcome.Synced
+
+        assertEquals(2, two.session.calls.count { it == "saveEvening" })
+        assertEquals(1, outcome.refused)
+        assertEquals(two.evening(abend), server.eveningRow(two.roundId(), abend)?.evening)
+    }
+
+    @Test
     fun `nimmt der Server das Ergebnis des Zusammenfuehrens nicht an, bleibt es hier und wartet`() = runTest {
         val round = round()
         one.addGame(abend)

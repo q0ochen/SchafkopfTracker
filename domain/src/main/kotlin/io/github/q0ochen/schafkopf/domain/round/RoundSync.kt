@@ -89,6 +89,9 @@ class RoundSync(
     /** Das Regelwerk, das der Server in dieser Sitzung nicht angenommen hat. */
     private var refusedRules: RuleSet? = null
 
+    /** Für diese Runde gilt das Gemerkte: Was eine Runde abgelehnt hat, sagt nichts über eine andere. */
+    private var remembered: RoundId? = null
+
     /**
      * Ein Abgleich.
      *
@@ -97,6 +100,13 @@ class RoundSync(
      */
     suspend fun sync(quick: Boolean = false): SyncOutcome = mutex.withLock {
         val link = store.link.first() ?: return@withLock SyncOutcome.NotLinked
+        if (remembered != link.roundId) {
+            // Eine andere Runde (zum Beispiel nach „Runde verlassen“ und „Neue Runde anlegen“): von vorn versuchen.
+            remembered = link.roundId
+            rejected.clear()
+            refusedEvenings.clear()
+            refusedRules = null
+        }
         try {
             Run(link).execute(quick)
         } catch (e: RoundException) {

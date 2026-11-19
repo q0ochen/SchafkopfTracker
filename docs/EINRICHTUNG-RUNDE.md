@@ -45,13 +45,15 @@ trägst du selbst bei Supabase oder GitHub ein.
    - **Database Password:** „Generate a password“, dann kopieren und sicher aufbewahren (Passwort-Manager).
    - **Region:** **Central EU (Frankfurt)**
    - Tarif: **Free**
+   - Falls „Security options“ angezeigt werden: die Standardwerte lassen (**Data API** eingeschaltet). Über diese
+     Schnittstelle sprechen die Apps mit dem Server.
 3. **Create new project** und ein, zwei Minuten warten.
 4. Die **Projekt-Referenz** notieren: **Project Settings → General → Project ID**. Die Projekt-URL ist dann
    `https://<projekt-referenz>.supabase.co`.
 5. Den **Publishable Key** notieren: **Project Settings → API Keys**, der Schlüssel, der mit `sb_publishable_`
    beginnt. **Nicht** den „secret“-Schlüssel nehmen.
 
-Kostenlos sind zwei Projekte; mit Drink With Me sind es dann genau zwei.
+Kostenlos sind zwei aktive Projekte je Konto. Mit dem von Drink With Me sind es dann zwei.
 
 ## 2. Google: Anmeldung erlauben
 
@@ -124,12 +126,17 @@ Die drei Variablen sind nicht geheim. Sie stehen später ohnehin in jeder ausgel
 
 ## 5. Claude Bescheid geben
 
-Schreib Claude: **„Supabase ist eingerichtet.“** Claude spielt dann die Datenbank ein (Workflow „Supabase Deploy“),
-baut die Apps mit der Adresse des Servers neu und prüft das Ergebnis.
+Schreib Claude: **„Supabase ist eingerichtet.“** Claude kümmert sich dann um den Rest:
+
+1. Der Stand mit der gemeinsamen Runde muss in `main` liegen. Falls noch nicht geschehen, legt Claude dafür einen
+   Pull Request an, den du zusammenführst.
+2. Claude spielt die Datenbank ein (Workflow „Supabase Deploy“), lässt die Apps mit der Adresse des Servers neu
+   bauen und prüft das Ergebnis.
 
 Selbst geht es auch, sobald der Stand in `main` liegt: **Actions → „Supabase Deploy“ → Run workflow**. Fehlt ein
 Wert, bricht der Lauf mit einer deutschen Meldung ab, die sagt, welcher. Danach **Actions → „Android“** und
-**„Web-App“** jeweils mit **Run workflow** neu starten, damit die Apps die Adresse des Servers bekommen.
+**„Web-App“** jeweils mit **Run workflow** neu starten, damit die Apps die Adresse des Servers bekommen. (Vorher
+zeigt GitHub den Knopf „Run workflow“ für „Supabase Deploy“ nicht an.)
 
 Die Web-App fürs iPhone wird nur aus `main` veröffentlicht. Sie zeigt die gemeinsame Runde also erst, wenn der
 Pull Request zusammengeführt ist.
