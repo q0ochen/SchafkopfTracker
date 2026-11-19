@@ -298,18 +298,26 @@ deshalb mit einem eigenen Pull Request #24 (auf Wunsch des Nutzers, „Ja. Neuen
 Als Nächstes: Client-ID eintragen, sobald der Nutzer sie schickt, dann die Anmeldung auf einem echten Handy
 erproben; Rückmeldungen der Tester; abstimmen, welche der Issues #1 bis #19 als erledigt gelten.
 
-## Stand am 19.11.2026: Ideen für die nächste Stufe (noch nicht freigegeben)
+## Stand am 19.11.2026: Gemeinsame Runde (freigegeben), Spracheingabe (verworfen)
 
 Der Nutzer hat am 19.11.2026 in einer Sprachnachricht zwei Ideen genannt und um ein Brainstorming gebeten.
-**Umgesetzt wird erst nach seinem ausdrücklichen Okay**; er wartet auf die Rückmeldung des Hauptentwicklers.
 Termin: Bis zum 12.12.2026 soll die App „einigermaßen gut“ sein.
+
+**Entscheidungen des Nutzers vom 19.11.2026 (nach dem Brainstorming):** „Macht zuerst die gemeinsame Runde“ und
+„die Runde am 12.12. soll schon mitlaufen“: Die gemeinsame Runde wird gebaut. Namen und Beträge dürfen auf dem
+Server liegen. Eintragen darf jeder, „aber der Geber ist der, der in der Regel einträgt“ (also keine Sperre, nur ein
+Hinweis). Die Spracheingabe entfällt (im Wirtshaus zu laut). Neu gewünscht: Wer über den Link beitritt, hinterlegt in
+seiner eigenen App seinen eigenen Namen, und alle lesen diese Namen; der Name soll sich danach nicht mehr ändern
+lassen. **Vertrag für die Umsetzung: `docs/ARCHITEKTUR.md`, Abschnitt 8.** Der Nutzer muss dafür ein eigenes
+Supabase-Projekt anlegen (Anleitung `docs/EINRICHTUNG-RUNDE.md`); ohne dessen Adresse und öffentlichen Schlüssel
+bleibt die Funktion in den Apps abgeschaltet.
 
 1. **Gemeinsame Runde** „so ähnlich wie bei Drink With Me“: Alle vier melden sich mit ihrem Google-Konto an, es gibt
    eine Gruppe auf einem Supabase-Server, und jeder trägt von seinem Handy ein (zum Beispiel, wer gegeben hat, während
    der Nächste mischt).
 2. **Spracheingabe** zum Eintragen eines Spiels.
 
-Überlegungen dazu (dem Nutzer am 19.11.2026 vorgestellt, nichts davon entschieden):
+Überlegungen aus dem Brainstorming (Grundlage des Vertrags; maßgeblich ist Abschnitt 8 der Architektur):
 
 - Bausteine aus DrinkWithMe übernehmen (gleiche Leitplanken, CC0): Supabase Free in Frankfurt, Zugriffsregeln mit
   pgTAP-Tests, nur der Google-Anbieter, Anmeldung per PKCE im Browser ohne Bibliothek (dort `android/app/…/supabase/`:
