@@ -335,8 +335,8 @@ eingerichtet“; alles andere funktioniert.
 Adressen: Rückkehr aus der Anmeldung Android `schafkopftracker://auth-callback`, Web die Start-Adresse der Web-App
 (`https://q0ochen.github.io/SchafkopfTracker/`). Einladung: `<Web-App>#/einladung/<token>`; die Seite bietet „In der
 Android-App öffnen“ (`schafkopftracker://einladung/<token>`) und „Hier beitreten“. In beiden Apps lässt sich der Link
-oder der bloße Code auch einfügen (`InviteLinks.tokenFrom(text)`: nimmt beide Link-Formen und den bloßen Code,
-32 Zeichen `0-9a-f`; sonst `null`).
+oder der bloße Code auch einfügen (`InviteLinks.tokenFrom(text)`: die erste Folge aus genau 32 Zeichen `0-9a-f`
+im Text, also beide Link-Formen und der bloße Code, auch mitten in einer Nachricht; sonst `null`).
 
 ### 8.2 Tabellen (Schema `public`, RLS auf jeder Tabelle, Schreiben nur über die Funktionen aus 8.3)
 
@@ -404,7 +404,8 @@ Lesen über PostgREST (`apikey` = Publishable Key, `Authorization: Bearer <Acces
   `cursor` ist das größte verarbeitete `rev`, `rulesBase` das zuletzt abgeglichene Regelwerk (JSON-Text),
   `members` die Mitglieder (`userId`, `playerId?`).
 - `EveningBase(eveningId, version, evening)`: je Abend die zuletzt gesehene Fassung des Servers.
-- `PlayerBase(id, name, colorIndex, archived, position, owner?, nameLocked)`: je Spieler der letzte Stand des Servers.
+- Je Spieler der letzte Stand des Servers (`RemotePlayer`: `id`, `name`, `colorIndex`, `archived`, `position`,
+  `owner?`, `nameLocked`, `rev`).
 
 Ein Abend ist „geändert“, wenn er von seiner Basis abweicht oder keine hat; „gelöscht“, wenn es die Basis noch gibt,
 den Abend aber nicht mehr. Für Spieler gilt dasselbe. Die Sitzung (Refresh-Token) liegt getrennt und verschlüsselt.
@@ -427,48 +428,84 @@ Einträge, mit `B`, `L`, `R` als Einträge von Basis, lokal und Server nach Kenn
      direkt folgenden Einträge, die neu vom Server sind (Kennung weder in `L` noch in `B`) und nach
      `(recordedAt, id)` vor `l` liegen.
 
-Es gilt unter anderem: `merge3(b, l, l) == l`, `merge3(b, b, r) == r`, `merge3(b, l, b) == l`; nichts, was auf einer
-Seite neu ist, geht verloren; das Ergebnis erneut mit dem Server zusammengeführt ändert sich nicht.
+Bei doppelten Kennungen in einer Liste (beschädigte Daten) zählt jeweils der erste Eintrag; das Ergebnis enthält
+jede Kennung höchstens einmal. Ohne Basis bleibt damit alles von beiden Seiten, bei gleicher Kennung der Eintrag von
+hier.
+
+Es gilt unter anderem: `merge3(b, l, l) == l`, `merge3(b, b, r) == r`, `merge3(b, l, b) == l` (solange die
+gemeinsamen Einträge in derselben Reihenfolge stehen; sonst gilt für sie die des Servers); nichts, was auf einer
+Seite neu ist, geht verloren; das Ergebnis erneut mit dem Server zusammengeführt ändert sich nicht
+(`merge3(b, m, r) == m` und `merge3(r, m, r) == m` für `m = merge3(b, l, r)`); ohne Konflikt ist es gleich, welches
+Gerät zuerst abgleicht, wenn jedes seine neuen Einträge mit fortlaufender Zeit aufschreibt.
 
 `DuplicateCheck.suspects(evening): Set<EntryId>`: Zwei in der Liste direkt aufeinander folgende Spiele, die bis auf
 `id`, `recordedAt` und `note` gleich sind und deren `recordedAt` höchstens 120 Sekunden auseinanderliegen; gemeldet
 wird das hintere.
 
-### 8.6 Ein Abgleich (`RoundSync.sync()`, höchstens einer gleichzeitig)
+### 8.6 Ein Abgleich (`RoundSync.sync(quick)`, höchstens einer gleichzeitig)
 
-1. Ohne `RoundLink` → `NotLinked`. Kopf der Runde lesen; gibt es ihn nicht → `Detached` (Verbindung lösen, Daten
-   bleiben auf dem Gerät).
-2. Ist `rev` größer als `cursor`: Mitglieder, geänderte Spieler und geänderte Abende lesen.
-3. **Spieler:** Jede Zeile des Servers wird übernommen (bei Konflikt gewinnt der Server; `deleted` löscht lokal),
-   die Basis folgt. Danach lokale Änderungen hochladen (`save_player`); lehnt der Server ab (`name_locked`,
-   `name_taken`, `invalid_name`, `player_owned`, `limit_reached`), wird der Spieler auf die Basis zurückgesetzt und
-   der Hinweis gemerkt.
-4. **Regelwerk für neue Abende:** Hat der Server ein anderes als `rulesBase` → übernehmen (Server gewinnt); sonst
-   ein lokal geändertes hochladen (`save_rules`); hat der Server noch keines, das lokale hochladen.
-5. **Abende**, für jeden vom Server geänderten, lokal geänderten oder lokal gelöschten Abend (höchstens 3 Versuche):
-   - Server hat ihn nicht: lokal vorhanden → `save_evening(…, 0)`.
-   - Server hat ihn (nicht gelöscht): lokal vorhanden → unter der Sperre des `EveningEditor` lokal durch
-     `merge3(basis, lokal, server)` ersetzen; weicht das Ergebnis vom Server ab, hochladen mit der Version des
-     Servers. Lokal gelöscht (Basis da, Abend weg): hat der Server noch die Version der Basis → als gelöscht
-     hochladen; sonst die Fassung des Servers wieder anlegen. Lokal unbekannt (keine Basis) → anlegen.
-   - Server meldet gelöscht: lokal unverändert oder schon weg → lokal löschen; lokal geändert → wieder hochladen
-     (`deleted = false`).
-   - Leere Antwort von `save_evening` (Version passt nicht): den Abend einzeln neu lesen und wiederholen.
-   - Nach jedem Erfolg ist die Basis die Fassung des Servers. Ein Dokument, das sich nicht lesen lässt, wird
-     übersprungen und gezählt.
-6. `cursor` auf das größte gelesene `rev` setzen. Wurde in 3 bis 5 etwas hochgeladen, die Schritte 2 bis 5 einmal
-   wiederholen.
+Ein Abgleich besteht aus höchstens zwei Durchgängen. Ein Durchgang:
 
-Ergebnis: `Synced(pulled, pushed, notices)`, `NotLinked`, `Detached`, `SignedOut` (Sitzung ungültig),
-`Offline` (keine Verbindung), `Failed` (Server antwortet mit Fehler, zum Beispiel pausiert). `pendingCount()` zählt
-geänderte und gelöschte Abende und Spieler sowie ein geändertes Regelwerk.
+1. Ohne `RoundLink` → `NotLinked`. Kopf der Runde lesen. Gibt es ihn nicht, `my_rounds()` gegenprüfen: Fehlt die
+   Runde auch dort → `Detached` (Verbindung und Basen löschen, die Daten bleiben auf dem Gerät); steht sie dort →
+   `Failed`. Mit `quick` und `rev == cursor` endet der Abgleich hier mit `Unchanged` (eine Anfrage; ob auf dem
+   Gerät etwas wartet, wird dann nicht geprüft).
+2. Ist `rev` größer als `cursor`: Mitglieder, geänderte Spieler und geänderte Abende lesen (`rev > cursor`).
+   Ist `rev` kleiner als `cursor` (Server neu aufgesetzt), vorher `cursor = 0`.
+3. **Spieler vom Server:** Zeilen in der Reihenfolge `position`. Weicht eine Zeile inhaltlich (Name, Farbe,
+   „archiviert“) von der Basis ab oder gibt es keine Basis, gilt der Server (auch gegen eine Änderung von hier);
+   stimmt sie mit der Basis überein, bleibt eine Änderung von hier bestehen. Die Basis ist danach die Zeile.
+   Gelöschte Zeilen werden vorgemerkt (Schritt 7).
+4. **Spieler von hier:** Was von der Basis abweicht oder keine hat, hochladen (`save_player`; Farbnummern außerhalb
+   0 bis 31 vorher auf `colorIndex mod 32` umstellen). Lehnt der Server ab (`name_locked`, `name_taken`,
+   `invalid_name`, `player_owned`, `limit_reached`): mit Basis zurück auf die Basis; ohne Basis und in keinem Abend
+   gebraucht → Spieler entfernen; ohne Basis, gebraucht und `name_taken` → umbenennen („Name 2“, „Name 3“ …,
+   auf 24 Zeichen gekürzt) und im nächsten Durchgang hochladen; sonst bleibt er und wird in dieser Sitzung nicht
+   erneut versucht. Jede Ablehnung ergibt einen Hinweis (`SyncNotice`).
+5. **Regelwerk für neue Abende:** Kann die App das Regelwerk des Servers nicht lesen, passiert nichts. Hat der
+   Server keines → das lokale hochladen. Hat er ein anderes als `rulesBase` → übernehmen (Server gewinnt). Sonst
+   ein lokal geändertes hochladen (`save_rules`).
+6. **Abende**, für jeden vom Server geänderten, lokal geänderten oder lokal gelöschten Abend (höchstens 3 Versuche;
+   kommt ein Abend beim Lesen mehrfach, zählt die höchste Version):
+   - Nicht mitgelesen (der Server hat noch die Basis oder kennt den Abend nicht): lokal vorhanden und geändert →
+     `save_evening` mit der Version der Basis (ohne Basis 0); lokal gelöscht → als gelöscht hochladen.
+   - Mitgelesen, nicht gelöscht: unter der Sperre des `EveningEditor` lokal durch `merge3(basis, lokal, server)`
+     ersetzen, **danach** die Basis auf die Fassung des Servers setzen, dann – weicht das Ergebnis vom Server ab –
+     hochladen mit der Version des Servers. Lokal gelöscht (Basis da, Abend weg): hat der Server noch die Version
+     der Basis → als gelöscht hochladen; sonst die Fassung des Servers wieder anlegen. Lokal unbekannt → anlegen.
+     Ist die Version des Servers kleiner als die der Basis, wird ohne Basis zusammengeführt.
+   - Mitgelesen, gelöscht: lokal unverändert oder schon weg → lokal löschen; lokal geändert → wieder hochladen
+     (`deleted = false`, Version des Servers).
+   - Leere Antwort von `save_evening` (Version passt nicht): den Abend einzeln neu lesen und wiederholen; kennt
+     der Server ihn gar nicht, die Basis löschen. Danach folgt in jedem Fall ein zweiter Durchgang.
+   - Nach jedem Erfolg ist die Basis die hochgeladene Fassung. Ein Dokument, das sich nicht lesen lässt, wird
+     übersprungen und gezählt; es wird nie überschrieben.
+7. **Spieler löschen**, erst jetzt und nie, solange ein Abend auf dem Gerät den Spieler nennt: Vom Server als
+   gelöscht gemeldet → lokal löschen; wird er gebraucht, bleibt er, verliert die Basis und geht im nächsten
+   Durchgang als neu wieder hoch. Lokal gelöscht (Basis da, Spieler weg) → `save_player(…, p_deleted = true)`;
+   wird er inzwischen gebraucht oder lehnt der Server ab, kommt er aus der Basis zurück.
+8. `cursor`: der beim Lesen des Kopfes gesehene `rev`, erhöht um die eigenen Änderungen, solange deren `rev`
+   lückenlos anschließt (dann hat niemand dazwischen geschrieben). Schließt ein `rev` nicht an, wurde ein
+   Hochladen abgelehnt oder ist in Schritt 4 oder 7 etwas für den nächsten Durchgang entstanden, folgt der zweite
+   Durchgang. Ein eingetragenes Spiel kostet so zwei Anfragen (Kopf und `save_evening`).
+
+Ergebnis: `Synced(pulled, pushed, pending, unreadable, notices)`, `Unchanged`, `NotLinked`, `Detached`, `SignedOut`
+(Sitzung ungültig), `Offline` (keine Verbindung), `Failed` (Server antwortet mit Fehler, zum Beispiel pausiert).
+`pendingCount()` zählt geänderte und gelöschte Abende und Spieler sowie ein geändertes Regelwerk.
+
+Bricht ein Abgleich mittendrin ab, ist nichts verloren: `cursor` steht dann noch auf dem alten Wert, das Gelesene
+kommt noch einmal und ändert nichts. Bekannte Grenze: Geht die Antwort auf ein Hochladen verloren und löscht ein
+anderes Gerät vor dem nächsten Abgleich einen dabei neu angelegten Eintrag, taucht dieser Eintrag einmal wieder auf
+(das Gerät kann nicht wissen, dass er schon auf dem Server war; im Zweifel bleibt ein Spiel lieber erhalten).
 
 Ausgelöst wird: beim Öffnen der App, 0,5 Sekunden nach jeder lokalen Änderung, alle 4 Sekunden im Vordergrund
-(nur der Kopf; alles Weitere nur bei neuem `rev` oder wartenden Änderungen), bei Fehlern mit wachsendem Abstand
-(4, 8, 16, 32, 60 Sekunden). Android zusätzlich über WorkManager (mit Netz), damit Wartendes auch nach dem Schließen
-ankommt; Web bei `online` und wenn die App wieder sichtbar wird.
+(`quick`, solange auf dem Gerät nichts wartet), bei Fehlern mit wachsendem Abstand (4, 8, 16, 32, 60 Sekunden).
+Android zusätzlich über WorkManager (mit Netz), damit Wartendes auch nach dem Schließen ankommt; Web bei `online`
+und wenn die App wieder sichtbar wird.
 
 ### 8.7 Verbinden und Trennen
+
+Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disconnect`, `hasOwnData`).
 
 - **Runde anlegen:** Vorbelegte Spieler (`spieler-1` bis `spieler-4`), die noch „Spieler N“ heißen und in keinem
   Abend vorkommen, werden lokal entfernt. `create_round`, `RoundLink` mit `cursor = 0` ohne Basen, dann Abgleich:
@@ -485,7 +522,9 @@ ankommt; Web bei `online` und wenn die App wieder sichtbar wird.
 ### 8.8 Kotlin und Web
 
 - `:domain`, Paket `domain.round`: Modelle, `RoundApi` und `RoundStore` (Ports), `EveningMerge`, `DuplicateCheck`,
-  `InviteLinks`, `RoundSync`. Tests mit einem Server im Speicher und mehreren Geräten, auch ohne Netz.
+  `InviteLinks`, `RoundSync`, `RoundConnection`, dazu `InMemoryRoundStore` und `InMemoryRoundServer` (ein Server im
+  Speicher nach 8.2 und 8.3). Tests mit mehreren nachgestellten Geräten, Funklöchern, verlorenen Antworten und
+  Zufallsläufen (`RoundSimulationTest`).
 - `:data`, Paket `data.round`: `SupabaseAuthApi` (wie DrinkWithMe `AuthApi`: `authorize`, `token?grant_type=pkce`,
   `token?grant_type=refresh_token`, `logout?scope=local`), `SupabaseRoundApi` (PostgREST und Funktionen aus 8.3).
 - `:database`: Room-Version 2 mit `round_link`, `evening_bases`, `player_bases` (`RoomRoundStore`), Migration 1 → 2.

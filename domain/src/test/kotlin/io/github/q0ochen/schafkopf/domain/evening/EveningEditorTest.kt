@@ -97,6 +97,38 @@ class EveningEditorTest {
     }
 
     @Test
+    fun `ersetzen legt an, aendert und loescht - und speichert nur, wenn sich etwas aendert`() = runTest {
+        val storage = InMemoryEveningRepository()
+        val realEditor = EveningEditor(storage, clock, IdGenerator { "x" })
+        val game = GameEntry(EntryId("e1"), now, GameType.RUFSPIEL, declarer = a, partner = b, declarerWon = true)
+
+        // Anlegen: Den Abend gibt es noch nicht.
+        assertEquals(evening, realEditor.replace(evening.id) { current -> evening.also { assertNull(current) } })
+        assertEquals(evening, storage.evening(evening.id).first())
+        // Ändern.
+        assertEquals(evening.append(game), realEditor.replace(evening.id) { it?.append(game) })
+        assertEquals(evening.append(game), storage.evening(evening.id).first())
+        // Löschen.
+        assertNull(realEditor.replace(evening.id) { null })
+        assertNull(storage.evening(evening.id).first())
+        // Was es nicht gibt, bleibt weg.
+        assertNull(realEditor.replace(evening.id) { it })
+        assertEquals(emptyList<Evening>(), storage.evenings.first())
+    }
+
+    @Test
+    fun `ersetzen ohne Aenderung fasst die Ablage nicht an`() = runTest {
+        every { repository.evening(evening.id) } returns flowOf(evening)
+        every { repository.evening(EveningId("weg")) } returns flowOf(null)
+
+        assertEquals(evening, editor.replace(evening.id) { it })
+        assertNull(editor.replace(EveningId("weg")) { null })
+
+        coVerify(exactly = 0) { repository.save(any()) }
+        coVerify(exactly = 0) { repository.delete(any()) }
+    }
+
+    @Test
     fun `gleichzeitige Aenderungen ueberschreiben einander nicht`() = runTest {
         val storage = InMemoryEveningRepository(listOf(evening))
         val realEditor = EveningEditor(storage, clock, IdGenerator { "x" })
