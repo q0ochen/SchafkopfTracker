@@ -5,6 +5,7 @@ import io.github.q0ochen.schafkopf.domain.evening.EveningEditor
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
+import io.github.q0ochen.schafkopf.domain.ports.EveningNotStorableException
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
@@ -412,6 +413,9 @@ class RoundSync(
                 // Der Server nimmt diesen einen Abend nicht an. Die anderen sollen deshalb nicht liegen bleiben.
                 refused += id
                 evenings.evening(id).first()?.let { refusedEvenings[id] = it }
+            } catch (e: EveningNotStorableException) {
+                // Dieses Gerät kann die Fassung des Servers nicht speichern (beschädigte Daten): wie unlesbar behandeln.
+                unreadable += id
             }
         }
 
