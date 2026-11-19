@@ -534,3 +534,76 @@ Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disc
 - Web: `web/src/core/round` (Port von `EveningMerge`, `DuplicateCheck`, `InviteLinks`, `RoundSync` mit Golden-Tests
   aus `WebGoldenTest`), `web/src/round` (Supabase-Zugriff, `RoundStore` in IndexedDB), Seiten `#/runde` und
   `#/einladung/<token>`; Anmeldung mit `signInWithOAuth` (PKCE), Rückkehr auf die Start-Adresse.
+
+### 8.9 Oberfläche (Android-App und Web-App gleich, Texte wörtlich)
+
+**Einstieg:** Auf dem Start-Bildschirm und in den Einstellungen eine Zeile „Gemeinsame Runde“. Ohne Runde mit dem
+Untertitel „Alle tragen vom eigenen Handy ein“, mit Runde „Runde: ‹Name›“ und der Statuszeile.
+
+**Statuszeile** (auch als Beschreibung des Wolken-Symbols in der Kopfzeile eines Abends; Tippen öffnet „Gemeinsame
+Runde“). Es gilt die erste zutreffende Zeile:
+
+| Lage | Text |
+|---|---|
+| Anmeldung abgelaufen | „Anmeldung abgelaufen – bitte neu anmelden“ |
+| Abende, die diese Version nicht lesen kann | „‹n› Abende kann diese Version nicht lesen – bitte die App aktualisieren“ (bei 1: „1 Abend kann …“) |
+| keine Verbindung | „Kein Netz – ‹n› Änderungen warten“ (bei 1: „… 1 Änderung wartet“, bei 0: „Kein Netz“) |
+| Server antwortet mit Fehler | „Server nicht erreichbar – ‹n› Änderungen warten“ (bei 0: „Server nicht erreichbar“) |
+| es wartet etwas | „‹n› Änderungen warten“ (bei 1: „1 Änderung wartet“) |
+| sonst | „Abgeglichen“ |
+
+**Bildschirm „Gemeinsame Runde“**, je nach Lage:
+
+- *Kein Server eingerichtet:* „Der Server ist noch nicht eingerichtet.“ – „Sobald er eingerichtet ist, können alle
+  vom eigenen Handy eintragen.“
+- *Nicht angemeldet:* Überschrift „Gemeinsam eintragen“. „Alle in der Runde tragen vom eigenen Handy ein und sehen
+  denselben Stand.“ – „Namen, Abende und Beträge der Runde liegen dafür auf einem Server in Frankfurt (Supabase).
+  Zum Anmelden brauchst du ein Google-Konto.“ Knopf „Mit Google anmelden“. Wartet eine Einladung: „Du bist
+  eingeladen. Melde dich an, um beizutreten.“
+- *Angemeldet, ohne Runde:* „Angemeldet als ‹E-Mail›“. Wartet eine Einladung: Karte „Einladung in die Runde
+  ‹Name›“ (‹n› Mitglieder), Knopf „Beitreten“. Hat das Konto Runden: „Deine Runden“, je Runde ‹Name› und
+  „‹n› Mitglieder“, Knopf „Auf diesem Gerät verwenden“. „Neue Runde anlegen“: Feld „Name der Runde“ (Vorgabe
+  „Schafkopfrunde“), Hinweis „Alle Abende und Spieler dieses Geräts kommen mit in die Runde.“, Knopf „Runde
+  anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten „Abmelden“.
+- *Rückfrage vor dem Beitreten oder Verwenden*, wenn `hasOwnData`: „Daten dieses Geräts ersetzen?“ – „Auf diesem
+  Gerät liegen ‹n› Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten
+  willst.“ (ohne Abende: „Die Spieler dieses Geräts werden durch die der Runde ersetzt.“) Knöpfe „Ersetzen“,
+  „Zur Sicherung“, „Abbrechen“.
+- *Verbunden, „Das bin ich“ steht aus:* Karte „Wer bist du?“ mit den Spielern ohne Besitzer (nicht archiviert) und
+  „Ich bin neu“ zur Auswahl, Feld „Dein Name“ (vorbelegt mit dem Namen des gewählten Spielers, außer er heißt noch
+  „Spieler ‹N›“), Hinweis „Dein Name lässt sich danach nicht mehr ändern.“, Knopf „Das bin ich“. Rückfrage: „Als
+  ‹Name› festlegen?“ – „Der Name lässt sich danach nicht mehr ändern.“ Knöpfe „Festlegen“, „Abbrechen“.
+- *Verbunden:* ‹Name der Runde›, Statuszeile, Knopf „Jetzt abgleichen“. „Mitglieder“: je Mitglied der Name seines
+  Spielers, das eigene mit „(du)“, ohne Spieler „Noch ohne Namen“. Knopf „Einladen“: erzeugt den Link und gibt ihn
+  weiter (Android: Teilen; Web: Teilen oder Kopieren) mit dem Text „Komm in unsere Schafkopfrunde ‹Name›: ‹Link›“;
+  darunter „Der Link gilt 14 Tage.“ Unten „Runde verlassen“ (Rückfrage „Runde verlassen?“ – „Die Daten bleiben als
+  Kopie auf diesem Gerät. Dein Name bleibt in der Runde.“) und „Abmelden“ (Rückfrage „Abmelden?“ – „Dieses Gerät
+  wird von der Runde getrennt. Die Daten bleiben als Kopie hier.“). Wartet noch etwas, steht in beiden Rückfragen
+  zusätzlich: „‹n› Änderungen sind noch nicht hochgeladen und kommen nicht mehr in der Runde an.“
+
+**Fehlertexte:** `invalid_invite` „Die Einladung ist abgelaufen oder ungültig.“; kein Code im eingefügten Text „Das
+ist kein gültiger Einladungslink.“; `name_taken` „Den Namen gibt es in der Runde schon.“; `invalid_name` „Bitte
+einen Namen mit 1 bis 24 Zeichen eingeben.“ (Runde: „… 1 bis 40 Zeichen …“); `player_taken` „Diesen Spieler hat
+gerade jemand anders gewählt.“; `already_claimed` „Du hast schon einen Namen in dieser Runde.“; `limit_reached`
+„Mehr geht nicht: Die Grenze für Runden, Mitglieder oder Einladungen ist erreicht.“; keine Verbindung „Keine
+Verbindung. Bitte später noch einmal versuchen.“; sonst „Das hat nicht geklappt. Bitte später noch einmal
+versuchen.“
+
+**Hinweise aus dem Abgleich** (`SyncNotice`, als kurze Meldung und auf dem Bildschirm „Gemeinsame Runde“):
+`name_locked` „‹nowName› hat den Namen selbst festgelegt. Er bleibt.“; `name_taken` ohne `nowName` „Den Namen
+‹name› gibt es in der Runde schon. Der neue Spieler wurde nicht angelegt.“; `name_taken` mit `nowName` „Den Namen
+‹name› gibt es in der Runde schon. Der Spieler heißt jetzt ‹nowName›.“; `player_owned` „‹name› gehört zu einem
+Mitglied und lässt sich nicht löschen.“; `limit_reached` „Die Runde hat schon 40 Spieler. ‹name› wurde nicht
+hochgeladen.“; `invalid_name` „Der Name ‹name› ist nicht erlaubt.“
+
+**Abend:** Mit Runde und laufendem Abend steht über der Eingabe, wer gibt: ist es der eigene Spieler
+(`RoundLink.playerId == EveningState.nextDealer`), „Du gibst – trag dieses Spiel ein.“, sonst „‹Geber› gibt und trägt
+ein.“ Eintragen kann trotzdem jeder. Spiele aus `DuplicateCheck.suspects` tragen in der Liste die Markierung
+„Doppelt eingetragen?“ (als Text, nicht nur als Farbe).
+
+**Spieler:** Ein fester Name (`nameLocked`) lässt sich nicht bearbeiten, darunter steht „Name selbst festgelegt“;
+nur der Ersteller der Runde darf ihn korrigieren. Löschen lassen sich nur Spieler ohne Besitzer.
+
+**Einladungsseite der Web-App** (`#/einladung/‹Code›`): „Einladung in eine Schafkopfrunde“, Knöpfe „In der
+Android-App öffnen“ und „Hier beitreten“ (weiter nach `#/runde`, der Code wird gemerkt). Ohne gültigen Code: „Das
+ist kein gültiger Einladungslink.“
