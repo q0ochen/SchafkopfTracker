@@ -8,6 +8,7 @@ import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
+import io.github.q0ochen.schafkopf.domain.rules.RuleSet
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -30,12 +31,15 @@ sealed interface SyncOutcome {
      * @property pushed So viele Änderungen hat dieses Gerät hochgeladen.
      * @property pending So viele Änderungen warten danach noch (zum Beispiel, weil gerade jemand anders schrieb).
      * @property unreadable So viele Abende des Servers kann diese Version der App nicht lesen; sie bleiben unberührt.
+     * @property refused So viele Abende nimmt der Server nicht an (zum Beispiel, weil einer zu groß ist); sie bleiben
+     *   auf dem Gerät und warten, bis sie sich ändern.
      */
     data class Synced(
         val pulled: Int,
         val pushed: Int,
         val pending: Int,
         val unreadable: Int = 0,
+        val refused: Int = 0,
         val notices: List<SyncNotice> = emptyList(),
     ) : SyncOutcome
 
@@ -77,6 +81,12 @@ class RoundSync(
 
     /** Spieler, die der Server in dieser Sitzung abgelehnt hat: nicht bei jedem Abgleich dasselbe erneut versuchen. */
     private val rejected = HashMap<PlayerId, Player>()
+
+    /** Abende, die der Server in dieser Sitzung nicht angenommen hat, mit dem Stand, den er abgelehnt hat. */
+    private val refusedEvenings = HashMap<EveningId, Evening>()
+
+    /** Das Regelwerk, das der Server in dieser Sitzung nicht angenommen hat. */
+    private var refusedRules: RuleSet? = null
 
     /**
      * Ein Abgleich.
@@ -124,6 +134,7 @@ class RoundSync(
         private var pulled = 0
         private var pushed = 0
         private val unreadable = HashSet<EveningId>()
+        private val refused = HashSet<EveningId>()
         private val notices = ArrayList<SyncNotice>()
 
         /** Die Nummer, die der Server der nächsten Änderung gibt, wenn außer diesem Gerät niemand schreibt. */
@@ -148,7 +159,7 @@ class RoundSync(
                 pass(head)
                 if (!gap && !again) break
             }
-            return SyncOutcome.Synced(pulled, pushed, pendingCount(), unreadable.size, notices)
+            return SyncOutcome.Synced(pulled, pushed, pendingCount(), unreadable.size, refused.size, notices)
         }
 
         /** Der Kopf der Runde fehlt: Gibt es sie wirklich nicht mehr, wird die Verbindung gelöst. */
@@ -240,7 +251,7 @@ class RoundSync(
                 if (current.id in removals) continue
                 val base = playerBases[current.id]
                 if (base != null && base.sameContent(current)) continue
-                val player = withServerColor(current)
+                val player = inServerForm(current)
                 if (rejected[player.id] == player) continue
                 try {
                     val rev = api.savePlayer(link.roundId, player)
@@ -320,11 +331,18 @@ class RoundSync(
             }
         }
 
-        /** Der Server kennt Farben von 0 bis 31; größere Nummern (dieselbe Farbe) werden vorher hier umgestellt. */
-        private suspend fun withServerColor(player: Player): Player {
-            if (player.colorIndex in 0 until SERVER_COLOR_COUNT) return player
-            val changed = player.copy(colorIndex = Math.floorMod(player.colorIndex, SERVER_COLOR_COUNT))
-            players.save(changed)
+        /**
+         * Der Server bereinigt Namen (Leerraum außen weg, innen einfach, höchstens 24 Zeichen) und kennt Farben von 0
+         * bis 31. Was davon abweicht (das kommt nur aus alten oder eingelesenen Daten), wird vorher hier umgestellt,
+         * damit auf allen Geräten dasselbe steht.
+         */
+        private suspend fun inServerForm(player: Player): Player {
+            val name = player.name.trim().replace(WHITESPACE, " ").take(Player.MAX_NAME_LENGTH).trimEnd()
+            val changed = player.copy(
+                name = name.ifEmpty { player.name },
+                colorIndex = Math.floorMod(player.colorIndex, SERVER_COLOR_COUNT),
+            )
+            if (changed != player) players.save(changed)
             return changed
         }
 
@@ -345,8 +363,15 @@ class RoundSync(
                 }
                 // Der Server hat noch keines, oder hier wurde es geändert.
                 theirs == null || local != link.rulesBase -> {
-                    countPush(api.saveRules(link.roundId, local))
-                    link = link.copy(rulesBase = local)
+                    if (local == refusedRules) return
+                    try {
+                        countPush(api.saveRules(link.roundId, local))
+                        link = link.copy(rulesBase = local)
+                    } catch (e: RoundException) {
+                        if (e.error !in DOCUMENT_REJECTIONS) throw e
+                        // Der Server nimmt dieses Regelwerk nicht an: nicht bei jedem Abgleich neu versuchen.
+                        refusedRules = local
+                    }
                 }
             }
         }
@@ -366,8 +391,10 @@ class RoundSync(
             val localIds = HashSet<EveningId>()
             for (evening in local) {
                 localIds += evening.id
-                if (eveningBases[evening.id]?.evening != evening) ids += evening.id
+                // Was der Server so schon einmal abgelehnt hat, wartet, bis es sich ändert.
+                if (eveningBases[evening.id]?.evening != evening && refusedEvenings[evening.id] != evening) ids += evening.id
             }
+            refusedEvenings.keys.retainAll(localIds)
             eveningBases.keys.filterTo(ids) { it !in localIds }
             for (id in ids) syncEvening(id, latest[id])
         }
@@ -378,6 +405,17 @@ class RoundSync(
         }
 
         private suspend fun syncEvening(id: EveningId, pulledRow: RemoteEvening?) {
+            try {
+                trySyncEvening(id, pulledRow)
+            } catch (e: RoundException) {
+                if (e.error !in DOCUMENT_REJECTIONS) throw e
+                // Der Server nimmt diesen einen Abend nicht an. Die anderen sollen deshalb nicht liegen bleiben.
+                refused += id
+                evenings.evening(id).first()?.let { refusedEvenings[id] = it }
+            }
+        }
+
+        private suspend fun trySyncEvening(id: EveningId, pulledRow: RemoteEvening?) {
             var row = pulledRow
             repeat(MAX_TRIES) {
                 if (attempt(id, row)) return
@@ -485,7 +523,13 @@ class RoundSync(
             RoundError.INVALID_NAME,
             RoundError.PLAYER_OWNED,
             RoundError.LIMIT_REACHED,
+            RoundError.INVALID_DOC,
         )
+
+        /** Ablehnungen, die nur den einen Abend oder das Regelwerk betreffen. */
+        val DOCUMENT_REJECTIONS = setOf(RoundError.TOO_LARGE, RoundError.INVALID_DOC, RoundError.LIMIT_REACHED)
+
+        val WHITESPACE = Regex("\\s+")
 
         /** Ein Name, den noch niemand trägt: der gewünschte mit einer angehängten Nummer. */
         fun freeName(name: String, taken: Collection<String>): String {

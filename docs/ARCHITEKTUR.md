@@ -379,16 +379,16 @@ Wer kein Mitglied der genannten Runde ist, bekommt immer `not_member`.
 
 | Funktion | Verhalten |
 |---|---|
-| `create_round(p_name text) → uuid` | Legt die Runde an (Name beschnitten, 1 bis 40 Zeichen, sonst `invalid_name`) und macht den Aufrufer zum Mitglied. |
+| `create_round(p_name text) → uuid` | Legt die Runde an (Name beschnitten, 1 bis 40 Zeichen, sonst `invalid_name`) und macht den Aufrufer zum Mitglied. Die neue Runde hat `rev = 1`. |
 | `my_rounds() → table(id uuid, name text, rev bigint, member_count int, my_player_id text, is_creator boolean)` | Alle Runden des Aufrufers, älteste Mitgliedschaft zuerst. |
 | `create_invite(p_round uuid) → text` | Neuer Token (32 Zeichen `0-9a-f`), gültig 14 Tage; abgelaufene Einladungen der Runde werden dabei gelöscht. |
 | `invite_info(p_token text) → table(round_id uuid, round_name text, member_count int, already_member boolean)` | Unbekannt oder abgelaufen → `invalid_invite`. |
 | `join_round(p_token text) → uuid` | Macht den Aufrufer zum Mitglied (schon Mitglied: nichts weiter). Gehört ihm in der Runde bereits ein Spieler (`owner`), wird er wieder verknüpft. |
 | `leave_round(p_round uuid) → void` | Entfernt die Mitgliedschaft; der eigene Spieler bleibt mit `owner`. Verlässt das letzte Mitglied die Runde, wird sie gelöscht. |
-| `claim_player(p_round uuid, p_player text, p_name text, p_color_index int) → void` | „Das bin ich“: Hat der Aufrufer schon einen Spieler → `already_claimed`. Gibt es `p_player` (nicht gelöscht): gehört er einem anderen → `player_taken`, sonst wird er übernommen. Gibt es ihn nicht, wird er angelegt. Gesetzt werden `owner`, `name = p_name` (1 bis 24 Zeichen nach Beschneiden, sonst `invalid_name`; vergeben → `name_taken`), `name_locked = true` und `round_members.player_id`. Gehörte der Spieler dem Aufrufer schon, bleibt der Name. |
-| `save_player(p_round uuid, p_id text, p_name text, p_color_index int, p_archived boolean, p_deleted boolean) → bigint` | Gäste anlegen und ändern; für alle Spieler Farbe und „archiviert“. Namensänderung bei `name_locked` → `name_locked` (Ausnahme: der Ersteller der Runde darf korrigieren). `p_deleted`: nur Gäste (`owner` null), sonst `player_owned`; die Zeile bleibt mit `deleted = true`. Liefert das neue `rev`. |
+| `claim_player(p_round uuid, p_player text, p_name text, p_color_index int) → void` | „Das bin ich“: Hat der Aufrufer schon einen anderen Spieler → `already_claimed` (derselbe Spieler noch einmal ist kein Fehler). Gibt es `p_player` (nicht gelöscht): gehört er einem anderen → `player_taken`, sonst wird er übernommen. Gibt es ihn nicht (oder nur gelöscht), wird er angelegt. Gesetzt werden `owner`, `name = p_name` (1 bis 24 Zeichen nach Beschneiden, sonst `invalid_name`; vergeben → `name_taken`), `name_locked = true`, die Farbe (`p_color_index mod 32`) und `round_members.player_id`. Gehörte der Spieler dem Aufrufer schon, bleibt der Name. |
+| `save_player(p_round uuid, p_id text, p_name text, p_color_index int, p_archived boolean, p_deleted boolean) → bigint` | Gäste anlegen und ändern (eine gelöschte Zeile lebt als Gast wieder auf); für alle Spieler Farbe (`mod 32`) und „archiviert“. Namensänderung bei `name_locked` → `name_locked` (Ausnahme: der Ersteller der Runde darf korrigieren). `p_deleted`: nur Gäste (`owner` null), sonst `player_owned`; die Zeile bleibt mit `deleted = true`; gibt es den Spieler nicht (mehr), passiert nichts und `rev` bleibt. Kennung 1 bis 64 Zeichen, sonst `invalid_doc`. Liefert das (neue) `rev`. |
 | `save_rules(p_round uuid, p_rules jsonb) → bigint` | Setzt `rounds.rules` (muss ein JSON-Objekt sein, sonst `invalid_doc`). |
-| `save_evening(p_round uuid, p_id text, p_doc jsonb, p_expected_version int, p_deleted boolean) → table(version int, rev bigint)` | Gibt es den Abend noch nicht: `p_expected_version` muss 0 sein, die neue Version ist 1. Sonst muss `version = p_expected_version` gelten; dann `doc`, `deleted`, `version + 1`. Passt die Version nicht, kommt **kein Fehler**, sondern eine leere Ergebnismenge (der Aufrufer liest den Abend neu). `p_doc` muss ein JSON-Objekt mit `"id" = p_id` sein (`invalid_doc`). |
+| `save_evening(p_round uuid, p_id text, p_doc jsonb, p_expected_version int, p_deleted boolean) → table(version int, rev bigint)` | Gibt es den Abend noch nicht: `p_expected_version` muss 0 sein, die neue Version ist 1. Sonst muss `version = p_expected_version` gelten; dann `doc`, `deleted`, `version + 1`. Passt die Version nicht, kommt **kein Fehler**, sondern eine leere Ergebnismenge (der Aufrufer liest den Abend neu), und `rev` bleibt. `p_doc` muss ein JSON-Objekt mit `"id" = p_id` sein (`invalid_doc`); zu groß → `too_large`, mehr als 3000 Abende → `limit_reached`. |
 
 Lesen über PostgREST (`apikey` = Publishable Key, `Authorization: Bearer <Access-Token>`):
 
@@ -456,15 +456,17 @@ Ein Abgleich besteht aus höchstens zwei Durchgängen. Ein Durchgang:
    „archiviert“) von der Basis ab oder gibt es keine Basis, gilt der Server (auch gegen eine Änderung von hier);
    stimmt sie mit der Basis überein, bleibt eine Änderung von hier bestehen. Die Basis ist danach die Zeile.
    Gelöschte Zeilen werden vorgemerkt (Schritt 7).
-4. **Spieler von hier:** Was von der Basis abweicht oder keine hat, hochladen (`save_player`; Farbnummern außerhalb
-   0 bis 31 vorher auf `colorIndex mod 32` umstellen). Lehnt der Server ab (`name_locked`, `name_taken`,
-   `invalid_name`, `player_owned`, `limit_reached`): mit Basis zurück auf die Basis; ohne Basis und in keinem Abend
+4. **Spieler von hier:** Was von der Basis abweicht oder keine hat, hochladen (`save_player`). Vorher lokal in die
+   Form des Servers bringen: Name ohne Leerraum außen, Leerraum innen einfach, höchstens 24 Zeichen; Farbnummer
+   `colorIndex mod 32`. Lehnt der Server ab (`name_locked`, `name_taken`, `invalid_name`, `player_owned`,
+   `limit_reached`, `invalid_doc`): mit Basis zurück auf die Basis; ohne Basis und in keinem Abend
    gebraucht → Spieler entfernen; ohne Basis, gebraucht und `name_taken` → umbenennen („Name 2“, „Name 3“ …,
    auf 24 Zeichen gekürzt) und im nächsten Durchgang hochladen; sonst bleibt er und wird in dieser Sitzung nicht
    erneut versucht. Jede Ablehnung ergibt einen Hinweis (`SyncNotice`).
 5. **Regelwerk für neue Abende:** Kann die App das Regelwerk des Servers nicht lesen, passiert nichts. Hat der
    Server keines → das lokale hochladen. Hat er ein anderes als `rulesBase` → übernehmen (Server gewinnt). Sonst
-   ein lokal geändertes hochladen (`save_rules`).
+   ein lokal geändertes hochladen (`save_rules`). Lehnt der Server es ab (`too_large`, `invalid_doc`), wird
+   dasselbe Regelwerk in dieser Sitzung nicht erneut versucht.
 6. **Abende**, für jeden vom Server geänderten, lokal geänderten oder lokal gelöschten Abend (höchstens 3 Versuche;
    kommt ein Abend beim Lesen mehrfach, zählt die höchste Version):
    - Nicht mitgelesen (der Server hat noch die Basis oder kennt den Abend nicht): lokal vorhanden und geändert →
@@ -480,6 +482,9 @@ Ein Abgleich besteht aus höchstens zwei Durchgängen. Ein Durchgang:
      der Server ihn gar nicht, die Basis löschen. Danach folgt in jedem Fall ein zweiter Durchgang.
    - Nach jedem Erfolg ist die Basis die hochgeladene Fassung. Ein Dokument, das sich nicht lesen lässt, wird
      übersprungen und gezählt; es wird nie überschrieben.
+   - Lehnt der Server einen Abend ab (`too_large`, `invalid_doc`, `limit_reached`), bleibt er auf dem Gerät, wird
+     gezählt (`refused`) und in dieser Sitzung erst wieder versucht, wenn er sich geändert hat. Die übrigen Abende
+     laufen weiter.
 7. **Spieler löschen**, erst jetzt und nie, solange ein Abend auf dem Gerät den Spieler nennt: Vom Server als
    gelöscht gemeldet → lokal löschen; wird er gebraucht, bleibt er, verliert die Basis und geht im nächsten
    Durchgang als neu wieder hoch. Lokal gelöscht (Basis da, Spieler weg) → `save_player(…, p_deleted = true)`;
@@ -489,7 +494,7 @@ Ein Abgleich besteht aus höchstens zwei Durchgängen. Ein Durchgang:
    Hochladen abgelehnt oder ist in Schritt 4 oder 7 etwas für den nächsten Durchgang entstanden, folgt der zweite
    Durchgang. Ein eingetragenes Spiel kostet so zwei Anfragen (Kopf und `save_evening`).
 
-Ergebnis: `Synced(pulled, pushed, pending, unreadable, notices)`, `Unchanged`, `NotLinked`, `Detached`, `SignedOut`
+Ergebnis: `Synced(pulled, pushed, pending, unreadable, refused, notices)`, `Unchanged`, `NotLinked`, `Detached`, `SignedOut`
 (Sitzung ungültig), `Offline` (keine Verbindung), `Failed` (Server antwortet mit Fehler, zum Beispiel pausiert).
 `pendingCount()` zählt geänderte und gelöschte Abende und Spieler sowie ein geändertes Regelwerk.
 
@@ -547,6 +552,7 @@ Runde“). Es gilt die erste zutreffende Zeile:
 |---|---|
 | Anmeldung abgelaufen | „Anmeldung abgelaufen – bitte neu anmelden“ |
 | Abende, die diese Version nicht lesen kann | „‹n› Abende kann diese Version nicht lesen – bitte die App aktualisieren“ (bei 1: „1 Abend kann …“) |
+| Abende, die der Server nicht annimmt | „‹n› Abende nimmt der Server nicht an“ (bei 1: „1 Abend nimmt der Server nicht an“) |
 | keine Verbindung | „Kein Netz – ‹n› Änderungen warten“ (bei 1: „… 1 Änderung wartet“, bei 0: „Kein Netz“) |
 | Server antwortet mit Fehler | „Server nicht erreichbar – ‹n› Änderungen warten“ (bei 0: „Server nicht erreichbar“) |
 | es wartet etwas | „‹n› Änderungen warten“ (bei 1: „1 Änderung wartet“) |

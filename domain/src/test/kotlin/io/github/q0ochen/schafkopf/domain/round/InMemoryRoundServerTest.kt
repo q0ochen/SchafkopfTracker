@@ -45,9 +45,10 @@ class InMemoryRoundServerTest {
     fun `eine neue Runde hat ihren Ersteller als einziges Mitglied`() = runTest {
         val round = one.createRound("  Stammtisch  ")
 
-        assertEquals(RoundHead(round, "Stammtisch", rev = 0, rules = null, createdBy = "konto-1"), one.head(round))
+        // Das Anlegen mit dem ersten Mitglied ist die erste Änderung der Runde.
+        assertEquals(RoundHead(round, "Stammtisch", rev = 1, rules = null, createdBy = "konto-1"), one.head(round))
         assertEquals(listOf(RoundMember("konto-1", null)), one.members(round))
-        assertEquals(listOf(RoundSummary(round, "Stammtisch", 0, memberCount = 1, myPlayerId = null, isCreator = true)), one.myRounds())
+        assertEquals(listOf(RoundSummary(round, "Stammtisch", 1, memberCount = 1, myPlayerId = null, isCreator = true)), one.myRounds())
     }
 
     @Test
@@ -198,7 +199,7 @@ class InMemoryRoundServerTest {
         two.savePlayer(round, Player(PlayerId("gast-2"), "Nachbar", colorIndex = 40))
 
         assertEquals(listOf("Wirt", "Nachbar"), server.players(round).map { it.name })
-        assertEquals(listOf(0, 1), server.players(round).map { it.position })
+        assertEquals(listOf(1, 2), server.players(round).map { it.position })
         assertEquals(8, server.players(round)[1].colorIndex)
         assertEquals(RoundError.NAME_TAKEN, errorOf { two.savePlayer(round, Player(PlayerId("gast-3"), "WIRT", 0)) })
         assertEquals(RoundError.NAME_TAKEN, errorOf { two.savePlayer(round, Player(PlayerId("gast-2"), "wirt", 0)) })
@@ -206,7 +207,7 @@ class InMemoryRoundServerTest {
         assertEquals(RoundError.INVALID_NAME, errorOf { two.savePlayer(round, Player(PlayerId("gast-3"), "x".repeat(25), 0)) })
         // Der eigene Name darf bleiben, auch in anderer Schreibweise.
         assertNull(errorOf { two.savePlayer(round, guest.copy(name = "WIRT", archived = true)) })
-        assertEquals(RemotePlayer(guest.id, "WIRT", 3, archived = true, position = 0, rev = server.rev(round)), one.playersSince(round, 0).last())
+        assertEquals(RemotePlayer(guest.id, "WIRT", 3, archived = true, position = 1, rev = server.rev(round)), one.playersSince(round, 0).last())
     }
 
     @Test
@@ -249,9 +250,12 @@ class InMemoryRoundServerTest {
         two.claimPlayer(round, guest.id, " Zwei ", colorIndex = 9)
 
         val row = server.players(round).single()
-        assertEquals(RemotePlayer(guest.id, "Zwei", colorIndex = 3, archived = false, position = 0, owner = "konto-2", nameLocked = true, rev = row.rev), row)
+        assertEquals(RemotePlayer(guest.id, "Zwei", colorIndex = 9, archived = false, position = 1, owner = "konto-2", nameLocked = true, rev = row.rev), row)
         assertEquals(RoundMember("konto-2", guest.id), one.members(round).last())
         assertEquals(guest.id, two.myRounds().single().myPlayerId)
+        // Derselbe Spieler noch einmal (etwa nach einer verlorenen Antwort) ist kein Fehler; der Name bleibt.
+        assertNull(errorOf { two.claimPlayer(round, guest.id, "Anders", colorIndex = 2) })
+        assertEquals(Player(guest.id, "Zwei", colorIndex = 2), server.players(round).single().toPlayer())
         assertEquals(RoundError.ALREADY_CLAIMED, errorOf { two.claimPlayer(round, PlayerId("noch-einer"), "Drei", 0) })
         assertEquals(RoundError.PLAYER_TAKEN, errorOf { one.claimPlayer(round, guest.id, "Eins", 0) })
         assertEquals(RoundError.PLAYER_OWNED, errorOf { one.savePlayer(round, guest, deleted = true) })
@@ -282,7 +286,7 @@ class InMemoryRoundServerTest {
         assertEquals(RoundError.INVALID_NAME, errorOf { two.claimPlayer(round, PlayerId("ich"), "", 0) })
 
         two.claimPlayer(round, PlayerId("ich"), "Zwei", colorIndex = 33)
-        assertEquals(RemotePlayer(PlayerId("ich"), "Zwei", colorIndex = 1, archived = false, position = 1, owner = "konto-2", nameLocked = true, rev = server.rev(round)), server.players(round).last())
+        assertEquals(RemotePlayer(PlayerId("ich"), "Zwei", colorIndex = 1, archived = false, position = 2, owner = "konto-2", nameLocked = true, rev = server.rev(round)), server.players(round).last())
 
         // Wer geht und wiederkommt, ist wieder derselbe Spieler.
         two.leaveRound(round)
@@ -302,8 +306,22 @@ class InMemoryRoundServerTest {
 
         val row = server.players(round).single()
         assertEquals("konto-2", row.owner)
-        assertEquals(0, row.position)
+        assertEquals(1, row.position)
         assertEquals(6, row.colorIndex)
+    }
+
+    @Test
+    fun `Kennungen sind hoechstens 64 Zeichen lang, Dokumente nicht beliebig gross`() = runTest {
+        val round = roundOfTwo()
+        val long = "x".repeat(InMemoryRoundServer.MAX_ID_LENGTH + 1)
+
+        assertEquals(RoundError.INVALID_DOC, errorOf { one.savePlayer(round, Player(PlayerId(long), "Lang", 0)) })
+        assertEquals(RoundError.INVALID_DOC, errorOf { one.saveEvening(round, evening(id = long), 0) })
+        assertNull(errorOf { one.saveEvening(round, evening(id = long.dropLast(1)), 0) })
+        val huge = evening(*Array(InMemoryRoundServer.MAX_ENTRIES + 1) { game("g$it", it.toLong()) })
+        assertEquals(RoundError.TOO_LARGE, errorOf { one.saveEvening(round, huge, 0) })
+        val wordy = RuleSet.standard().copy(name = "x".repeat(InMemoryRoundServer.MAX_RULES_NAME_LENGTH + 1))
+        assertEquals(RoundError.TOO_LARGE, errorOf { one.saveRules(round, wordy) })
     }
 
     // --- Regelwerk, Störungen, Hilfen für Tests ---
@@ -362,6 +380,7 @@ class InMemoryRoundServerTest {
         assertNull(two.head(round))
         server.removeMember(round, "konto-1")
         assertEquals(0, server.rev(round))
+        server.forgetEvening(one.createRound("Leer"), doc.id)
         assertNull(server.eveningRow(round, doc.id))
         assertEquals(emptyList<Any>(), server.players(round))
         server.removeMember(round, "konto-1")

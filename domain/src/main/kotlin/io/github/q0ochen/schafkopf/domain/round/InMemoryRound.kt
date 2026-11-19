@@ -188,6 +188,8 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
             call("saveEvening", write = true) {
                 val state = member(round)
                 val current = state.evenings[evening.id]
+                if (evening.id.value.length !in 1..MAX_ID_LENGTH) throw RoundException(RoundError.INVALID_DOC)
+                if (evening.entries.size > MAX_ENTRIES) throw RoundException(RoundError.TOO_LARGE)
                 when {
                     current == null && expectedVersion != 0 -> null
                     current != null && current.version != expectedVersion -> null
@@ -202,6 +204,7 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
 
         override suspend fun savePlayer(round: RoundId, player: Player, deleted: Boolean): Long = call("savePlayer", write = true) {
             val state = member(round)
+            if (player.id.value.length !in 1..MAX_ID_LENGTH) throw RoundException(RoundError.INVALID_DOC)
             val current = state.players[player.id]
             if (deleted) {
                 if (current != null && !current.deleted) {
@@ -236,6 +239,7 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
 
         override suspend fun saveRules(round: RoundId, rules: RuleSet): Long = call("saveRules", write = true) {
             val state = member(round)
+            if (rules.name.length > MAX_RULES_NAME_LENGTH) throw RoundException(RoundError.TOO_LARGE)
             state.rules = rules
             state.rulesUnreadable = false
             state.nextRev()
@@ -251,6 +255,8 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
             val clean = name.trim().takeIf { it.length in 1..MAX_ROUND_NAME_LENGTH } ?: throw RoundException(RoundError.INVALID_NAME)
             requireRoomForRound()
             val round = Round(RoundId("runde-${++created}"), clean, userId)
+            // Das Anlegen mit dem ersten Mitglied ist die erste Änderung der Runde.
+            round.rev = 1
             round.members[userId] = null
             rounds[round.id] = round
             round.id
@@ -293,30 +299,33 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
         override suspend fun claimPlayer(round: RoundId, player: PlayerId, name: String, colorIndex: Int): Unit =
             call("claimPlayer", write = true) {
                 val state = member(round)
-                if (state.members[userId] != null) throw RoundException(RoundError.ALREADY_CLAIMED)
-                val clean = Player.cleanName(name) ?: throw RoundException(RoundError.INVALID_NAME)
+                val mine = state.members[userId]
+                // Derselbe Spieler noch einmal ist erlaubt (zum Beispiel nach einer verlorenen Antwort).
+                if (mine != null && mine != player) throw RoundException(RoundError.ALREADY_CLAIMED)
                 val current = state.players[player]?.takeIf { !it.deleted }
+                if (current?.owner != null && current.owner != userId) throw RoundException(RoundError.PLAYER_TAKEN)
+                val color = Math.floorMod(colorIndex, COLOR_COUNT)
                 when {
-                    current == null -> {
+                    // Gehörte der Spieler dem Konto schon, bleibt sein Name.
+                    current?.owner == userId ->
+                        state.players[player] = current.copy(nameLocked = true, colorIndex = color, rev = state.nextRev())
+                    current != null -> {
+                        val clean = state.freeName(name, player)
+                        state.players[player] =
+                            current.copy(name = clean, owner = userId, nameLocked = true, colorIndex = color, rev = state.nextRev())
+                    }
+                    else -> {
                         if (state.players.values.count { !it.deleted } >= MAX_PLAYERS) throw RoundException(RoundError.LIMIT_REACHED)
-                        state.requireFreeName(clean, player)
                         state.players[player] = RemotePlayer(
                             id = player,
-                            name = clean,
-                            colorIndex = Math.floorMod(colorIndex, COLOR_COUNT),
+                            name = state.freeName(name, player),
+                            colorIndex = color,
                             archived = false,
                             position = state.players[player]?.position ?: state.nextPosition(),
                             owner = userId,
                             nameLocked = true,
                             rev = state.nextRev(),
                         )
-                    }
-                    current.owner != null && current.owner != userId -> throw RoundException(RoundError.PLAYER_TAKEN)
-                    // Gehörte der Spieler dem Konto schon, bleibt sein Name.
-                    current.owner == userId -> state.players[player] = current.copy(nameLocked = true, rev = state.nextRev())
-                    else -> {
-                        state.requireFreeName(clean, player)
-                        state.players[player] = current.copy(name = clean, owner = userId, nameLocked = true, rev = state.nextRev())
                     }
                 }
                 state.members[userId] = player
@@ -338,7 +347,15 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
             if (taken) throw RoundException(RoundError.NAME_TAKEN)
         }
 
-        private fun Round.nextPosition(): Int = (players.values.maxOfOrNull { it.position } ?: -1) + 1
+        /** Der bereinigte Name, wenn er gültig und noch frei ist. */
+        private fun Round.freeName(name: String, except: PlayerId): String {
+            val clean = Player.cleanName(name) ?: throw RoundException(RoundError.INVALID_NAME)
+            requireFreeName(clean, except)
+            return clean
+        }
+
+        /** Die Position für einen neuen Spieler: die größte der Runde plus eins (der erste bekommt 1). */
+        private fun Round.nextPosition(): Int = (players.values.maxOfOrNull { it.position } ?: 0) + 1
     }
 
     companion object {
@@ -348,6 +365,14 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
         const val MAX_EVENINGS = 3000
         const val MAX_INVITES = 20
         const val MAX_ROUND_NAME_LENGTH = 40
+        const val MAX_ID_LENGTH = 64
+
+        /**
+         * Der echte Server begrenzt die Größe eines Abends auf 300 000 Bytes und die des Regelwerks auf 20 000. Hier
+         * stehen dafür einfache Zahlen, an denen sich die Ablehnung zeigen lässt.
+         */
+        const val MAX_ENTRIES = 1000
+        const val MAX_RULES_NAME_LENGTH = 10_000
 
         /** Der Server speichert Farbnummern von 0 bis 31. */
         const val COLOR_COUNT = 32

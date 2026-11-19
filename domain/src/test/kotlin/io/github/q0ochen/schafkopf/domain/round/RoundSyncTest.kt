@@ -81,12 +81,21 @@ class RoundSyncTest {
         assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 6, pending = 0), outcome)
         val round = one.roundId()
         assertEquals(listOf("Nord", "Spieler 2", "Spieler 3", "Spieler 4"), server.players(round).map { it.name })
-        assertEquals(listOf(0, 1, 2, 3), server.players(round).map { it.position })
+        assertEquals(listOf(1, 2, 3, 4), server.players(round).map { it.position })
         assertEquals(one.allEvenings(), server.evenings(round))
         assertEquals(RuleSet.sauspiel(), one.api.head(round)?.rules)
-        assertEquals(RoundLink(round, "Stammtisch", one.userId, isCreator = true, cursor = 6, rulesBase = RuleSet.sauspiel()), one.link())
         assertEquals(
-            listOf("createRound", "head", "savePlayer", "savePlayer", "savePlayer", "savePlayer", "saveRules", "saveEvening", "head"),
+            RoundLink(
+                round, "Stammtisch", one.userId, isCreator = true, cursor = 7, rulesBase = RuleSet.sauspiel(),
+                members = listOf(RoundMember(one.userId, null)),
+            ),
+            one.link(),
+        )
+        assertEquals(
+            listOf(
+                "createRound", "head", "members", "playersSince", "eveningsSince",
+                "savePlayer", "savePlayer", "savePlayer", "savePlayer", "saveRules", "saveEvening", "head",
+            ),
             one.session.calls,
         )
     }
@@ -545,6 +554,52 @@ class RoundSyncTest {
     }
 
     @Test
+    fun `ein Abend, den der Server nicht annimmt, haelt die anderen nicht auf`() = runTest {
+        val round = round()
+        val huge = two.startEvening("riesig")
+        two.editor.update(huge) { evening ->
+            evening.copy(entries = List(InMemoryRoundServer.MAX_ENTRIES + 1) { game("g$it", it.toLong()) })
+        }
+        two.addGame(abend)
+        val normal = two.startEvening("abend-2")
+
+        val first = two.sync.sync() as SyncOutcome.Synced
+
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 2, pending = 1, refused = 1), first)
+        assertNull(server.eveningRow(round, huge))
+        assertEquals(two.evening(normal), server.eveningRow(round, normal)?.evening)
+
+        // Derselbe Stand wird nicht noch einmal versucht; nach einer Änderung schon.
+        two.session.calls.clear()
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 1), two.sync.sync())
+        assertFalse("saveEvening" in two.session.calls)
+        two.editor.update(huge) { it.copy(entries = it.entries.take(3)) }
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 1, pending = 0), two.sync.sync())
+        assertEquals(3, server.eveningRow(round, huge)?.evening?.entries?.size)
+        assertSameEverywhere(round, two)
+    }
+
+    @Test
+    fun `nimmt der Server das Ergebnis des Zusammenfuehrens nicht an, bleibt es hier und wartet`() = runTest {
+        val round = round()
+        one.addGame(abend)
+        one.synced()
+        two.editor.update(abend) { evening ->
+            evening.copy(entries = evening.entries + List(InMemoryRoundServer.MAX_ENTRIES) { game("g$it", it.toLong()) })
+        }
+
+        val outcome = two.sync.sync() as SyncOutcome.Synced
+
+        // Das Spiel von Handy eins ist hier angekommen, das Hochladen wurde abgelehnt.
+        assertEquals(SyncOutcome.Synced(pulled = 1, pushed = 0, pending = 1, refused = 1), outcome)
+        assertEquals(InMemoryRoundServer.MAX_ENTRIES + 2, two.evening(abend)?.entries?.size)
+        assertEquals(2, server.eveningRow(round, abend)?.evening?.entries?.size)
+        two.session.calls.clear()
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 1), two.sync.sync())
+        assertFalse("saveEvening" in two.session.calls)
+    }
+
+    @Test
     fun `kommt ein Abend beim Lesen zweimal, zaehlt die neuere Fassung`() = runTest {
         val round = round()
         val old = two.evening(abend)!!
@@ -825,6 +880,47 @@ class RoundSyncTest {
         assertSameEverywhere(round, one)
     }
 
+    @Test
+    fun `Namen und Farben aus alten Daten werden vor dem Hochladen in Form gebracht`() = runTest {
+        val round = round()
+        two.players.save(Player(PlayerId("gast-1"), "  Wirt   vom\tEck ", colorIndex = -1))
+        two.players.save(Player(PlayerId("gast-2"), "Ein viel zu langer Name für den Server", colorIndex = 4))
+
+        two.synced()
+        one.synced()
+
+        assertEquals(Player(PlayerId("gast-1"), "Wirt vom Eck", colorIndex = 31), one.allPlayers()[4])
+        assertEquals(Player(PlayerId("gast-2"), "Ein viel zu langer Name", colorIndex = 4), one.allPlayers()[5])
+        assertSameEverywhere(round, one, two)
+    }
+
+    @Test
+    fun `ein Spieler, den der Server gar nicht annimmt, entfaellt oder bleibt hier, ohne den Abgleich aufzuhalten`() = runTest {
+        val round = round()
+        val long = PlayerId("x".repeat(InMemoryRoundServer.MAX_ID_LENGTH + 1))
+        val used = PlayerId("y".repeat(InMemoryRoundServer.MAX_ID_LENGTH + 1))
+        two.players.save(Player(long, "Unbenutzt", colorIndex = 4))
+        two.players.save(Player(used, "Am Tisch", colorIndex = 5))
+        two.players.save(Player(PlayerId("leer"), "   ", colorIndex = 6))
+        two.addGame(abend)
+        two.editor.update(abend) { it.copy(firstDealer = used) }
+
+        val outcome = two.sync.sync() as SyncOutcome.Synced
+
+        assertEquals(
+            listOf(
+                SyncNotice(long, "Unbenutzt", RoundError.INVALID_DOC, nowName = null),
+                SyncNotice(used, "Am Tisch", RoundError.INVALID_DOC, nowName = "Am Tisch"),
+                SyncNotice(PlayerId("leer"), "   ", RoundError.INVALID_NAME, nowName = null),
+            ),
+            outcome.notices,
+        )
+        // Das Spiel ist trotzdem oben; nur der eine Spieler wartet.
+        assertEquals(1, outcome.pushed)
+        assertEquals(1, outcome.pending)
+        assertEquals(two.evening(abend), server.eveningRow(round, abend)?.evening)
+    }
+
     // --- Regelwerk für neue Abende ---
 
     @Test
@@ -866,6 +962,26 @@ class RoundSyncTest {
         assertEquals(1, outcome.pending)
         assertFalse("saveRules" in two.session.calls)
         assertEquals(RuleSet.sauspiel(), two.settings.settings.first().defaultRules)
+    }
+
+    @Test
+    fun `ein Regelwerk, das der Server nicht annimmt, wird nicht bei jedem Abgleich neu versucht`() = runTest {
+        round()
+        val wordy = RuleSet.standard().copy(name = "x".repeat(InMemoryRoundServer.MAX_RULES_NAME_LENGTH + 1))
+        two.settings.update { it.copy(defaultRules = wordy) }
+        two.addGame(abend)
+
+        val first = two.sync.sync() as SyncOutcome.Synced
+        two.session.calls.clear()
+        val second = two.sync.sync() as SyncOutcome.Synced
+
+        assertEquals(1, first.pushed)
+        assertEquals(1, first.pending)
+        assertEquals(1, second.pending)
+        assertFalse("saveRules" in two.session.calls)
+        // Ein anderes Regelwerk geht wieder hoch.
+        two.settings.update { it.copy(defaultRules = RuleSet.sauspiel()) }
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 1, pending = 0), two.sync.sync())
     }
 
     // --- Das bin ich ---
