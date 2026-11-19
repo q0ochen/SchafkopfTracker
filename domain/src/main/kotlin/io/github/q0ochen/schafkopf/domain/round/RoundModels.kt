@@ -159,6 +159,10 @@ enum class RoundError {
     }
 }
 
-/** Ein Aufruf des Servers ist gescheitert. */
-class RoundException(val error: RoundError, detail: String? = null, cause: Throwable? = null) :
+/**
+ * Ein Aufruf des Servers ist gescheitert.
+ *
+ * @property detail Kurzer technischer Zusatz (zum Beispiel „HTTP 503“); nie ein Schlüssel, ein Token oder Inhalt.
+ */
+class RoundException(val error: RoundError, val detail: String? = null, cause: Throwable? = null) :
     Exception(if (detail.isNullOrEmpty()) error.name else "${error.name}: $detail", cause)

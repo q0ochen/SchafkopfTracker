@@ -66,6 +66,9 @@ internal object StorageCodec {
         json.decodeFromString(EveningDto.serializer(), text.withoutByteOrderMark()).checked()
     }
 
+    /** Ein Abend als JSON-Baum, so wie er auch in der Sicherung steht (für den Server der gemeinsamen Runde). */
+    fun encodeEveningElement(evening: Evening): JsonElement = json.encodeToJsonElement(EveningDto.serializer(), evening.toDto())
+
     /** Liest einen Abend aus einem bereits zerlegten JSON-Baum (ein Element der Sicherung). */
     fun decodeEveningElement(element: JsonElement): Evening = reading {
         json.decodeFromJsonElement(EveningDto.serializer(), element).checked()
@@ -77,6 +80,9 @@ internal object StorageCodec {
     fun decodeRules(text: String): RuleSet = reading {
         json.decodeFromString(RuleSetDto.serializer(), text.withoutByteOrderMark()).toDomain()
     }
+
+    /** Ein Regelwerk als JSON-Baum (für den Server der gemeinsamen Runde). */
+    fun encodeRulesElement(rules: RuleSet): JsonElement = json.encodeToJsonElement(RuleSetDto.serializer(), rules.toDto())
 
     /** Liest ein Regelwerk aus einem bereits zerlegten JSON-Baum (die Vorlage in der Sicherung). */
     fun decodeRulesElement(element: JsonElement): RuleSet = reading {
