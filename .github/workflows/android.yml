@@ -82,7 +82,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import glob, sys, xml.etree.ElementTree as ET
-          minimum = {"domain": 539, "data": 241, "database": 16, "app": 105}
+          minimum = {"domain": 678, "data": 277, "database": 24, "app": 177}
           ok = True
           for module, least in minimum.items():
               files = glob.glob(f"{module}/build/test-results/**/*.xml", recursive=True)
@@ -96,8 +96,16 @@ jobs:
 
       # Laufnummer → steigende versionCode (1000 + Nummer) und versionName „0.1.0-test.<Nummer>“, damit Android,
       # F-Droid und Obtainium jede Testversion als Update erkennen (siehe app/build.gradle.kts).
+      # Gemeinsame Runde: Adresse und Publishable Key des Supabase-Projekts kommen aus app/supabase.properties oder,
+      # solange die Datei leer ist, aus den GitHub-Variablen (beides öffentlich, kein Geheimnis). Ohne Werte ist die
+      # Funktion in der Testversion abgeschaltet.
       - name: Testversion bauen (Release, Ausgabe fdroid)
-        run: ./gradlew :app:assembleFdroidRelease --no-daemon -PciBuildNumber=${{ github.run_number }}
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+        run: >-
+          ./gradlew :app:assembleFdroidRelease --no-daemon -PciBuildNumber=${{ github.run_number }}
+          "-PsupabaseUrl=$SUPABASE_URL" "-PsupabasePublishableKey=$SUPABASE_PUBLISHABLE_KEY"
 
       # Nur mit dem festen Schlüssel aus app/debug.keystore lassen sich neue Testversionen ohne Datenverlust über alte
       # installieren. Außerdem muss die Versionsnummer stimmen.

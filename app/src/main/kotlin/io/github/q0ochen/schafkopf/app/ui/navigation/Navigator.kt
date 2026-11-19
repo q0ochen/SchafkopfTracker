@@ -28,6 +28,9 @@ sealed interface Screen {
     data object AiSettings : Screen
     data object Backup : Screen
 
+    /** Die gemeinsame Runde: anmelden, anlegen, beitreten, Mitglieder. */
+    data object Round : Screen
+
     fun encode(): String = when (this) {
         Start -> "start"
         NewEvening -> "new"
@@ -40,6 +43,7 @@ sealed interface Screen {
         is Rules -> "rules$SEP${eveningId.orEmpty()}"
         AiSettings -> "ai"
         Backup -> "backup"
+        Round -> "round"
     }
 
     companion object {
@@ -61,6 +65,7 @@ sealed interface Screen {
                 "rules" -> Rules(parts.getOrNull(1)?.takeIf(String::isNotEmpty))
                 "ai" -> AiSettings
                 "backup" -> Backup
+                "round" -> Round
                 else -> null
             }
         }

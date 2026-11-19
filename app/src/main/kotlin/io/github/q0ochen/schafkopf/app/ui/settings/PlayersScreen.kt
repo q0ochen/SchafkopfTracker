@@ -44,6 +44,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import io.github.q0ochen.schafkopf.R
+import io.github.q0ochen.schafkopf.app.round.RoundCoordinator
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
 import io.github.q0ochen.schafkopf.app.ui.common.SwitchRow
 import org.koin.androidx.compose.koinViewModel
@@ -66,18 +67,35 @@ import kotlinx.coroutines.launch
  *
  * @property eveningCount Nur ein Spieler ohne Abend lässt sich löschen.
  */
-data class PlayerRow(val player: Player, val eveningCount: Int) {
-    val canDelete: Boolean get() = eveningCount == 0
+data class PlayerRow(
+    val player: Player,
+    val eveningCount: Int,
+    /** In der gemeinsamen Runde hat sein Besitzer den Namen selbst festgelegt; ändern darf ihn nur der Ersteller. */
+    val nameLocked: Boolean = false,
+    /** In der gemeinsamen Runde gehört der Spieler einem Mitglied und lässt sich deshalb nicht löschen. */
+    val owned: Boolean = false,
+) {
+    val canDelete: Boolean get() = eveningCount == 0 && !owned
 }
 
 class PlayersViewModel(
     private val players: PlayerRepository,
     private val evenings: EveningRepository,
     private val idGenerator: IdGenerator,
+    coordinator: RoundCoordinator,
 ) : ViewModel() {
     val state: StateFlow<List<PlayerRow>> =
-        combine(players.players, evenings.evenings) { all, allEvenings ->
-            all.map { player -> PlayerRow(player, allEvenings.count { it.involves(player.id) }) }
+        combine(players.players, evenings.evenings, coordinator.state) { all, allEvenings, round ->
+            all.map { player ->
+                // Was der Server über den Spieler weiß; ohne gemeinsame Runde nichts.
+                val remote = round.players[player.id].takeIf { round.link != null }
+                PlayerRow(
+                    player = player,
+                    eveningCount = allEvenings.count { it.involves(player.id) },
+                    nameLocked = remote?.nameLocked == true && round.link?.isCreator != true,
+                    owned = remote?.owner != null,
+                )
+            }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** @return `false`, wenn der Name leer oder zu lang ist. */
@@ -255,49 +273,84 @@ private fun EditPlayerDialog(row: PlayerRow, onDismiss: () -> Unit, onSave: (Str
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.players_edit_title)) },
         text = {
-            Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = {
-                        name = it
-                        error = false
-                    },
-                    label = { Text(stringResource(R.string.new_player_name)) },
-                    singleLine = true,
-                    isError = error,
-                    supportingText = if (error) {
-                        { Text(stringResource(R.string.new_player_name_error)) }
-                    } else {
-                        null
-                    },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-                )
-                SwitchRow(
-                    title = stringResource(R.string.players_archive_label),
-                    subtitle = stringResource(R.string.players_archive_hint),
-                    checked = archived,
-                    onCheckedChange = { archived = it },
-                )
-                if (row.canDelete) {
-                    TextButton(
-                        onClick = { confirmDelete = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp),
-                    ) { Text(stringResource(R.string.players_delete), color = MaterialTheme.colorScheme.error) }
-                } else {
-                    Text(
-                        pluralStringResource(R.plurals.players_delete_blocked, row.eveningCount, row.eveningCount),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-            }
+            PlayerEditFields(
+                row = row,
+                name = name,
+                onNameChange = {
+                    name = it
+                    error = false
+                },
+                nameError = error,
+                archived = archived,
+                onArchivedChange = { archived = it },
+                onDelete = { confirmDelete = true },
+            )
         },
         confirmButton = {
             TextButton(onClick = { if (!onSave(name, archived)) error = true }) { Text(stringResource(R.string.common_save)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
+}
+
+/**
+ * Der Inhalt des Dialogs „Spieler bearbeiten“: Name, „archiviert“ und Löschen – oder der Grund, warum es nicht geht.
+ * Als eigenes Bauteil, damit es sich ohne Dialog zeichnen und prüfen lässt.
+ */
+@Composable
+internal fun PlayerEditFields(
+    row: PlayerRow,
+    name: String,
+    onNameChange: (String) -> Unit,
+    nameError: Boolean,
+    archived: Boolean,
+    onArchivedChange: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+) {
+    Column {
+        OutlinedTextField(
+            value = name,
+            onValueChange = onNameChange,
+            label = { Text(stringResource(R.string.new_player_name)) },
+            singleLine = true,
+            // Einen selbst festgelegten Namen kann hier niemand mehr ändern.
+            enabled = !row.nameLocked,
+            isError = nameError,
+            supportingText = when {
+                row.nameLocked -> {
+                    { Text(stringResource(R.string.round_name_locked)) }
+                }
+                nameError -> {
+                    { Text(stringResource(R.string.new_player_name_error)) }
+                }
+                else -> null
+            },
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+        )
+        SwitchRow(
+            title = stringResource(R.string.players_archive_label),
+            subtitle = stringResource(R.string.players_archive_hint),
+            checked = archived,
+            onCheckedChange = onArchivedChange,
+        )
+        if (row.canDelete) {
+            TextButton(
+                onClick = onDelete,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.players_delete), color = MaterialTheme.colorScheme.error) }
+        } else {
+            Text(
+                if (row.owned) {
+                    stringResource(R.string.round_player_owned)
+                } else {
+                    pluralStringResource(R.plurals.players_delete_blocked, row.eveningCount, row.eveningCount)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
 }

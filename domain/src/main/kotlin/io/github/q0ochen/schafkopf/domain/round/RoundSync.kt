@@ -502,9 +502,13 @@ class RoundSync(
             // Erst der Abend, dann die Basis: Bricht es dazwischen ab, führt der nächste Abgleich noch einmal zusammen
             // und kommt zum selben Ergebnis. Andersherum sähe Neues vom Server aus, als wäre es hier gelöscht worden.
             setBase(id, EveningBase(row.version, remote))
-            if (merged == remote) return true
-            val saved = api.saveEvening(link.roundId, merged, row.version) ?: return false
-            setBase(id, EveningBase(saved.version, merged))
+            // Hochgeladen wird, was jetzt wirklich auf dem Gerät steht. Speichert die Ablage etwas anders, als es kam
+            // (zum Beispiel Zeitpunkte nur auf Millisekunden genau), gilt ihre Fassung – sonst hielte das Gerät den
+            // Abend beim nächsten Mal für geändert.
+            val stored = evenings.evening(id).first() ?: return true
+            if (stored == remote) return true
+            val saved = api.saveEvening(link.roundId, stored, row.version) ?: return false
+            setBase(id, EveningBase(saved.version, stored))
             countPush(saved.rev)
             return true
         }

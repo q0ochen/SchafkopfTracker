@@ -84,6 +84,12 @@ fun SettingsScreen(navigator: Navigator) {
             )
 
             HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+            LinkRow(
+                title = stringResource(R.string.round_title),
+                subtitle = stringResource(R.string.round_entry_hint),
+                onClick = { navigator.open(Screen.Round) },
+            )
+            HorizontalDivider()
             LinkRow(stringResource(R.string.settings_rules), onClick = { navigator.open(Screen.Rules(null)) })
             HorizontalDivider()
             LinkRow(

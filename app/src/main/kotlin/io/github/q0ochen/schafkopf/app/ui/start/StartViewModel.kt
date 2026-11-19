@@ -2,6 +2,8 @@ package io.github.q0ochen.schafkopf.app.ui.start
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.q0ochen.schafkopf.app.round.RoundCoordinator
+import io.github.q0ochen.schafkopf.app.round.RoundState
 import io.github.q0ochen.schafkopf.domain.evening.EveningCalculator
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
@@ -33,7 +35,10 @@ data class StartUiState(
     val evenings: List<EveningCard> = emptyList(),
 )
 
-class StartViewModel(evenings: EveningRepository, players: PlayerRepository) : ViewModel() {
+class StartViewModel(evenings: EveningRepository, players: PlayerRepository, coordinator: RoundCoordinator) : ViewModel() {
+
+    /** Der Stand der gemeinsamen Runde für die Zeile auf der Startseite. */
+    val round: StateFlow<RoundState> = coordinator.state
 
     val state: StateFlow<StartUiState> = combine(evenings.evenings, players.players) { list, allPlayers ->
         val names = allPlayers.associate { it.id to it.name }

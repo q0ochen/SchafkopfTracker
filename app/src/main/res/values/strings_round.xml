@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Gemeinsame Runde. Die Texte sind in docs/ARCHITEKTUR.md, Abschnitt 8.9 festgelegt und in der Web-App dieselben. -->
+    <string name="round_title">Gemeinsame Runde</string>
+    <string name="round_entry_hint">Alle tragen vom eigenen Handy ein</string>
+    <string name="round_entry_linked">Runde: %1$s</string>
+
+    <!-- Statuszeile -->
+    <string name="round_status_signed_out">Anmeldung abgelaufen – bitte neu anmelden</string>
+    <plurals name="round_status_unreadable">
+        <item quantity="one">%1$d Abend kann diese Version nicht lesen – bitte die App aktualisieren</item>
+        <item quantity="other">%1$d Abende kann diese Version nicht lesen – bitte die App aktualisieren</item>
+    </plurals>
+    <plurals name="round_status_refused">
+        <item quantity="one">%1$d Abend nimmt der Server nicht an</item>
+        <item quantity="other">%1$d Abende nimmt der Server nicht an</item>
+    </plurals>
+    <string name="round_status_offline">Kein Netz</string>
+    <plurals name="round_status_offline_pending">
+        <item quantity="one">Kein Netz – %1$d Änderung wartet</item>
+        <item quantity="other">Kein Netz – %1$d Änderungen warten</item>
+    </plurals>
+    <string name="round_status_server">Server nicht erreichbar</string>
+    <plurals name="round_status_server_pending">
+        <item quantity="one">Server nicht erreichbar – %1$d Änderung wartet</item>
+        <item quantity="other">Server nicht erreichbar – %1$d Änderungen warten</item>
+    </plurals>
+    <plurals name="round_status_pending">
+        <item quantity="one">%1$d Änderung wartet</item>
+        <item quantity="other">%1$d Änderungen warten</item>
+    </plurals>
+    <string name="round_status_synced">Abgeglichen</string>
+    <string name="round_status_icon">Gemeinsame Runde: %1$s</string>
+
+    <!-- Kein Server eingerichtet -->
+    <string name="round_not_configured">Der Server ist noch nicht eingerichtet.</string>
+    <string name="round_not_configured_hint">Sobald er eingerichtet ist, können alle vom eigenen Handy eintragen.</string>
+
+    <!-- Nicht angemeldet -->
+    <string name="round_intro_heading">Gemeinsam eintragen</string>
+    <string name="round_intro_text">Alle in der Runde tragen vom eigenen Handy ein und sehen denselben Stand.</string>
+    <string name="round_intro_privacy">Namen, Abende und Beträge der Runde liegen dafür auf einem Server in Frankfurt (Supabase). Zum Anmelden brauchst du ein Google-Konto.</string>
+    <string name="round_sign_in">Mit Google anmelden</string>
+    <string name="round_invited_sign_in">Du bist eingeladen. Melde dich an, um beizutreten.</string>
+    <string name="round_no_browser">Für die Anmeldung braucht es einen Browser auf dem Handy.</string>
+    <string name="round_sign_in_failed">Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen.</string>
+    <string name="round_sign_in_cancelled">Die Anmeldung wurde abgebrochen.</string>
+    <string name="round_other_account">Du bist jetzt mit einem anderen Konto angemeldet. Die Runde wurde von diesem Gerät getrennt; die Daten bleiben hier.</string>
+    <string name="round_detached">Die Runde gibt es nicht mehr, oder du gehörst nicht mehr dazu. Die Daten bleiben als Kopie auf diesem Gerät.</string>
+
+    <!-- Angemeldet, ohne Runde -->
+    <string name="round_signed_in_as">Angemeldet als %1$s</string>
+    <string name="round_signed_in">Angemeldet</string>
+    <string name="round_invite_card">Einladung in die Runde %1$s</string>
+    <plurals name="round_members_count">
+        <item quantity="one">%1$d Mitglied</item>
+        <item quantity="other">%1$d Mitglieder</item>
+    </plurals>
+    <string name="round_join">Beitreten</string>
+    <string name="round_invite_discard">Einladung verwerfen</string>
+    <string name="round_my_rounds">Deine Runden</string>
+    <string name="round_use">Auf diesem Gerät verwenden</string>
+    <string name="round_create_heading">Neue Runde anlegen</string>
+    <string name="round_create_name">Name der Runde</string>
+    <string name="round_create_default_name">Schafkopfrunde</string>
+    <string name="round_create_hint">Alle Abende und Spieler dieses Geräts kommen mit in die Runde.</string>
+    <string name="round_create">Runde anlegen</string>
+    <string name="round_redeem_heading">Einladung einlösen</string>
+    <string name="round_redeem_field">Link oder Code</string>
+    <string name="round_sign_out">Abmelden</string>
+    <string name="round_working">Einen Moment …</string>
+
+    <!-- Rückfrage vor dem Beitreten oder Verwenden -->
+    <string name="round_replace_title">Daten dieses Geräts ersetzen?</string>
+    <plurals name="round_replace_text">
+        <item quantity="one">Auf diesem Gerät liegt %1$d Abend. Er wird durch die Daten der Runde ersetzt. Sichere ihn vorher, wenn du ihn behalten willst.</item>
+        <item quantity="other">Auf diesem Gerät liegen %1$d Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten willst.</item>
+    </plurals>
+    <string name="round_replace_text_players">Die Spieler dieses Geräts werden durch die der Runde ersetzt.</string>
+    <string name="round_replace_confirm">Ersetzen</string>
+    <string name="round_replace_backup">Zur Sicherung</string>
+
+    <!-- Das bin ich -->
+    <string name="round_claim_heading">Wer bist du?</string>
+    <string name="round_claim_new">Ich bin neu</string>
+    <string name="round_claim_name">Dein Name</string>
+    <string name="round_claim_hint">Dein Name lässt sich danach nicht mehr ändern.</string>
+    <string name="round_claim">Das bin ich</string>
+    <string name="round_claim_confirm_title">Als %1$s festlegen?</string>
+    <string name="round_claim_confirm_text">Der Name lässt sich danach nicht mehr ändern.</string>
+    <string name="round_claim_confirm">Festlegen</string>
+
+    <!-- Verbunden -->
+    <string name="round_sync_now">Jetzt abgleichen</string>
+    <string name="round_members">Mitglieder</string>
+    <string name="round_member_you">%1$s (du)</string>
+    <string name="round_member_unnamed">Noch ohne Namen</string>
+    <string name="round_invite">Einladen</string>
+    <string name="round_invite_message">Komm in unsere Schafkopfrunde %1$s: %2$s</string>
+    <string name="round_invite_hint">Der Link gilt 14 Tage.</string>
+    <string name="round_invite_share_title">Einladung weitergeben</string>
+    <string name="round_leave">Runde verlassen</string>
+    <string name="round_leave_title">Runde verlassen?</string>
+    <string name="round_leave_text">Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt in der Runde.</string>
+    <string name="round_sign_out_title">Abmelden?</string>
+    <string name="round_sign_out_text">Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier.</string>
+    <plurals name="round_pending_warning">
+        <item quantity="one">%1$d Änderung ist noch nicht hochgeladen und kommt nicht mehr in der Runde an.</item>
+        <item quantity="other">%1$d Änderungen sind noch nicht hochgeladen und kommen nicht mehr in der Runde an.</item>
+    </plurals>
+    <string name="round_notices">Hinweise</string>
+    <string name="round_notices_clear">Hinweise ausblenden</string>
+
+    <!-- Fehlertexte -->
+    <string name="round_error_invalid_invite">Die Einladung ist abgelaufen oder ungültig.</string>
+    <string name="round_error_no_code">Das ist kein gültiger Einladungslink.</string>
+    <string name="round_error_name_taken">Den Namen gibt es in der Runde schon.</string>
+    <string name="round_error_invalid_name">Bitte einen Namen mit 1 bis 24 Zeichen eingeben.</string>
+    <string name="round_error_invalid_round_name">Bitte einen Namen mit 1 bis 40 Zeichen eingeben.</string>
+    <string name="round_error_player_taken">Diesen Spieler hat gerade jemand anders gewählt.</string>
+    <string name="round_error_already_claimed">Du hast schon einen Namen in dieser Runde.</string>
+    <string name="round_error_limit">Mehr geht nicht: Die Grenze für Runden, Mitglieder oder Einladungen ist erreicht.</string>
+    <string name="round_error_offline">Keine Verbindung. Bitte später noch einmal versuchen.</string>
+    <string name="round_error_generic">Das hat nicht geklappt. Bitte später noch einmal versuchen.</string>
+
+    <!-- Hinweise aus dem Abgleich -->
+    <string name="round_notice_name_locked">%1$s hat den Namen selbst festgelegt. Er bleibt.</string>
+    <string name="round_notice_name_taken_dropped">Den Namen %1$s gibt es in der Runde schon. Der neue Spieler wurde nicht angelegt.</string>
+    <string name="round_notice_name_taken_renamed">Den Namen %1$s gibt es in der Runde schon. Der Spieler heißt jetzt %2$s.</string>
+    <string name="round_notice_player_owned">%1$s gehört zu einem Mitglied und lässt sich nicht löschen.</string>
+    <string name="round_notice_limit">Die Runde hat schon 40 Spieler. %1$s wurde nicht hochgeladen.</string>
+    <string name="round_notice_invalid_name">Der Name %1$s ist nicht erlaubt.</string>
+
+    <!-- Abend -->
+    <string name="round_dealer_you">Du gibst – trag dieses Spiel ein.</string>
+    <string name="round_dealer_other">%1$s gibt und trägt ein.</string>
+    <string name="round_duplicate">Doppelt eingetragen?</string>
+
+    <!-- Spieler -->
+    <string name="round_name_locked">Name selbst festgelegt</string>
+    <string name="round_player_owned">Dieser Spieler gehört zu einem Mitglied der Runde und lässt sich nicht löschen.</string>
+</resources>

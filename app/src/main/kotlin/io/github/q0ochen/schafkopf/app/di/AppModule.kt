@@ -20,7 +20,26 @@ import io.github.q0ochen.schafkopf.app.storage.JsonRulesCodec
 import io.github.q0ochen.schafkopf.app.ui.ai.AiSettingsViewModel
 import io.github.q0ochen.schafkopf.app.storage.JsonSettingsCodec
 import io.github.q0ochen.schafkopf.app.storage.LegacyFileImport
+import io.github.q0ochen.schafkopf.BuildConfig
 import io.github.q0ochen.schafkopf.R
+import io.github.q0ochen.schafkopf.app.SchafkopfApp
+import io.github.q0ochen.schafkopf.app.round.EncryptedSessionStorage
+import io.github.q0ochen.schafkopf.app.round.InviteMemory
+import io.github.q0ochen.schafkopf.app.round.JsonRoundCodec
+import io.github.q0ochen.schafkopf.app.round.PreferencesInviteMemory
+import io.github.q0ochen.schafkopf.app.round.RoundBackgroundSync
+import io.github.q0ochen.schafkopf.app.round.RoundCoordinator
+import io.github.q0ochen.schafkopf.app.round.RoundServer
+import io.github.q0ochen.schafkopf.app.ui.round.RoundViewModel
+import io.github.q0ochen.schafkopf.data.round.RoundAccount
+import io.github.q0ochen.schafkopf.data.round.SupabaseConfig
+import io.github.q0ochen.schafkopf.database.RoomRoundStore
+import io.github.q0ochen.schafkopf.domain.round.RoundApi
+import io.github.q0ochen.schafkopf.domain.round.RoundConnection
+import io.github.q0ochen.schafkopf.domain.round.RoundStore
+import io.github.q0ochen.schafkopf.domain.round.RoundSync
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import io.github.q0ochen.schafkopf.data.backup.BackupService
 import io.github.q0ochen.schafkopf.data.drive.DriveBackup
 import io.github.q0ochen.schafkopf.data.drive.GoogleDriveClient
@@ -53,6 +72,9 @@ import org.koin.dsl.onClose
 import java.time.Clock
 import java.util.UUID
 
+
+/** Die Adresse der Web-App; Einladungslinks führen dorthin (docs/ARCHITEKTUR.md, Abschnitt 8.1). */
+private const val WEB_APP_URL = "https://q0ochen.github.io/SchafkopfTracker/"
 
 /** Version der App, wie sie im Kopf jeder Sicherung steht. */
 private fun appVersion(context: Context): String =
@@ -105,9 +127,44 @@ val appModule = module {
     single { AutoBackupRunner(get(), get(), get(), get(), get()) }
     single { AutoBackupScheduler({ WorkManager.getInstance(androidContext()) }, get()) }
 
-    viewModel { StartViewModel(get(), get()) }
+    // Gemeinsame Runde: Server (Supabase) über OkHttp, Gerätezustand in der Datenbank, Abgleich im Vordergrund und
+    // über WorkManager. Ohne Adresse des Servers (BuildConfig leer) ist die Funktion abgeschaltet.
+    single {
+        RoundServer(
+            config = SupabaseConfig.of(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_PUBLISHABLE_KEY),
+            client = get(),
+            storage = EncryptedSessionStorage(get()),
+        )
+    }
+    single<RoundApi> { get<RoundServer>().api }
+    single<RoundAccount> { get<RoundServer>().session }
+    single<RoundStore> { RoomRoundStore(get(), JsonRoundCodec) }
+    single { RoundSync(get(), get(), get(), get(), get(), get()) }
+    single { RoundConnection(get(), get(), get(), get(), get(), get()) }
+    single<InviteMemory> { PreferencesInviteMemory(androidContext()) }
+    single { RoundBackgroundSync { WorkManager.getInstance(androidContext()) } }
+    single {
+        val background: RoundBackgroundSync = get()
+        RoundCoordinator(
+            configured = get<RoundServer>().configured,
+            account = get(),
+            api = get(),
+            store = get(),
+            sync = get(),
+            connection = get(),
+            changes = AutoBackupScheduler.changesOf(get(), get(), get()),
+            invites = get(),
+            placeholders = SchafkopfApp.DEFAULT_PLAYERS,
+            webAppUrl = WEB_APP_URL,
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            onBackground = background::request,
+        )
+    }
+
+    viewModel { StartViewModel(get(), get(), get()) }
+    viewModel { RoundViewModel(get(), get(), get()) }
     viewModel { NewEveningViewModel(get(), get(), get(), get(), get()) }
-    viewModel { params -> BoardViewModel(EveningId(params.get(0)), get(), get(), get(), get()) }
+    viewModel { params -> BoardViewModel(EveningId(params.get(0)), get(), get(), get(), get(), get()) }
     viewModel { params ->
         GameFormViewModel(
             eveningId = EveningId(params.get(0)),
@@ -137,5 +194,5 @@ val appModule = module {
     }
     viewModel { SettingsViewModel(get()) }
     viewModel { BackupViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
-    viewModel { PlayersViewModel(get(), get(), get()) }
+    viewModel { PlayersViewModel(get(), get(), get(), get()) }
 }

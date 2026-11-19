@@ -3,8 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-        Internet nur für zwei freiwillige Dinge: den Abend-Kommentator mit Sprachmodell (standardmäßig aus, sendet erst
-        nach Zustimmung) und die Sicherung in Google Drive. Alles andere funktioniert ohne Netz.
+        Internet nur für drei freiwillige Dinge: den Abend-Kommentator mit Sprachmodell (standardmäßig aus, sendet erst
+        nach Zustimmung), die Sicherung in Google Drive und die gemeinsame Runde (erst nach der Anmeldung). Alles
+        andere funktioniert ohne Netz.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -19,13 +20,30 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
+        <!--
+            singleTask: Kehrt der Browser aus der Anmeldung zurück oder tippt jemand einen Einladungslink an, landet
+            das in der schon laufenden App (onNewIntent) statt in einer zweiten.
+        -->
         <activity
             android:name=".app.MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!--
+                Gemeinsame Runde: Rückkehr aus der Anmeldung (schafkopftracker://auth-callback?code=…) und
+                Einladungen (schafkopftracker://einladung/<Code>). Der Code allein nützt niemandem (PKCE), und
+                eine Einladung wird erst nach Anmeldung und Rückfrage eingelöst.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="schafkopftracker" android:host="auth-callback" />
+                <data android:scheme="schafkopftracker" android:host="einladung" />
             </intent-filter>
         </activity>
 

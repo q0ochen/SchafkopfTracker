@@ -4,12 +4,16 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.q0ochen.schafkopf.app.ui.ai.AiSettingsScreen
@@ -17,12 +21,15 @@ import io.github.q0ochen.schafkopf.app.ui.backup.BackupScreen
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
 import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormScreen
+import io.github.q0ochen.schafkopf.app.round.RoundCoordinator
 import io.github.q0ochen.schafkopf.app.ui.newevening.NewEveningScreen
+import io.github.q0ochen.schafkopf.app.ui.round.RoundScreen
 import io.github.q0ochen.schafkopf.app.ui.settings.PlayersScreen
 import io.github.q0ochen.schafkopf.app.ui.settings.RulesScreen
 import io.github.q0ochen.schafkopf.app.ui.settings.SettingsScreen
 import io.github.q0ochen.schafkopf.app.ui.start.StartScreen
 import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsScreen
+import org.koin.compose.koinInject
 
 /**
  * Hält je Bildschirm auf dem Stapel einen eigenen Behälter für ViewModels. Er überlebt Drehungen des Geräts
@@ -54,6 +61,17 @@ fun AppNavHost() {
     val entryIds = navigator.entries.map { it.id }
 
     LaunchedEffect(entryIds) { stores.retainOnly(entryIds.toSet()) }
+
+    // Ein Einladungslink oder die Rückkehr aus der Anmeldung öffnet die gemeinsame Runde (einmal je Anlass).
+    val coordinator: RoundCoordinator = koinInject()
+    val openRequests = coordinator.state.collectAsStateWithLifecycle().value.openRequests
+    var handledRequests by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(openRequests) {
+        if (openRequests > handledRequests) {
+            handledRequests = openRequests
+            if (navigator.current.screen != Screen.Round) navigator.open(Screen.Round)
+        }
+    }
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }
 
     val owner = remember(entry.id) {
@@ -76,6 +94,7 @@ fun AppNavHost() {
                 is Screen.Rules -> RulesScreen(screen.eveningId, navigator)
                 Screen.AiSettings -> AiSettingsScreen(navigator)
                 Screen.Backup -> BackupScreen(navigator)
+                Screen.Round -> RoundScreen(navigator)
             }
         }
     }
