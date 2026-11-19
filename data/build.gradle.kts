@@ -32,7 +32,12 @@ dependencies {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        // Die Probe gegen ein echtes Supabase (SupabaseLiveTest, Marke „live“) läuft nur, wenn seine Adresse angegeben
+        // ist: im Workflow „Supabase“ auf GitHub, der dafür den lokalen Stack der Supabase CLI startet. Sonst gehört sie
+        // gar nicht zum Lauf und zählt auch nicht mit.
+        if (System.getenv("SKT_LIVE_URL").isNullOrBlank()) excludeTags("live")
+    }
 
     // Golden-Daten für die Web-App (web/src/data): WebFormatGoldenTest vergleicht die eingecheckte Datei mit dem, was
     // der Kotlin-Code heute schreibt und liest, und schlägt fehl, wenn sie veraltet ist. Mit -PgoldenWrite=true schreibt

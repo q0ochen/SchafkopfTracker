@@ -1,6 +1,8 @@
-# Prüft das Supabase-Backend der gemeinsamen Runde bei jeder Änderung: alle Migrationen auf einer frischen lokalen
-# Datenbank und die pgTAP-Tests (Schema und Rechte, Row Level Security, jede Funktion mit jedem Fehlercode und
-# jeder Obergrenze, die Zählung über rev, Konto löschen).
+# Prüft das Supabase-Backend der gemeinsamen Runde bei jeder Änderung:
+# - „Datenbank“: alle Migrationen auf einer frischen lokalen Datenbank und die pgTAP-Tests (Schema und Rechte, Row
+#   Level Security, jede Funktion mit jedem Fehlercode und jeder Obergrenze, die Zählung über rev, Konto löschen).
+# - „Anbindung“: die Anbindung der Android-App (data/…/round) gegen das echte lokale Supabase – Anmeldung erneuern und
+#   beenden, jede Funktion über die Datenschnittstelle, seitenweises Lesen, der ganze Abgleich mit zwei Geräten.
 # Es wird nichts bereitgestellt – dafür gibt es den manuellen Workflow „Supabase Deploy“.
 name: Supabase
 
@@ -8,10 +10,18 @@ on:
   push:
     paths:
       - "supabase/**"
+      - "data/**"
+      - "domain/**"
+      - "gradle/**"
+      - "tools/jvm-build.sh"
       - ".github/workflows/supabase.yml"
   pull_request:
     paths:
       - "supabase/**"
+      - "data/**"
+      - "domain/**"
+      - "gradle/**"
+      - "tools/jvm-build.sh"
       - ".github/workflows/supabase.yml"
   workflow_dispatch:
 
@@ -67,6 +77,102 @@ jobs:
       - name: Datenbank-Protokoll anzeigen (nur bei Fehlern)
         if: failure()
         run: docker logs supabase_db_schafkopftracker 2>&1 | tail -n 200
+
+      - name: Lokales Supabase stoppen
+        if: always()
+        run: supabase stop --no-backup
+
+  anbindung:
+    name: Anbindung der Apps gegen ein echtes Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Erfundene Zugangsdaten für Google, damit der Anmelde-Server die Adresse der Anmeldung annimmt und zu Google
+      # weiterleitet. Angemeldet wird damit niemand.
+      SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: probe.apps.googleusercontent.com
+      SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET: nur-eine-probe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.1
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Nur in dieser Probe und nur auf diesem Rechner: Testkonten melden sich mit E-Mail und Passwort an, weil sich
+      # die Anmeldung mit Google nicht automatisch durchspielen lässt. Im echten Projekt bleibt E-Mail ausgeschaltet.
+      - name: Anmeldung mit Passwort für Testkonten einschalten (nur in dieser Probe)
+        run: |
+          sed -i '/^\[auth\.email\]/,/^\[auth\.sms\]/ s/^enable_signup = false/enable_signup = true/' supabase/config.toml
+          sed -n '/^\[auth\.email\]/,/^\[auth\.sms\]/p' supabase/config.toml | grep -q '^enable_signup = true$'
+
+      - name: Lokales Supabase starten
+        run: >-
+          supabase start
+          -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      # Die Schlüssel des lokalen Stacks sind die bekannten Vorgaben der Supabase CLI und gelten nur auf diesem
+      # Rechner. Ausgegeben werden trotzdem nur ihre Namen.
+      - name: Adresse und Schlüssel des lokalen Stacks merken
+        run: |
+          supabase status -o env 2>/dev/null | grep -E '^[A-Z0-9_]+=' > "$RUNNER_TEMP/status.env"
+          echo "Angaben des lokalen Stacks: $(cut -d= -f1 "$RUNNER_TEMP/status.env" | tr '\n' ' ')"
+          set -a
+          . "$RUNNER_TEMP/status.env"
+          set +a
+          adresse="${API_URL:-}"
+          schluessel="${PUBLISHABLE_KEY:-${ANON_KEY:-}}"
+          verwaltung="${SERVICE_ROLE_KEY:-${SECRET_KEY:-}}"
+          if [ -z "$adresse" ] || [ -z "$schluessel" ] || [ -z "$verwaltung" ]; then
+            echo "::error title=Lokales Supabase::Adresse oder Schlüssel des lokalen Stacks fehlen in „supabase status“."
+            exit 1
+          fi
+          echo "::add-mask::$verwaltung"
+          {
+            echo "SKT_LIVE_URL=$adresse"
+            echo "SKT_LIVE_KEY=$schluessel"
+            echo "SKT_LIVE_ADMIN_KEY=$verwaltung"
+          } >> "$GITHUB_ENV"
+
+      # Nur die beiden reinen Kotlin-Module, ohne Android-SDK (tools/jvm-build.sh).
+      - name: Anbindung der Android-App prüfen (SupabaseLiveTest)
+        run: tools/jvm-build.sh :data:test --tests '*SupabaseLiveTest' --console=plain
+
+      # „Alles grün“ genügt nicht: Ohne die Adresse des Stacks ließe Gradle die Probe stillschweigend aus.
+      - name: Zahl der Tests prüfen und Fehler anzeigen
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, sys, xml.etree.ElementTree as ET
+          least = 9
+          tests = skipped = failed = 0
+          for file in glob.glob("data/build/test-results/test/TEST-*SupabaseLiveTest.xml"):
+              root = ET.parse(file).getroot()
+              tests += int(root.get("tests"))
+              skipped += int(root.get("skipped"))
+              failed += int(root.get("failures")) + int(root.get("errors"))
+              for case in root.iter("testcase"):
+                  for problem in list(case.findall("failure")) + list(case.findall("error")):
+                      print(f"--- {case.get('name')}")
+                      print("\n".join((problem.text or problem.get("message") or "").splitlines()[:25]))
+          ran = tests - skipped
+          print(f"Anbindung: {ran} Tests gelaufen, {failed} fehlgeschlagen (mindestens {least} erwartet)")
+          sys.exit(0 if ran >= least and not failed else "::error::Die Probe gegen das echte Supabase ist nicht vollständig gelaufen oder fehlgeschlagen.")
+          PY
+
+      - name: Protokolle der Dienste anzeigen (nur bei Fehlern)
+        if: failure()
+        run: |
+          for dienst in auth rest kong; do
+            echo "=== $dienst"
+            docker logs "supabase_${dienst}_schafkopftracker" 2>&1 | tail -n 80 || true
+          done
 
       - name: Lokales Supabase stoppen
         if: always()
