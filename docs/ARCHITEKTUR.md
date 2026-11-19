@@ -545,8 +545,8 @@ Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disc
 **Einstieg:** Auf dem Start-Bildschirm und in den Einstellungen eine Zeile „Gemeinsame Runde“. Ohne Runde mit dem
 Untertitel „Alle tragen vom eigenen Handy ein“, mit Runde „Runde: ‹Name›“ und der Statuszeile.
 
-**Statuszeile** (auch als Beschreibung des Wolken-Symbols in der Kopfzeile eines Abends; Tippen öffnet „Gemeinsame
-Runde“). Es gilt die erste zutreffende Zeile:
+**Statuszeile** (auch als Beschreibung des Wolken-Symbols in der Kopfzeile eines Abends, dort mit „Gemeinsame
+Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutreffende Zeile:
 
 | Lage | Text |
 |---|---|
@@ -566,15 +566,17 @@ Runde“). Es gilt die erste zutreffende Zeile:
   denselben Stand.“ – „Namen, Abende und Beträge der Runde liegen dafür auf einem Server in Frankfurt (Supabase).
   Zum Anmelden brauchst du ein Google-Konto.“ Knopf „Mit Google anmelden“. Wartet eine Einladung: „Du bist
   eingeladen. Melde dich an, um beizutreten.“
-- *Angemeldet, ohne Runde:* „Angemeldet als ‹E-Mail›“. Wartet eine Einladung: Karte „Einladung in die Runde
-  ‹Name›“ (‹n› Mitglieder), Knopf „Beitreten“. Hat das Konto Runden: „Deine Runden“, je Runde ‹Name› und
+- *Angemeldet, ohne Runde:* „Angemeldet als ‹E-Mail›“ (ohne bekannte Adresse nur „Angemeldet“). Wartet eine
+  Einladung: Karte „Einladung in die Runde ‹Name›“ (‹n› Mitglieder; solange der Name noch geladen wird, „…“), Knopf
+  „Beitreten“, darunter „Einladung verwerfen“. Hat das Konto Runden: „Deine Runden“, je Runde ‹Name› und
   „‹n› Mitglieder“, Knopf „Auf diesem Gerät verwenden“. „Neue Runde anlegen“: Feld „Name der Runde“ (Vorgabe
   „Schafkopfrunde“), Hinweis „Alle Abende und Spieler dieses Geräts kommen mit in die Runde.“, Knopf „Runde
   anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten „Abmelden“.
 - *Rückfrage vor dem Beitreten oder Verwenden*, wenn `hasOwnData`: „Daten dieses Geräts ersetzen?“ – „Auf diesem
   Gerät liegen ‹n› Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten
-  willst.“ (ohne Abende: „Die Spieler dieses Geräts werden durch die der Runde ersetzt.“) Knöpfe „Ersetzen“,
-  „Zur Sicherung“, „Abbrechen“.
+  willst.“ (bei 1: „Auf diesem Gerät liegt 1 Abend. Er wird durch die Daten der Runde ersetzt. Sichere ihn vorher,
+  wenn du ihn behalten willst.“; ohne Abende: „Die Spieler dieses Geräts werden durch die der Runde ersetzt.“)
+  Knöpfe „Ersetzen“, „Zur Sicherung“, „Abbrechen“.
 - *Verbunden, „Das bin ich“ steht aus:* Karte „Wer bist du?“ mit den Spielern ohne Besitzer (nicht archiviert) und
   „Ich bin neu“ zur Auswahl, Feld „Dein Name“ (vorbelegt mit dem Namen des gewählten Spielers, außer er heißt noch
   „Spieler ‹N›“), Hinweis „Dein Name lässt sich danach nicht mehr ändern.“, Knopf „Das bin ich“. Rückfrage: „Als
@@ -585,7 +587,18 @@ Runde“). Es gilt die erste zutreffende Zeile:
   darunter „Der Link gilt 14 Tage.“ Unten „Runde verlassen“ (Rückfrage „Runde verlassen?“ – „Die Daten bleiben als
   Kopie auf diesem Gerät. Dein Name bleibt in der Runde.“) und „Abmelden“ (Rückfrage „Abmelden?“ – „Dieses Gerät
   wird von der Runde getrennt. Die Daten bleiben als Kopie hier.“). Wartet noch etwas, steht in beiden Rückfragen
-  zusätzlich: „‹n› Änderungen sind noch nicht hochgeladen und kommen nicht mehr in der Runde an.“
+  zusätzlich: „‹n› Änderungen sind noch nicht hochgeladen und kommen nicht mehr in der Runde an.“ (bei 1: „1
+  Änderung ist noch nicht hochgeladen und kommt nicht mehr in der Runde an.“)
+- *Verbunden, Anmeldung abgelaufen:* statt „Jetzt abgleichen“, „Wer bist du?“, „Einladen“ und „Runde verlassen“
+  nur der Knopf „Mit Google anmelden“; Mitglieder und „Abmelden“ bleiben.
+- Solange eine Aktion läuft, sind die Knöpfe gesperrt, und unten steht „Einen Moment …“.
+
+**Meldungen** (bleiben stehen, bis man sie mit „OK“ wegtippt): Anmeldung gescheitert „Die Anmeldung hat nicht
+geklappt. Bitte noch einmal versuchen.“; im Browser abgelehnt (`access_denied`) „Die Anmeldung wurde abgebrochen.“;
+mit einem anderen Konto angemeldet als dem der verbundenen Runde „Du bist jetzt mit einem anderen Konto angemeldet.
+Die Runde wurde von diesem Gerät getrennt; die Daten bleiben hier.“; nach `Detached` „Die Runde gibt es nicht mehr,
+oder du gehörst nicht mehr dazu. Die Daten bleiben als Kopie auf diesem Gerät.“; nur Android, wenn kein Browser
+da ist: „Für die Anmeldung braucht es einen Browser auf dem Handy.“
 
 **Fehlertexte:** `invalid_invite` „Die Einladung ist abgelaufen oder ungültig.“; kein Code im eingefügten Text „Das
 ist kein gültiger Einladungslink.“; `name_taken` „Den Namen gibt es in der Runde schon.“; `invalid_name` „Bitte
@@ -595,7 +608,8 @@ gerade jemand anders gewählt.“; `already_claimed` „Du hast schon einen Name
 Verbindung. Bitte später noch einmal versuchen.“; sonst „Das hat nicht geklappt. Bitte später noch einmal
 versuchen.“
 
-**Hinweise aus dem Abgleich** (`SyncNotice`, als kurze Meldung und auf dem Bildschirm „Gemeinsame Runde“):
+**Hinweise aus dem Abgleich** (`SyncNotice`, auf dem Bildschirm „Gemeinsame Runde“ unter der Überschrift
+„Hinweise“, mit dem Knopf „Hinweise ausblenden“):
 `name_locked` „‹nowName› hat den Namen selbst festgelegt. Er bleibt.“; `name_taken` ohne `nowName` „Den Namen
 ‹name› gibt es in der Runde schon. Der neue Spieler wurde nicht angelegt.“; `name_taken` mit `nowName` „Den Namen
 ‹name› gibt es in der Runde schon. Der Spieler heißt jetzt ‹nowName›.“; `player_owned` „‹name› gehört zu einem
@@ -608,7 +622,8 @@ ein.“ Eintragen kann trotzdem jeder. Spiele aus `DuplicateCheck.suspects` trag
 „Doppelt eingetragen?“ (als Text, nicht nur als Farbe).
 
 **Spieler:** Ein fester Name (`nameLocked`) lässt sich nicht bearbeiten, darunter steht „Name selbst festgelegt“;
-nur der Ersteller der Runde darf ihn korrigieren. Löschen lassen sich nur Spieler ohne Besitzer.
+nur der Ersteller der Runde darf ihn korrigieren. Löschen lassen sich nur Spieler ohne Besitzer; sonst steht dort
+„Dieser Spieler gehört zu einem Mitglied der Runde und lässt sich nicht löschen.“
 
 **Einladungsseite der Web-App** (`#/einladung/‹Code›`): „Einladung in eine Schafkopfrunde“, Knöpfe „In der
 Android-App öffnen“ und „Hier beitreten“ (weiter nach `#/runde`, der Code wird gemerkt). Ohne gültigen Code: „Das
