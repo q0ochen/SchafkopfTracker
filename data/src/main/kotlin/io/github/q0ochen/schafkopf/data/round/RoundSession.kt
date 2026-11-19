@@ -2,14 +2,11 @@ package io.github.q0ochen.schafkopf.data.round
 
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.RoundException
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import java.security.SecureRandom
 import java.time.Clock
 import java.time.Duration
@@ -21,22 +18,37 @@ import java.time.Instant
  */
 data class StoredSession(val refreshToken: String, val userId: String, val email: String?)
 
-/**
- * Sicherer Ablageort für die Anmeldung; die App legt ihn verschlüsselt an. Die Aufrufe dürfen blockieren und werden
- * nur im Hintergrund benutzt.
- */
+/** Sicherer Ablageort für die Anmeldung; die App legt ihn verschlüsselt an. */
 interface SessionStorage {
     /** `null`, wenn niemand angemeldet ist oder sich der Eintrag nicht mehr lesen lässt. */
-    fun load(): StoredSession?
+    suspend fun load(): StoredSession?
 
-    fun save(session: StoredSession)
+    suspend fun save(session: StoredSession)
 
-    fun clear()
+    suspend fun clear()
 
     /** Der PKCE-Verifier einer begonnenen Anmeldung; er muss überstehen, dass Android die App im Hintergrund beendet. */
-    fun pendingVerifier(): String?
+    suspend fun pendingVerifier(): String?
 
-    fun setPendingVerifier(verifier: String?)
+    suspend fun setPendingVerifier(verifier: String?)
+}
+
+/** Die Anmeldung dieses Geräts aus Sicht der Oberfläche. Als Schnittstelle, damit sich die Abläufe ohne Server prüfen lassen. */
+interface RoundAccount {
+    /** Das angemeldete Konto; `null`, solange niemand angemeldet ist oder [load] noch nicht gelaufen ist. */
+    val account: StateFlow<Account?>
+
+    /** Liest die gespeicherte Anmeldung (einmal genügt). */
+    suspend fun load(): Account?
+
+    /** Beginnt die Anmeldung und liefert die Adresse für den Browser. */
+    suspend fun beginSignIn(): String
+
+    /** Schließt die Anmeldung mit dem Code aus der Rückkehr-Adresse ab. */
+    suspend fun completeSignIn(code: String): Account
+
+    /** Meldet ab; auf dem Gerät klappt das immer, auch ohne Netz. */
+    suspend fun signOut()
 }
 
 /** Liefert gültige Zugriffstoken für Aufrufe im Namen des Kontos. */
@@ -55,15 +67,14 @@ interface AccessTokenSource {
  * - Das Refresh-Token wird bei jeder Erneuerung ersetzt und sofort gespeichert.
  * - Kennt der Server die Sitzung nicht mehr, gilt das Gerät als abgemeldet. Bei einem Netzfehler oder einer
  *   vorübergehenden Störung bleibt es angemeldet.
- * - Der Speicher wird erst bei Bedarf und nie auf dem Hauptthread gelesen.
+ * - Der Speicher wird erst bei Bedarf gelesen.
  */
 class RoundSession(
     private val auth: AuthApi,
     private val storage: SessionStorage,
     private val clock: Clock = Clock.systemUTC(),
     private val random: SecureRandom = SecureRandom(),
-    private val io: CoroutineDispatcher = Dispatchers.IO,
-) : AccessTokenSource {
+) : AccessTokenSource, RoundAccount {
 
     private val mutex = Mutex()
     private var loaded = false
@@ -72,19 +83,16 @@ class RoundSession(
     private var accessTokenExpiresAt: Instant = Instant.EPOCH
     private val state = MutableStateFlow<Account?>(null)
 
-    /** Das angemeldete Konto; `null`, solange niemand angemeldet ist oder [load] noch nicht gelaufen ist. */
-    val account: StateFlow<Account?> = state.asStateFlow()
+    override val account: StateFlow<Account?> = state.asStateFlow()
 
-    /** Liest die gespeicherte Anmeldung (einmal, im Hintergrund). */
-    suspend fun load(): Account? = mutex.withLock {
+    override suspend fun load(): Account? = mutex.withLock {
         ensureLoaded()
         state.value
     }
 
-    /** Beginnt die Anmeldung und liefert die Adresse für den Browser. */
-    suspend fun beginSignIn(): String {
+    override suspend fun beginSignIn(): String {
         val verifier = Pkce.newVerifier(random)
-        withContext(io) { storage.setPendingVerifier(verifier) }
+        storage.setPendingVerifier(verifier)
         return auth.authorizeUrl(Pkce.challenge(verifier))
     }
 
@@ -92,12 +100,11 @@ class RoundSession(
      * Schließt die Anmeldung mit dem Code aus der Rückkehr-Adresse ab. Ohne begonnene Anmeldung (oder beim zweiten
      * Aufruf mit demselben Code) scheitert sie mit [RoundError.SIGNED_OUT].
      */
-    suspend fun completeSignIn(code: String): Account = mutex.withLock {
+    override suspend fun completeSignIn(code: String): Account = mutex.withLock {
         ensureLoaded()
-        val verifier = withContext(io) { storage.pendingVerifier() }
-            ?: throw RoundException(RoundError.SIGNED_OUT, "keine begonnene Anmeldung")
+        val verifier = storage.pendingVerifier() ?: throw RoundException(RoundError.SIGNED_OUT, "keine begonnene Anmeldung")
         val tokens = auth.exchangeCode(code, verifier)
-        withContext(io) { storage.setPendingVerifier(null) }
+        storage.setPendingVerifier(null)
         apply(tokens)
         tokens.account
     }
@@ -118,7 +125,7 @@ class RoundSession(
     }
 
     /** Meldet beim Server ab, wenn er erreichbar ist, und vergisst die Anmeldung auf dem Gerät in jedem Fall. */
-    suspend fun signOut() {
+    override suspend fun signOut() {
         try {
             auth.signOut(accessToken())
         } catch (e: RoundException) {
@@ -129,7 +136,7 @@ class RoundSession(
 
     private suspend fun ensureLoaded() {
         if (loaded) return
-        val session = withContext(io) { storage.load() }
+        val session = storage.load()
         stored = session
         state.value = session?.let { Account(it.userId, it.email) }
         loaded = true
@@ -151,12 +158,10 @@ class RoundSession(
     private suspend fun apply(tokens: AuthTokens) {
         val session = StoredSession(tokens.refreshToken, tokens.account.userId, tokens.account.email)
         // Erst speichern, dann benutzen: Das alte Refresh-Token gilt ab jetzt nicht mehr.
-        withContext(io) {
-            try {
-                storage.save(session)
-            } catch (e: RuntimeException) {
-                // Streikt der Schlüsselspeicher, bleibt die Anmeldung wenigstens bis zum Beenden der App erhalten.
-            }
+        try {
+            storage.save(session)
+        } catch (e: RuntimeException) {
+            // Streikt der Schlüsselspeicher, bleibt die Anmeldung wenigstens bis zum Beenden der App erhalten.
         }
         stored = session
         accessToken = tokens.accessToken
@@ -165,7 +170,7 @@ class RoundSession(
     }
 
     private suspend fun forgetLocked() {
-        withContext(io) { storage.clear() }
+        storage.clear()
         stored = null
         accessToken = null
         accessTokenExpiresAt = Instant.EPOCH

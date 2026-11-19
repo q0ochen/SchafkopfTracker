@@ -1,0 +1,73 @@
+# Prüft das Supabase-Backend der gemeinsamen Runde bei jeder Änderung: alle Migrationen auf einer frischen lokalen
+# Datenbank und die pgTAP-Tests (Schema und Rechte, Row Level Security, jede Funktion mit jedem Fehlercode und
+# jeder Obergrenze, die Zählung über rev, Konto löschen).
+# Es wird nichts bereitgestellt – dafür gibt es den manuellen Workflow „Supabase Deploy“.
+name: Supabase
+
+on:
+  push:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/supabase.yml"
+  pull_request:
+    paths:
+      - "supabase/**"
+      - ".github/workflows/supabase.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  datenbank:
+    name: Datenbank (Migrationen und pgTAP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Feste CLI-Version (dieselbe wie im Schwesterprojekt DrinkWithMe: Release v2.122.1, Kanal „v2.stable“).
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.1
+
+      # Docker ist auf den GitHub-Runnern vorhanden. Für die Tests werden nur Datenbank, Auth (legt das
+      # Schema auth an), PostgREST und Kong gebraucht; alles andere bleibt aus, damit der Start schneller geht.
+      # Die Google-Zugangsdaten aus config.toml sind hier nicht gesetzt; die CLI warnt nur.
+      - name: Lokales Supabase starten
+        run: >-
+          supabase start
+          -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      - name: Datenbank neu aufsetzen (alle Migrationen auf leerer Datenbank)
+        run: supabase db reset
+
+      # Läuft über das ganze Verzeichnis supabase/tests. Die Datei lokal/supabase-attrappe.sql (nur für die
+      # Prüfung ohne Docker) meldet sich dabei selbst als übersprungen und ändert nichts.
+      - name: pgTAP-Tests (supabase test db)
+        run: |
+          set -o pipefail
+          supabase test db 2>&1 | tee pgtap.log
+
+      # „Alles grün“ genügt nicht: Es zählt auch, dass wirklich alle Tests gelaufen sind.
+      - name: Zahl der Tests prüfen
+        run: |
+          zeile="$(grep -E '^Files=[0-9]+, Tests=[0-9]+' pgtap.log | tail -n 1)"
+          tests="$(printf '%s' "$zeile" | sed -E 's/^Files=[0-9]+, Tests=([0-9]+).*/\1/')"
+          mindestens=556
+          echo "pgTAP: ${tests:-0} Tests (mindestens $mindestens erwartet)"
+          if [ -z "$tests" ] || [ "$tests" -lt "$mindestens" ]; then
+            echo "::error title=Zu wenige pgTAP-Tests::Gelaufen sind ${tests:-0} Tests, erwartet werden mindestens $mindestens. Wurde eine Testdatei übersprungen oder gelöscht?"
+            exit 1
+          fi
+
+      - name: Datenbank-Protokoll anzeigen (nur bei Fehlern)
+        if: failure()
+        run: docker logs supabase_db_schafkopftracker 2>&1 | tail -n 200
+
+      - name: Lokales Supabase stoppen
+        if: always()
+        run: supabase stop --no-backup

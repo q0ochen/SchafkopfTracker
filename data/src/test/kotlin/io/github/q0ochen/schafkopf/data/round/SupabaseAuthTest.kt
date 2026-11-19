@@ -8,7 +8,6 @@ import io.github.q0ochen.schafkopf.data.llm.nextRequest
 import io.github.q0ochen.schafkopf.data.llm.startLocal
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.RoundException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import mockwebserver3.MockResponse
@@ -48,24 +47,24 @@ class SupabaseAuthTest {
         var loads = 0
         var failOnSave = false
 
-        override fun load(): StoredSession? {
+        override suspend fun load(): StoredSession? {
             loads++
             return session
         }
 
-        override fun save(session: StoredSession) {
+        override suspend fun save(session: StoredSession) {
             if (failOnSave) throw IllegalStateException("Schlüsselspeicher gestört")
             saves++
             this.session = session
         }
 
-        override fun clear() {
+        override suspend fun clear() {
             session = null
         }
 
-        override fun pendingVerifier(): String? = verifier
+        override suspend fun pendingVerifier(): String? = verifier
 
-        override fun setPendingVerifier(verifier: String?) {
+        override suspend fun setPendingVerifier(verifier: String?) {
             this.verifier = verifier
         }
     }
@@ -80,7 +79,7 @@ class SupabaseAuthTest {
         SupabaseAuthApi(SupabaseHttp(TestHttp.client, SupabaseConfig(address, "sb_publishable_TEST")), clock)
 
     private fun session(storage: SessionStorage, address: String = server.baseUrl) =
-        RoundSession(auth(address), storage, clock, io = Dispatchers.Unconfined)
+        RoundSession(auth(address), storage, clock)
 
     /** Die Adresse eines Servers, der nicht mehr läuft: Jeder Aufruf dorthin scheitert wie ohne Netz. */
     private fun unreachable(): String = MockWebServer().run {

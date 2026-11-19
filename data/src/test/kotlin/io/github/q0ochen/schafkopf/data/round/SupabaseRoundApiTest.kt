@@ -359,6 +359,18 @@ class SupabaseRoundApiTest {
     }
 
     @Test
+    fun `kann die Datenbank mit einem Inhalt nichts anfangen, trifft das nur dieses eine Stueck`() = runTest {
+        // Zum Beispiel ein Nullzeichen in einer Notiz: PostgreSQL lehnt es ab, bevor die Funktion überhaupt läuft.
+        server.enqueueJson(400, """{"code":"22P05","details":"\\u0000 cannot be converted to text.","hint":null,"message":"unsupported Unicode escape sequence"}""")
+        server.enqueueJson(400, """{"code":"PGRST102","message":"Empty or invalid json"}""")
+        server.enqueueJson(400, """{"code":"22001","message":"value too long for type character varying(64)"}""")
+
+        assertEquals("INVALID_DOC: HTTP 400 22P05", errorOf { api().saveEvening(round, evening, 0) }?.message)
+        assertEquals(RoundError.INVALID_DOC, errorOf { api().saveRules(round, RuleSet.standard()) }?.error)
+        assertEquals(RoundError.INVALID_DOC, errorOf { api().savePlayer(round, Player(PlayerId("gast"), "Wirt", 0)) }?.error)
+    }
+
+    @Test
     fun `andere Fehler des Servers sind kein Grund, etwas am Geraet zu aendern`() = runTest {
         server.enqueueJson(400, """{"code":"P0001","message":"etwas_neues"}""")
         server.enqueueJson(403, """{"code":"42501","message":"permission denied for table rounds"}""")

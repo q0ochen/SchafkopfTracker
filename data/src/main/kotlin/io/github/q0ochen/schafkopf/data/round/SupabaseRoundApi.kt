@@ -200,11 +200,15 @@ class SupabaseRoundApi(
         var answer = send(token)
         if (answer.status == UNAUTHORIZED) answer = send(tokens.refreshAfterUnauthorized(token))
         if (answer.isSuccessful) return answer.body
-        val code = answer.errorCode()
+        val code = answer.errorCode().orEmpty()
         throw when {
-            answer.status == UNAUTHORIZED -> RoundException(RoundError.SIGNED_OUT, "HTTP 401 ${code.orEmpty()}".trim())
-            else -> RoundError.fromCode(code.orEmpty())?.let(::RoundException)
-                ?: RoundException(RoundError.SERVER, "HTTP ${answer.status} ${code.orEmpty()}".trim())
+            answer.status == UNAUTHORIZED -> RoundException(RoundError.SIGNED_OUT, "HTTP 401 $code".trim())
+            // Die Datenbank kann mit dem Inhalt nichts anfangen (zum Beispiel ein Nullzeichen in einem Text): Das
+            // trifft nur dieses eine Stück und wird durch Wiederholen nicht besser.
+            answer.status == BAD_REQUEST && (code.startsWith(DATA_EXCEPTION_CLASS) || code == INVALID_BODY) ->
+                RoundException(RoundError.INVALID_DOC, "HTTP 400 $code")
+            else -> RoundError.fromCode(code)?.let(::RoundException)
+                ?: RoundException(RoundError.SERVER, "HTTP ${answer.status} $code".trim())
         }
     }
 
@@ -283,6 +287,13 @@ class SupabaseRoundApi(
 
     private companion object {
         const val UNAUTHORIZED = 401
+        const val BAD_REQUEST = 400
+
+        /** SQLSTATE-Klasse 22: Die Datenbank lehnt einen Wert ab („data exception“). */
+        const val DATA_EXCEPTION_CLASS = "22"
+
+        /** Die Datenschnittstelle konnte den gesendeten Inhalt nicht lesen. */
+        const val INVALID_BODY = "PGRST102"
 
         /** So viele Abende kommen höchstens je Anfrage. */
         const val PAGE_SIZE = 100

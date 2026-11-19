@@ -1,0 +1,6 @@
+# Supabase CLI: lokale Daten, Verknüpfung mit dem echten Projekt (supabase link) und Geheimnisse.
+# Nichts davon gehört ins Repository.
+.temp/
+.branches/
+.env
+.env.*
