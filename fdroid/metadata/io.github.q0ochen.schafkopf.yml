@@ -1,11 +1,12 @@
 # Angaben für die eigene F-Droid-Paketquelle. Name, Kurz- und Langbeschreibung sowie das Symbol kommen aus
 # fastlane/metadata/android/ (dieselben Texte nutzt später auch das offizielle F-Droid).
-# Anti-Feature „NonFreeNet“: Zwei freiwillige Zusätze sprechen mit Diensten von Google (Abend-Kommentator mit
-# Gemini, Sicherung in Google Drive). Ohne sie arbeitet die App vollständig ohne Netz; keine Werbung, kein Tracking.
+# Anti-Feature „NonFreeNet“: Drei freiwillige Zusätze sprechen mit Diensten von Google (Abend-Kommentator mit
+# Gemini, Sicherung in Google Drive, Anmeldung bei der gemeinsamen Runde mit einem Google-Konto). Ohne sie arbeitet
+# die App vollständig ohne Netz; keine Werbung, kein Tracking.
 AntiFeatures:
   NonFreeNet:
-    de: Freiwillig - Abend-Kommentator mit Google Gemini und Sicherung in Google Drive.
-    en-US: Optional - evening commentator via Google Gemini and backup to Google Drive.
+    de: Freiwillig - Abend-Kommentator mit Google Gemini, Sicherung in Google Drive, gemeinsame Runde mit Anmeldung über Google.
+    en-US: Optional - evening commentator via Google Gemini, backup to Google Drive, shared round with Google sign-in.
 Categories:
   - Games
 License: CC0-1.0

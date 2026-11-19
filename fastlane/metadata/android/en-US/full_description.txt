@@ -9,10 +9,11 @@
 <li><b>Sharing:</b> closing and statistics as text or as an image, for example to Signal or Telegram.</li>
 <li><b>Backup:</b> save and restore a file (also exchangeable with the iPhone web app) and, if you like, automatically after every change, directly to Google Drive or into a file you pick once.</li>
 <li><b>Evening commentator:</b> a funny, slightly teasing summary of the evening, or a review of all evenings, in Bavarian, from text templates or, if you like, written by a language model (Google Gemini with your own key).</li>
+<li><b>Shared round:</b> if you like, everyone records from their own phone and sees the same standings, also mixed with the iPhone web app. Everybody sets their own name; the app shows who deals and marks games that were recorded twice. This needs a free server of your own (Supabase) and a Google account for each player.</li>
 <li><b>Made for dimly lit pubs:</b> dark design, large buttons, works with a screen reader.</li>
 </ul>
 
-<p><b>Privacy:</b> everything stays on the device. The app uses the internet only for two optional extras: backup to Google Drive and the evening commentator with a language model (sends only after consent, without real names by default). No own server, no ads, no tracking.</p>
+<p><b>Privacy:</b> without the optional extras everything stays on the device. The app uses the internet only for them: the shared round (names, evenings and rules are then stored on the round's server; only its members can read them), backup to Google Drive and the evening commentator with a language model (sends only after consent, without real names by default). No ads, no tracking.</p>
 
 <p><b>Test version:</b> the watch app comes later. For the iPhone there is a web app with the same calculations.</p>
 

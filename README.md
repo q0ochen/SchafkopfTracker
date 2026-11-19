@@ -10,8 +10,8 @@ rechnet aus, wer wie viel bekommt oder zahlt. Am Ende des Abends stehen Gewinner
 
 Die Testversion wird bei jeder Änderung automatisch gebaut, getestet und im Emulator probehalber installiert. Neue
 Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten. Internet braucht
-die App nur für zwei freiwillige Zusätze: den Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in
-Google Drive.
+die App nur für drei freiwillige Zusätze: die gemeinsame Runde (alle tragen vom eigenen Handy ein), den
+Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in Google Drive.
 
 ### In F-Droid (empfohlen)
 
@@ -66,9 +66,26 @@ Fürs iPhone gibt es in der Testphase eine kostenlose **Web-App** mit denselben 
 3. Den Schafkopf Tracker ab jetzt **über das neue Symbol auf dem Home-Bildschirm** öffnen. Die Home-Bildschirm-App
    hat einen eigenen Speicher; was im Safari-Tab eingetragen wurde, ist dort nicht zu sehen.
 
-Alles bleibt auf dem iPhone, und die Web-App funktioniert auch ohne Empfang. Löscht man das Symbol, sind die Daten
-weg – deshalb ab und zu **Einstellungen → Sicherung speichern**. Dieselbe Datei liest die Android-App ein
-(**Einstellungen → Sicherung und Export → Sicherung einlesen**), und umgekehrt.
+Alles bleibt auf dem iPhone (außer man tritt einer gemeinsamen Runde bei, siehe unten), und die Web-App
+funktioniert auch ohne Empfang. Löscht man das Symbol, sind die Daten weg – deshalb ab und zu **Einstellungen →
+Sicherung speichern**. Dieselbe Datei liest die Android-App ein (**Einstellungen → Sicherung und Export → Sicherung
+einlesen**), und umgekehrt.
+
+## Gemeinsame Runde
+
+Alle in der Runde können vom eigenen Handy eintragen (Android-App und Web-App gemischt) und sehen denselben Stand:
+zum Beispiel trägt ein, wer gerade gegeben hat, während der Nächste mischt. Jedes Handy behält alles selbst und
+funktioniert auch ohne Empfang; abgeglichen wird im Hintergrund.
+
+- **Einmalig richtet der Projektinhaber einen kostenlosen Server ein** (ein eigenes Supabase-Projekt in Frankfurt):
+  [docs/EINRICHTUNG-RUNDE.md](docs/EINRICHTUNG-RUNDE.md). Ohne ihn bleibt die Funktion in den Apps abgeschaltet.
+- **Mitmachen:** in der App „Gemeinsame Runde“ öffnen, mit Google anmelden, Runde anlegen oder über den
+  Einladungslink beitreten, bei „Wer bist du?“ den eigenen Spieler wählen und den eigenen Namen eintragen. Der Name
+  steht danach fest, und alle lesen dieselben vier Namen.
+- **Am Tisch:** Über dem Eintragen steht, wer gibt („… gibt und trägt ein.“). Eintragen kann trotzdem jeder; steht
+  ein Spiel doppelt da, markiert die App es mit „Doppelt eingetragen?“.
+- **Auf dem Server** liegen dann die Namen der Spieler, die Abende und das Regelwerk der Runde. Lesen können sie nur
+  die Mitglieder der Runde.
 
 ## Was die App kann (Stand der Entwicklung)
 
@@ -86,10 +103,11 @@ weg – deshalb ab und zu **Einstellungen → Sicherung speichern**. Dieselbe Da
 | Sicherung als Datei (speichern und einlesen, zwischen iPhone und Android austauschbar) | Android-App und Web-App |
 | Automatische Sicherung nach jeder Änderung, direkt in Google Drive oder in eine gewählte Datei | Android-App (Drive nach Einrichtung des Google-Cloud-Projekts) |
 | Abend-Kommentator: witzige Zusammenfassung des Abends oder Bilanz über alle Abende (Gemini mit eigenem Schlüssel oder Textbausteine) | Android-App |
+| Gemeinsame Runde: alle tragen vom eigenen Handy ein, Abgleich über einen eigenen Server, eigener fester Name, Hinweis auf den Geber und auf doppelt eingetragene Spiele | Android-App und Web-App (nach Einrichtung des Servers) |
 | Wear-OS-App | aufgeschoben bis zu einer Ausgabe ohne F-Droid |
 
-Alles liegt nur auf dem Gerät, außer man schaltet die Sicherung in Google Drive oder den Abend-Kommentator mit
-Sprachmodell selbst ein. Kein eigener Server, keine Werbung, keine Auswertung des Nutzungsverhaltens.
+Alles liegt nur auf dem Gerät, außer man tritt einer gemeinsamen Runde bei oder schaltet die Sicherung in Google
+Drive oder den Abend-Kommentator mit Sprachmodell selbst ein. Keine Werbung, keine Auswertung des Nutzungsverhaltens.
 
 ## Regeln und Abrechnung
 

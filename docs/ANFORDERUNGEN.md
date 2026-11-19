@@ -122,6 +122,13 @@ Stand 16.11.2026: umgesetzt in der Android-App (Statistik, Abschluss, Teilen als
   proprietäre Bibliotheken (15.11.2026).
 - Google Drive direkt über ein kostenloses Google-Cloud-Projekt des Projektinhabers; Abend-Kommentator ja; die Uhr
   wird aufgeschoben, bis die App auch ohne F-Droid gebaut wird (16.11.2026).
+- Gemeinsame Runde (19.11.2026): Alle tragen vom eigenen Handy ein, Android-App und Web-App gemischt; abgeglichen
+  wird über ein eigenes, kostenloses Supabase-Projekt mit Anmeldung über Google. Namen und Beträge dürfen dafür auf
+  dem Server liegen. Eintragen darf jeder; in der Regel trägt der Geber ein (Hinweis, keine Sperre). Wer beitritt,
+  legt in seiner eigenen App seinen eigenen Namen fest; er lässt sich danach nicht mehr ändern. Die Runde am
+  12.12.2026 soll damit schon mitlaufen. Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 8; Einrichtung:
+  `docs/EINRICHTUNG-RUNDE.md`.
+- Keine Spracheingabe (19.11.2026): im Wirtshaus zu laut.
 
 ## Offene Entscheidungen
 
