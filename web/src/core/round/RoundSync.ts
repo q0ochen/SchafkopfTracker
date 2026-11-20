@@ -56,9 +56,10 @@ export interface SyncNotice {
  * @property pulled So viele Abende, Spieler und Regelwerke haben sich auf diesem Gerät durch den Server geändert.
  * @property pushed So viele Änderungen hat dieses Gerät hochgeladen.
  * @property pending So viele Änderungen warten danach noch (zum Beispiel, weil gerade jemand anders schrieb).
- * @property unreadable So viele Abende des Servers kann diese Version der App nicht lesen; sie bleiben unberührt.
- * @property refused So viele Abende nimmt der Server nicht an (zum Beispiel, weil einer zu groß ist); sie bleiben
- *   auf dem Gerät und warten, bis sie sich ändern.
+ * @property unreadable So viele Abende des Servers kann diese Version der App nicht lesen; sie bleiben unberührt
+ *   und werden bei jedem Abgleich neu gelesen (`RoundLink.unreadable`).
+ * @property refused So viele Abende hat der Server in dieser Sitzung nicht angenommen (zum Beispiel, weil einer
+ *   zu groß ist); sie bleiben auf dem Gerät und warten, bis sie sich ändern.
  */
 export interface Synced {
   readonly kind: "Synced";
@@ -147,6 +148,13 @@ function freeName(name: string, taken: readonly string[]): string {
   }
 }
 
+/** Ob zwei Listen dieselben Kennungen enthalten, ohne auf die Reihenfolge zu achten (wie Kotlins `Set ==`). */
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((id) => right.has(id));
+}
+
 function sameLink(a: RoundLink, b: RoundLink): boolean {
   return (
     a.roundId === b.roundId &&
@@ -157,7 +165,8 @@ function sameLink(a: RoundLink, b: RoundLink): boolean {
     a.cursor === b.cursor &&
     sameRulesOrNull(a.rulesBase, b.rulesBase) &&
     a.members.length === b.members.length &&
-    a.members.every((member, index) => member.userId === b.members[index].userId && member.playerId === b.members[index].playerId)
+    a.members.every((member, index) => member.userId === b.members[index].userId && member.playerId === b.members[index].playerId) &&
+    sameIds(a.unreadable, b.unreadable)
   );
 }
 
@@ -272,8 +281,9 @@ export class RoundSync {
 class Run {
   private pulled = 0;
   private pushed = 0;
+
+  /** Abende des Servers, die sich in diesem Durchgang nicht lesen oder nicht speichern ließen. */
   private readonly unreadable = new Set<EveningId>();
-  private readonly refused = new Set<EveningId>();
   private readonly notices: SyncNotice[] = [];
 
   /** Die Nummer, die der Server der nächsten Änderung gibt, wenn außer diesem Gerät niemand schreibt. */
@@ -311,12 +321,14 @@ class Run {
       await this.pass(head);
       if (!this.gap && !this.again) break;
     }
+    // Beide Zahlen gelten auch für Abende, die dieser Abgleich nicht angefasst hat: die gemerkten unlesbaren und die,
+    // die der Server in dieser Sitzung abgelehnt hat und die seitdem unverändert auf dem Gerät liegen.
     return SyncOutcome.synced({
       pulled: this.pulled,
       pushed: this.pushed,
       pending: await this.pendingCount(),
-      unreadable: this.unreadable.size,
-      refused: this.refused.size,
+      unreadable: this.link.unreadable.length,
+      refused: this.memory.refusedEvenings.size,
       notices: this.notices,
     });
   }
@@ -552,6 +564,14 @@ class Run {
       const known = latest.get(row.id);
       if (known === undefined || row.version >= known.version) latest.set(row.id, row);
     }
+    // Was dieses Gerät früher nicht lesen konnte, liegt hinter dem Lesezeichen und käme nie wieder: einzeln neu
+    // lesen. Gibt es den Abend nicht mehr, ist er damit vergessen.
+    for (const id of this.link.unreadable) {
+      if (latest.has(id)) continue;
+      const row = await this.api.evening(this.link.roundId, id);
+      if (row !== null) latest.set(id, row);
+    }
+    this.unreadable.clear();
     const ids = new Set<EveningId>(latest.keys());
     const localIds = new Set<EveningId>();
     for (const evening of local) {
@@ -567,6 +587,7 @@ class Run {
     }
     for (const id of this.eveningBases.keys()) if (!localIds.has(id)) ids.add(id);
     for (const id of ids) await this.syncEvening(id, latest.get(id) ?? null);
+    this.link = { ...this.link, unreadable: [...this.unreadable] };
   }
 
   private async setBase(id: EveningId, base: EveningBase | null): Promise<void> {
@@ -578,6 +599,7 @@ class Run {
   private async syncEvening(id: EveningId, pulledRow: RemoteEvening | null): Promise<void> {
     try {
       await this.trySyncEvening(id, pulledRow);
+      this.memory.refusedEvenings.delete(id);
     } catch (error) {
       if (error instanceof EveningNotStorableError) {
         // Dieses Gerät kann die Fassung des Servers nicht speichern (beschädigte Daten): wie unlesbar behandeln.
@@ -585,10 +607,11 @@ class Run {
         return;
       }
       if (rejection(error, DOCUMENT_REJECTIONS) === null) throw error;
-      // Der Server nimmt diesen einen Abend nicht an. Die anderen sollen deshalb nicht liegen bleiben.
-      this.refused.add(id);
+      // Der Server nimmt diesen einen Abend nicht an. Die anderen sollen deshalb nicht liegen bleiben. Gemerkt wird
+      // der Stand, den er abgelehnt hat; gibt es den Abend hier nicht mehr, gibt es auch nichts zu merken.
       const current = await this.evenings.evening(id);
-      if (current !== null) this.memory.refusedEvenings.set(id, current);
+      if (current === null) this.memory.refusedEvenings.delete(id);
+      else this.memory.refusedEvenings.set(id, current);
     }
   }
 

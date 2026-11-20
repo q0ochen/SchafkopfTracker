@@ -3,8 +3,9 @@
  * Start-Adresse der Web-App (docs/ARCHITEKTUR.md, Abschnitt 8.1).
  */
 import { describe, expect, it } from "vitest";
+import { RoundException } from "../../core/round/RoundModels";
 import { errorOf } from "../../core/round/testing/fixtures";
-import type { Account } from "../backend";
+import { NO_SIGN_IN_PENDING, type Account } from "../backend";
 import { FakeSupabase, fakeFetch, NETWORK_FAILURE, type FakeAccount } from "../testing/fakeSupabase";
 import { MemoryStorage } from "../testing/memoryStorage";
 import { AUTH_STORAGE_KEY, createSupabaseBackend } from "./index";
@@ -114,10 +115,29 @@ describe("Anmelden", () => {
     expect(auth.account()).toEqual(ONE);
   });
 
-  it("ohne begonnene Anmeldung (kein Schlüssel zum Code) scheitert das Einlösen", async () => {
-    const { auth } = setUp();
+  it("ohne begonnene Anmeldung (kein Schlüssel zum Code) scheitert das Einlösen, und es ist zu erkennen, warum", async () => {
+    const { auth, fake } = setUp();
 
-    expect(await errorOf(() => auth.completeSignIn("code-ohne-anfang"))).toBe("SIGNED_OUT");
+    const failure = await auth.completeSignIn("code-ohne-anfang").then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(RoundException);
+    expect(failure).toMatchObject({ error: "SIGNED_OUT", detail: NO_SIGN_IN_PENDING });
+    // Ohne Schlüssel fragt die App den Server gar nicht erst.
+    expect(fake.calls("POST", "/auth/v1/token")).toEqual([]);
+  });
+
+  it("dieselbe Rückkehr ein zweites Mal: Die Anmeldung bleibt, und das Einlösen sagt, dass keine offen ist", async () => {
+    const { fake, auth, opened } = setUp();
+    await auth.signIn();
+    const code = await codeFor(fake, opened[0]);
+    expect(await auth.completeSignIn(code)).toEqual(ONE);
+
+    await expect(auth.completeSignIn(code)).rejects.toMatchObject({ error: "SIGNED_OUT", detail: NO_SIGN_IN_PENDING });
+
+    expect(auth.account()).toEqual(ONE);
   });
 
   it("ohne Netz scheitert das Einlösen mit OFFLINE", async () => {

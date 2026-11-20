@@ -5,9 +5,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemoryRoundServer } from "../core/round/InMemoryRound";
 import { InviteLinks } from "../core/round/InviteLinks";
+import { RoundException } from "../core/round/RoundModels";
+import { needsSignIn } from "./controller";
 import type { RoundScreenModel } from "./screenModel";
 import { account, Phone, WEB_APP_URL } from "./testing/phone";
-import { roundErrorText } from "./texts";
+import { roundErrorText, roundStatus } from "./texts";
 
 let server: InMemoryRoundServer;
 const phones: Phone[] = [];
@@ -38,6 +40,11 @@ async function inviteToken(one: Phone): Promise<string> {
   const token = InviteLinks.tokenFrom(await one.controller.inviteLink());
   if (token === null) throw new Error("kein Code im Einladungslink");
   return token;
+}
+
+/** Die Statuszeile eines Handys. */
+function statusOf(of: Phone): string {
+  return roundStatus({ ...of.state, needsSignIn: needsSignIn(of.state) }).text;
 }
 
 /** Der Bildschirm eines Handys, nachdem alles Angestoßene fertig ist. */
@@ -71,6 +78,34 @@ describe("Angemeldet, ohne Runde", () => {
       { id: expect.any(String), name: "Stammtisch", rev: expect.any(Number), memberCount: 1, myPlayerId: null, isCreator: true },
     ]);
     expect(screen.getUi().invite).toBeNull();
+  });
+
+  it("ließen sich die Runden nicht laden, sagt der Bildschirm es; „Erneut versuchen“ holt sie", async () => {
+    await founder();
+    const other = await Phone.create(server, "neues-handy", account(1));
+    phones.push(other);
+    other.session("konto-1").offline = true;
+    other.controller.start(true);
+    await pass();
+
+    const screen = await screenOf(other);
+
+    // Sonst sähe es auf einem neuen Handy aus, als gäbe es keine Runde.
+    expect(screen.getUi().roundsFailed).toBe(true);
+    expect(screen.getUi().rounds).toBeNull();
+    other.session("konto-1").offline = false;
+    const retrying = screen.retry();
+    expect(screen.getUi().busy).toBe(true);
+    await retrying;
+    expect(screen.getUi().busy).toBe(false);
+    expect(screen.getUi().roundsFailed).toBe(false);
+    expect(screen.getUi().rounds?.map((it) => it.name)).toEqual(["Stammtisch"]);
+
+    // Scheitert es später noch einmal, bleibt die bekannte Liste stehen.
+    other.session("konto-1").offline = true;
+    await screen.retry();
+    expect(screen.getUi().roundsFailed).toBe(true);
+    expect(screen.getUi().rounds?.map((it) => it.name)).toEqual(["Stammtisch"]);
   });
 
   it("ohne Anmeldung wird nichts nachgesehen", async () => {
@@ -201,6 +236,27 @@ describe("Runde anlegen", () => {
     expect(screen.getUi().error).toEqual({ kind: "Server", error: "OFFLINE", roundName: true });
     expect(one.state.link).toBeNull();
   });
+
+  it("scheitert nach dem Anlegen nur der Abgleich, ist die Runde trotzdem angelegt; die Statuszeile sagt es", async () => {
+    const one = await phone("eins", 1);
+    await one.startEvening("abend-1");
+    const screen = await screenOf(one);
+    const head = one.mine.head.bind(one.mine);
+    one.mine.head = async () => {
+      throw new RoundException("OFFLINE");
+    };
+
+    await screen.create("Stammtisch");
+
+    expect(screen.getUi().error).toBeNull();
+    expect(one.state.link?.roundName).toBe("Stammtisch");
+    expect(statusOf(one)).toBe("Kein Netz – 6 Änderungen warten");
+    // Die App holt den Abgleich von selbst nach.
+    one.mine.head = head;
+    await pass(4000);
+    expect(statusOf(one)).toBe("Abgeglichen");
+    expect(server.evenings(one.state.link?.roundId ?? "")).toHaveLength(1);
+  });
 });
 
 describe("Beitreten und Verwenden", () => {
@@ -281,6 +337,35 @@ describe("Beitreten und Verwenden", () => {
     expect(other.store.getState().evenings).toEqual(one.store.getState().evenings);
   });
 
+  it("antwortet der Server beim Beitreten nicht, bleibt das Gerät, wie es ist", async () => {
+    const one = await founder();
+    const two = await phone("zwei", 2);
+    await two.startEvening("eigener-1");
+    two.controller.rememberInvite(await inviteToken(one));
+    const screen = await screenOf(two);
+    await screen.joinInvited();
+    expect(screen.getUi().replace).not.toBeNull();
+    // Die Einladung lässt sich noch annehmen, dann reißt die Verbindung ab.
+    const head = two.mine.head.bind(two.mine);
+    two.mine.head = async () => {
+      throw new RoundException("OFFLINE");
+    };
+
+    await screen.confirmReplace();
+
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "OFFLINE", roundName: false });
+    expect(two.state.link).toBeNull();
+    expect(two.store.getState().evenings.map((it) => it.id)).toEqual(["eigener-1"]);
+    // Mit Netz klappt es, und erst dann werden die Daten des Geräts ersetzt.
+    two.mine.head = head;
+    await screen.joinInvited();
+    await screen.confirmReplace();
+    await pass();
+    expect(screen.getUi().error).toBeNull();
+    expect(two.state.link?.roundName).toBe("Stammtisch");
+    expect(two.store.getState().evenings.map((it) => it.id)).toEqual(["abend-1"]);
+  });
+
   it("eine ungültige Einladung beim Einlösen: Fehlertext, nichts ersetzt", async () => {
     const two = await phone("zwei", 2);
     await two.startEvening("eigener-1");
@@ -309,6 +394,28 @@ describe("Verbunden", () => {
 
     await screen.claim("spieler-2", "Gast");
     expect(screen.getUi().error).toBeNull();
+    expect(two.state.link?.playerId).toBe("spieler-2");
+    expect(two.store.playerName("spieler-2")).toBe("Gast");
+  });
+
+  it("„Das bin ich“ gilt, sobald der Server es angenommen hat, auch wenn der Abgleich danach scheitert", async () => {
+    const one = await founder();
+    const two = await phone("zwei", 2);
+    const screen = await screenOf(two);
+    await screen.redeem(await inviteToken(one));
+    await pass();
+    const head = two.mine.head.bind(two.mine);
+    two.mine.head = async () => {
+      throw new RoundException("OFFLINE");
+    };
+
+    await screen.claim("spieler-2", "Gast");
+
+    expect(screen.getUi().error).toBeNull();
+    expect(server.players(two.state.link?.roundId ?? "").find((it) => it.id === "spieler-2")).toMatchObject({ name: "Gast", owner: "konto-2" });
+    expect(statusOf(two)).toBe("Kein Netz");
+    two.mine.head = head;
+    await pass(4000);
     expect(two.state.link?.playerId).toBe("spieler-2");
     expect(two.store.playerName("spieler-2")).toBe("Gast");
   });

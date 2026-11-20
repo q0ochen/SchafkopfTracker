@@ -4,12 +4,16 @@
  */
 import { mkdir } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
-import { ROUND_APP_URL } from "./roundConfig";
+import type { Evening, Player } from "../src/core/model";
+import { RuleSets } from "../src/core/rules/RuleSet";
+import { writeBackup } from "../src/data/format";
+import { FAKE_SUPABASE_URL, ROUND_APP_URL } from "./roundConfig";
 import {
   anotherDevice,
   claim,
   createRound,
   FakeSupabase,
+  foundRound,
   KONTO_1,
   KONTO_2,
   nameRound,
@@ -204,5 +208,68 @@ test.describe("mit Server", () => {
     await shot(three, "42-runde-deine-runden-und-fehler", true);
     await two.context().close();
     await three.context().close();
+  });
+
+  test("Meldungen und Rückfragen der gemeinsamen Runde", async ({ page, context, browser }) => {
+    const fake = new FakeSupabase();
+    await routeSupabase(context, fake);
+    await foundRound(page, fake);
+
+    // „Abend löschen?“ mit Runde.
+    await openRunningEvening(page);
+    await page.getByRole("button", { name: "Mehr" }).click();
+    await page.getByRole("button", { name: "Abend löschen" }).click();
+    await expect(page.getByRole("dialog", { name: "Abend löschen?" })).toBeVisible();
+    await shot(page, "43-abend-loeschen-mit-runde");
+    await page.getByRole("dialog").getByRole("button", { name: "Behalten" }).click();
+
+    // Sicherung einlesen mit Runde: dieselben Spieler unter anderen Namen und ein neuer Abend.
+    const players: Player[] = ["Anna", "Bert", "Cilli", "Done"].map((name, index) => ({ id: `spieler-${index + 1}`, name, colorIndex: index, archived: false }));
+    const earlier: Evening = {
+      id: "abend-von-frueher",
+      startedAt: "2026-11-14T18:00:00Z",
+      finishedAt: "2026-11-14T22:00:00Z",
+      location: "Wirtshaus",
+      seating: players.map((it) => it.id),
+      firstDealer: "spieler-1",
+      rules: RuleSets.standard(),
+      entries: [{ kind: "thrown_in", id: "wurf-1", recordedAt: "2026-11-14T18:05:00Z" }],
+    };
+    const backup = writeBackup(players, [earlier], RuleSets.standard(), "0.1.0", "2026-11-15T10:00:00Z");
+    await openApp(page, "/einstellungen");
+    await page.locator('input[type="file"]').setInputFiles({ name: "sicherung.json", mimeType: "application/json", buffer: Buffer.from(backup) });
+    await expect(page.getByRole("dialog", { name: "Sicherung einlesen?" })).toBeVisible();
+    await shot(page, "44-sicherung-einlesen-mit-runde");
+    await page.getByRole("dialog").getByRole("button", { name: "Abbrechen" }).click();
+
+    // Die Anmeldung ist abgelaufen; die neue wird langsam eingelöst und gehört zu einem anderen Konto.
+    fake.revokeSessions();
+    await openRound(page);
+    await expect(page.getByRole("button", { name: "Mit Google anmelden" })).toBeVisible(SYNC);
+    let release = (): void => undefined;
+    const slow = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await context.route(`${FAKE_SUPABASE_URL}/auth/v1/token**`, async (route) => {
+      if (route.request().method() === "POST" && new URL(route.request().url()).searchParams.get("grant_type") === "pkce") await slow;
+      await route.fallback();
+    });
+    fake.nextSignIn = KONTO_2;
+    await page.getByRole("button", { name: "Mit Google anmelden" }).click();
+    await expect(page.getByText("Einen Moment …")).toBeVisible();
+    await shot(page, "45-runde-anmeldung-wird-eingeloest", true);
+    release();
+    await expect(page.getByText("Diese Runde gehört zu einem anderen Google-Konto.", { exact: false })).toBeVisible();
+    await shot(page, "46-runde-anderes-konto", true);
+
+    // Ein neues Gerät, auf dem sich die Runden des Kontos nicht laden lassen.
+    const other = await anotherDevice(browser, fake);
+    fake.override = (request) => (request.url.pathname === "/rest/v1/rpc/my_rounds" ? { status: 503, body: { message: "Gerade nicht" } } : null);
+    await openRound(other);
+    await signIn(other, fake, KONTO_1);
+    await expect(other.getByText("Deine Runden ließen sich nicht laden.")).toBeVisible();
+    await shot(other, "47-runde-runden-nicht-geladen", true);
+    fake.override = null;
+    await other.context().close();
   });
 });

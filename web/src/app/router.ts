@@ -20,6 +20,15 @@ export type Route =
 
 const SEGMENT = "([^/]+)";
 
+/** Der Text ohne %-Kodierung; lässt er sich nicht entschlüsseln, der Text, wie er ist. */
+function decodedOrRaw(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
 /** Anker (mit oder ohne „#“) → Route. Unbekanntes führt zum Start. */
 export function parseRoute(hash: string): Route {
   let path = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -41,7 +50,9 @@ export function parseRoute(hash: string): Route {
   if (path === "/einstellungen") return { name: "settings" };
   if (path === "/runde") return { name: "round" };
   if (path === "/einladung") return { name: "invite", token: "" };
-  if ((m = match(`/einladung/${SEGMENT}`))) return { name: "invite", token: m[0] };
+  // Alles hinter „/einladung/“ (auch ein verstümmelter Link) führt zur Einladungsseite; ob darin ein gültiger Code
+  // steht, prüft erst die Seite („Das ist kein gültiger Einladungslink.“).
+  if (path.startsWith("/einladung/")) return { name: "invite", token: decodedOrRaw(path.slice("/einladung/".length)) };
   if (path === "/regeln") return { name: "rules", eveningId: null };
   if (path === "/statistik") return { name: "statistics", eveningId: null };
   if ((m = match(`/abend/${SEGMENT}`))) return { name: "board", eveningId: m[0] };

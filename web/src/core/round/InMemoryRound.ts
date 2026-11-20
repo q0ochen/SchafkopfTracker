@@ -222,6 +222,17 @@ export class InMemoryRoundServer {
     state.evenings.set(id, { ...row, version: row.version + 1, rev: state.nextRev(), evening: null });
   }
 
+  /**
+   * Macht das Dokument eines Abends wieder lesbar, ohne dass sich auf dem Server etwas ändert – wie nach einem Update
+   * der App auf dem Gerät, das ihn bisher nicht lesen konnte.
+   */
+  makeReadable(round: RoundId, id: EveningId, evening: Evening): void {
+    const state = this.requireRound(round);
+    const row = state.evenings.get(id);
+    if (row === undefined) throw new Error(`Abend ${id} fehlt`);
+    state.evenings.set(id, { ...row, evening });
+  }
+
   /** Vergisst einen Abend ganz, als hätte es ihn auf dem Server nie gegeben. */
   forgetEvening(round: RoundId, id: EveningId): void {
     this.requireRound(round).evenings.delete(id);

@@ -405,6 +405,12 @@ textarea {
   color: var(--error);
 }
 
+/* Gesperrt (zum Beispiel, solange eine Aktion der gemeinsamen Runde läuft): wie die übrigen Knöpfe gedämpft. */
+.text-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .result-button {
   display: flex;
   flex-direction: column;

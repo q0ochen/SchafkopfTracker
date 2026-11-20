@@ -33,10 +33,10 @@ nicht.
 web/
 ├── src/core/        Rechenkern aus dem Kotlin-Modul domain (Regeln, Abrechnung, Abend, Statistik)
 │   ├── golden/      vom Kotlin-Code erzeugte Erwartungen (kotlin-golden.json) und ihr Test
+│   └── round/       gemeinsame Runde: Zusammenführen, Abgleich, Verbinden, Server im Speicher (aus domain.round)
 ├── src/data/        Speicher im Browser (repository.ts, IndexedDB über idb)
 │   ├── format/      Dateiformat und Sicherung aus dem Kotlin-Modul data (gleiche Texte, gleiche Prüfungen)
 │   └── golden/      vom Kotlin-Code erzeugte Erwartungen (kotlin-format-golden.json) und ihr Test
-│   └── round/       gemeinsame Runde: Zusammenführen, Abgleich, Verbinden, Server im Speicher (aus domain.round)
 ├── src/app/         Zustand (store.ts), Router (Anker-Adressen), Sicherung, Anbindung des Dateiformats
 ├── src/round/       gemeinsame Runde im Browser: Steuerung, Planer, Speicher (IndexedDB), Texte
 │   ├── supabase/    Anbindung an den Server mit supabase-js (wird nur bei Bedarf geladen)
@@ -73,7 +73,9 @@ Supabase-Server ab. Der Vertrag steht in `docs/ARCHITEKTUR.md`, Abschnitt 8; wie
   nicht im Build, und die App spricht mit keinem Server.
 - **Anmeldung:** nur mit Google, über Supabase (PKCE). Die Seite wird dafür verlassen und kehrt auf die
   Start-Adresse zurück (`…/SchafkopfTracker/?code=…`); die App löst den Code ein und nimmt ihn sofort aus der
-  Adresse. Diese Start-Adresse muss beim Server als Rückkehr-Adresse eingetragen sein.
+  Adresse. Diese Start-Adresse muss beim Server als Rückkehr-Adresse eingetragen sein. Mit verbundener Runde spricht
+  das Gerät nur als das Konto der Runde mit dem Server: Wer sich mit einem anderen Konto anmeldet, wird gleich wieder
+  abgemeldet; die Runde bleibt verbunden, und nichts Wartendes geht verloren.
 - **Lokal zuerst:** Das Gerät bleibt vollständig benutzbar. Abgeglichen wird beim Öffnen, eine halbe Sekunde nach
   jeder Änderung und alle vier Sekunden, solange die App zu sehen ist; nach Fehlern mit wachsendem Abstand. Was
   nicht hochgeladen werden konnte, wartet.

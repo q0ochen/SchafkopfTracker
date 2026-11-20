@@ -364,6 +364,12 @@ describe("Regelwerk, Störungen, Hilfen für Tests", () => {
     expect(server.eveningRow(round, doc.id)).toEqual({ id: doc.id, version: 2, deleted: false, rev: rev + 1, evening: null });
     expect(server.evenings(round)).toEqual([]);
 
+    // Wieder lesbar (wie nach einem Update der App): Version und Änderungsnummer bleiben.
+    server.makeReadable(round, doc.id, doc);
+    expect(server.eveningRow(round, doc.id)).toEqual({ id: doc.id, version: 2, deleted: false, rev: rev + 1, evening: doc });
+    expect(server.rev(round)).toBe(rev + 1);
+    expect(() => server.makeReadable(round, "gibt-es-nicht", doc)).toThrow();
+
     server.rollBack(round, doc.id, 1, doc, 1);
     expect(server.rev(round)).toBe(1);
     expect(server.evenings(round)).toEqual([doc]);

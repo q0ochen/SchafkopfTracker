@@ -112,8 +112,18 @@ export function noticeText(notice: SyncNotice): string {
   }
 }
 
-/** Eine einmalige Meldung für den Bildschirm „Gemeinsame Runde“. */
+/**
+ * Eine einmalige Meldung für den Bildschirm „Gemeinsame Runde“:
+ * - `SIGN_IN_FAILED`: Die Anmeldung ist gescheitert.
+ * - `SIGN_IN_CANCELLED`: Die Anmeldung wurde im Browser abgebrochen.
+ * - `OTHER_ACCOUNT`: Angemeldet wurde ein anderes Konto als das der verbundenen Runde. Es wurde gleich wieder
+ *   abgemeldet; die Runde bleibt verbunden.
+ * - `DETACHED`: Die Runde gibt es nicht mehr, oder das Konto gehört nicht mehr dazu.
+ */
 export type RoundMessage = "SIGN_IN_FAILED" | "SIGN_IN_CANCELLED" | "OTHER_ACCOUNT" | "DETACHED";
+
+/** Meldungen, die eine geglückte Anmeldung erledigt. */
+export const SIGN_IN_MESSAGES: ReadonlySet<RoundMessage> = new Set<RoundMessage>(["SIGN_IN_FAILED", "SIGN_IN_CANCELLED", "OTHER_ACCOUNT"]);
 
 export function messageText(message: RoundMessage): string {
   switch (message) {
@@ -122,7 +132,7 @@ export function messageText(message: RoundMessage): string {
     case "SIGN_IN_CANCELLED":
       return "Die Anmeldung wurde abgebrochen.";
     case "OTHER_ACCOUNT":
-      return "Du bist jetzt mit einem anderen Konto angemeldet. Die Runde wurde von diesem Gerät getrennt; die Daten bleiben hier.";
+      return "Diese Runde gehört zu einem anderen Google-Konto. Melde dich mit dem Konto an, mit dem du der Runde beigetreten bist.";
     case "DETACHED":
       return "Die Runde gibt es nicht mehr, oder du gehörst nicht mehr dazu. Die Daten bleiben als Kopie auf diesem Gerät.";
   }

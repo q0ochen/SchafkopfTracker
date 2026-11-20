@@ -752,10 +752,14 @@ describe("der Abgleich über supabase-js (mehrere Geräte an einem nachgestellte
 
     expect(fake.server.evenings(round).map((it) => it.id)).toEqual(["gut"]);
     expect(await two.evening("gift")).not.toBeNull();
-    // Solange sich der Abend nicht ändert, wird er nicht noch einmal geschickt (und zählt dann nur noch als wartend).
+    // Solange sich der Abend nicht ändert, wird er nicht noch einmal geschickt; er wartet und bleibt als abgelehnt gezählt.
     fake.requests.length = 0;
-    expect(await two.sync.sync()).toEqual(SyncOutcome.synced({ pulled: 0, pushed: 0, pending: 1 }));
+    expect(await two.sync.sync()).toEqual(SyncOutcome.synced({ pulled: 0, pushed: 0, pending: 1, refused: 1 }));
     expect(fake.restCalls().filter((it) => it.includes("save_evening"))).toEqual([]);
+    // Ohne das Nullzeichen geht er hoch, und die Zählung ist weg.
+    await two.editor.update("gift", (it) => ({ ...it, location: "Wirtshaus" }));
+    expect(await two.sync.sync()).toEqual(SyncOutcome.synced({ pulled: 0, pushed: 1, pending: 0 }));
+    expect(fake.server.evenings(round).map((it) => it.id).sort()).toEqual(["gift", "gut"]);
   });
 
   it("ein pausiertes Projekt hält den Abend nicht auf", async () => {

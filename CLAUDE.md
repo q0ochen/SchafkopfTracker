@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 684, `data` 278, `database` 24, `app` 185, Web 136 Unit-Tests und 18 Oberflächen-Tests (Stand vor der
-  gemeinsamen Runde), Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 684, `data` 278, `database` 24, `app` 185, Web 510 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 34 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -341,13 +341,15 @@ Umgesetzt am 19.11.2026 auf dem Zweig `claude/gracious-keller-48tcn0`:
   du?“ mit festem Namen, Mitglieder, einladen, verlassen, abmelden), Wolken-Symbol und Geber-Hinweis im Abend,
   „Doppelt eingetragen?“, fester Name bei den Spielern. Rückkehr aus dem Browser über
   `schafkopftracker://auth-callback`, Einladung über `schafkopftracker://einladung/<Code>`.
-- **Web-App**: in Arbeit (Port des Rechenkerns nach `web/src/core/round` und Anbindung mit supabase-js stehen, die
-  Bildschirme folgen); noch nicht auf dem Zweig.
+- **Web-App**: dasselbe fürs iPhone: Port des Rechenkerns (`web/src/core/round`), Anbindung mit supabase-js
+  (`web/src/round`), Gerätezustand in IndexedDB, Bildschirm „Gemeinsame Runde“, Einladungsseite `#/einladung/<Code>`,
+  Hinweise im Abend und bei den Spielern. Gebaut von zwei Helfern nacheinander (der erste fiel am 19.11.2026 an der
+  Nutzungsgrenze aus; der Nutzer hat am 20.11.2026 auf Opus umgestellt: „Mach mit Opus weiter“).
 - **Probe gegen ein echtes Supabase** (nur auf GitHub, Workflow „Supabase“, Job „Anbindung“): `SupabaseLiveTest`
   (9 Proben) lässt die Anbindung der Android-App gegen den lokalen Stack der Supabase CLI laufen: Anmeldung erneuern
   und beenden, jede Funktion mit ihren Fehlercodes, 205 Abende seitenweise, zwei Geräte mit dem ganzen Abgleich.
-  Grün seit dem 19.11.2026, auch mit einem Schlüssel der Form `sb_publishable_…`.
-  Für die Web-App ist dieselbe Probe geplant.
+  Grün seit dem 19.11.2026, auch mit einem Schlüssel der Form `sb_publishable_…`. Seit dem 20.11.2026 läuft dort
+  auch die Probe der Web-App (`npm run test:live`, 9 Proben), ebenfalls grün.
 - **Unabhängige Durchsicht der Android-Seite (19./20.11.2026):** Kein Weg gefunden, auf dem ein Gerät die Daten der
   anderen löscht. Behoben: unlesbare Abende rutschten hinter das Lesezeichen und kamen nie wieder (jetzt gemerkt in
   `RoundLink.unreadable` und bei jedem Abgleich neu gelesen); „Auf diesem Gerät verwenden“ leerte das Gerät, bevor der
@@ -386,7 +388,7 @@ Gut zu wissen für die nächste Sitzung:
   PostgREST oder den Anmelde-Server braucht, läuft über den Workflow „Supabase“ auf GitHub (etwa zweieinhalb
   Minuten je Lauf).
 - Der Anmelde-Server des lokalen Stacks erlaubt 30 Anmeldungen je 5 Minuten; die Probe der Android-App braucht
-  davon 11.
+  davon 11, die der Web-App 5.
 - Auf GitHub aufgefallen am 19.11.2026: (1) Der Bildschirmtest der Start-Seite lief einmal (einer von fünf Läufen)
   in die Wartefrist; hier nicht nachstellbar. `waitForText` nennt jetzt in der Fehlermeldung, was auf dem Bildschirm
   stand: Tritt es wieder auf, zuerst diese Meldung lesen. (2) Der Tag „testversion“ ließ sich nicht verschieben

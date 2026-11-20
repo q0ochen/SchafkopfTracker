@@ -129,6 +129,17 @@ function SignedIn({ state, ui, model }: { state: RoundState; ui: RoundUi; model:
         </section>
       ) : null}
 
+      {ui.roundsFailed && rounds.length === 0 ? (
+        // Ohne diesen Hinweis sähe es auf einem neuen Handy aus, als gäbe es keine Runde.
+        <>
+          <SectionHeading>Deine Runden</SectionHeading>
+          <p>Deine Runden ließen sich nicht laden.</p>
+          <button type="button" class="button full-width" disabled={ui.busy} onClick={() => void model.retry()}>
+            Erneut versuchen
+          </button>
+        </>
+      ) : null}
+
       {rounds.length > 0 ? (
         <>
           <SectionHeading>Deine Runden</SectionHeading>
@@ -364,7 +375,7 @@ function Linked({
         </button>
       ) : (
         <>
-          <button type="button" class="button full-width spaced-top" onClick={() => controller.syncNow()}>
+          <button type="button" class="button full-width spaced-top" disabled={ui.busy} onClick={() => controller.syncNow()}>
             Jetzt abgleichen
           </button>
           {link.playerId === null ? (
@@ -505,17 +516,19 @@ function Configured({ controller }: { controller: RoundController }) {
     if (showsMessage) window.scrollTo({ top: 0 });
   }, [showsMessage, state.message, ui.error]);
 
+  // Auch während die Anmeldung nach der Rückkehr aus dem Browser eingelöst wird, ruhen die Knöpfe.
+  const shown: RoundUi = state.signingIn ? { ...ui, busy: true } : ui;
   const link = state.link;
   let body;
   if (link !== null) {
-    body = <Linked state={state} link={link} ui={ui} model={model} controller={controller} players={players} />;
+    body = <Linked state={state} link={link} ui={shown} model={model} controller={controller} players={players} />;
   } else if (!state.loaded) {
     // Die Anmeldung wird noch gelesen (oder die Anbindung an den Server lässt sich gerade nicht laden).
     body = state.problem === "OFFLINE" ? <p>{roundErrorText("OFFLINE")}</p> : null;
   } else if (state.account === null) {
-    body = <SignedOut invited={state.pendingInvite !== null} busy={ui.busy} onSignIn={() => void model.signIn()} />;
+    body = <SignedOut invited={state.pendingInvite !== null} busy={shown.busy} onSignIn={() => void model.signIn()} />;
   } else {
-    body = <SignedIn state={state} ui={ui} model={model} />;
+    body = <SignedIn state={state} ui={shown} model={model} />;
   }
 
   return (
@@ -524,7 +537,7 @@ function Configured({ controller }: { controller: RoundController }) {
         {state.message !== null ? <MessageCard text={messageText(state.message)} onDismiss={() => controller.clearMessage()} /> : null}
         {ui.error !== null ? <MessageCard text={errorText(ui.error)} onDismiss={() => model.clearError()} isError /> : null}
         {body}
-        {ui.busy || (!state.loaded && link === null && state.problem !== "OFFLINE") ? (
+        {shown.busy || (!state.loaded && link === null && state.problem !== "OFFLINE") ? (
           <p class="hint" role="status">
             Einen Moment …
           </p>

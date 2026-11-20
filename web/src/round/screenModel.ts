@@ -6,7 +6,6 @@
 import type { PlayerId } from "../core/model";
 import { InviteLinks } from "../core/round/InviteLinks";
 import { RoundException, type InviteInfo, type RoundError, type RoundSummary } from "../core/round/RoundModels";
-import type { SyncOutcome } from "../core/round/RoundSync";
 import type { RoundController } from "./controller";
 
 /** Was beim Beitreten oder Verwenden einer Runde noch bestätigt werden muss. */
@@ -24,6 +23,8 @@ export type RoundUiError =
 
 /**
  * @property rounds Die Runden des Kontos; `null`, solange sie nicht gelesen sind.
+ * @property roundsFailed Die Runden ließen sich nicht lesen (kein Netz, Server gestört). Sonst sähe es auf einem neuen
+ *   Handy aus, als gäbe es keine.
  * @property invite Was die wartende Einladung verrät; `null`, solange unbekannt.
  * @property replace Wartet auf die Rückfrage „Daten dieses Geräts ersetzen?“.
  * @property eveningCount So viele Abende lägen beim Ersetzen auf dem Gerät.
@@ -34,6 +35,7 @@ export interface RoundUi {
   readonly busy: boolean;
   readonly error: RoundUiError | null;
   readonly rounds: readonly RoundSummary[] | null;
+  readonly roundsFailed: boolean;
   readonly invite: InviteInfo | null;
   readonly replace: PendingAttach | null;
   readonly eveningCount: number;
@@ -46,6 +48,7 @@ const INITIAL: RoundUi = {
   busy: false,
   error: null,
   rounds: null,
+  roundsFailed: false,
   invite: null,
   replace: null,
   eveningCount: 0,
@@ -60,6 +63,8 @@ export class RoundScreenModel {
   private readonly unsubscribe: () => void;
   /** Konto, „ohne Runde“ und wartende Einladung als ein Text: Ändert er sich, wird neu nachgesehen. */
   private watched: string | null = null;
+  /** Zählt die Wechsel von {@link watched}: Eine Antwort, die nach einem Wechsel kommt, gilt nicht mehr. */
+  private generation = 0;
   private disposed = false;
 
   /**
@@ -104,19 +109,23 @@ export class RoundScreenModel {
     const now = JSON.stringify([userId, unlinked, state.pendingInvite]);
     if (now === this.watched) return;
     this.watched = now;
+    this.generation++;
     if (userId !== null && unlinked) void this.refresh();
-    else this.update({ rounds: null, invite: null });
+    else this.update({ rounds: null, roundsFailed: false, invite: null });
   }
 
   /** Liest die Runden des Kontos und die wartende Einladung. Scheitert das, bleibt der Bildschirm benutzbar. */
   async refresh(): Promise<void> {
+    const generation = this.generation;
     let rounds: readonly RoundSummary[] | null = null;
     try {
       rounds = await this.controller.myRounds();
     } catch {
-      // Ohne Netz bleibt die Liste, wie sie war.
+      // Ohne Netz bleibt die Liste, wie sie war; der Bildschirm sagt, dass sie sich nicht laden ließ.
     }
-    this.update({ rounds: rounds ?? this.ui.rounds });
+    // Inzwischen abgemeldet, verbunden oder ein anderes Konto: Dann gilt die Antwort nicht mehr.
+    if (generation !== this.generation) return;
+    this.update({ rounds: rounds ?? this.ui.rounds, roundsFailed: rounds === null });
     const token = this.controller.getState().pendingInvite;
     if (token === null) {
       this.update({ invite: null });
@@ -125,8 +134,9 @@ export class RoundScreenModel {
     try {
       const invite = await this.controller.inviteInfo(token);
       // Inzwischen verworfen oder eine andere: Dann gilt die Antwort nicht mehr.
-      if (this.controller.getState().pendingInvite === token) this.update({ invite });
+      if (generation === this.generation && this.controller.getState().pendingInvite === token) this.update({ invite });
     } catch (error) {
+      if (generation !== this.generation) return;
       if (error instanceof RoundException && error.error === "INVALID_INVITE") {
         // Abgelaufen oder ungültig: sagen und vergessen, sonst käme die Meldung bei jedem Öffnen wieder.
         this.controller.rememberInvite(null);
@@ -134,6 +144,11 @@ export class RoundScreenModel {
       }
       // Ohne Netz bleibt die Einladung einfach stehen; „Beitreten“ versucht es dann noch einmal.
     }
+  }
+
+  /** „Erneut versuchen“, wenn sich die Runden nicht laden ließen; solange ruhen die Knöpfe. */
+  retry(): Promise<void> {
+    return this.busy(() => this.refresh());
   }
 
   // --- Anmelden und Abmelden ---
@@ -163,7 +178,9 @@ export class RoundScreenModel {
   // --- Runde anlegen, beitreten, verwenden ---
 
   create(name: string): Promise<void> {
-    return this.busy(async () => requireSynced(await this.controller.create(name)), true);
+    return this.busy(async () => {
+      await this.controller.create(name);
+    }, true);
   }
 
   /** Löst einen eingefügten Link oder Code ein. */
@@ -210,14 +227,17 @@ export class RoundScreenModel {
   }
 
   private async attach(target: PendingAttach): Promise<void> {
-    requireSynced(target.kind === "join" ? await this.controller.join(target.token) : await this.controller.use(target.round));
+    if (target.kind === "join") await this.controller.join(target.token);
+    else await this.controller.use(target.round);
   }
 
   // --- Verbunden ---
 
   /** „Das bin ich“; `player === null` heißt „Ich bin neu“. */
   claim(player: PlayerId | null, name: string): Promise<void> {
-    return this.busy(async () => requireSynced(await this.controller.claim(player, name)));
+    return this.busy(async () => {
+      await this.controller.claim(player, name);
+    });
   }
 
   /** Erzeugt einen Einladungslink zum Weitergeben. */
@@ -235,6 +255,12 @@ export class RoundScreenModel {
   }
 
   // --- Gemeinsames ---
+
+  /*
+   * Anlegen, Beitreten und „Das bin ich“ sind geschafft, sobald der Server sie angenommen hat. Scheitert nur der
+   * Abgleich danach, ist das kein Fehler dieser Aktion: Die Statuszeile sagt es („Kein Netz“), und die App holt ihn
+   * von selbst nach.
+   */
 
   /**
    * Führt eine Aktion aus; währenddessen sind die Knöpfe gesperrt. Läuft schon eine, passiert nichts.
@@ -256,11 +282,4 @@ export class RoundScreenModel {
       this.update({ busy: false });
     }
   }
-}
-
-/** Die Verbindung steht schon; scheitert nur der erste Abgleich, holt die App ihn von selbst nach. */
-function requireSynced(outcome: SyncOutcome): void {
-  if (outcome.kind === "Offline") throw new RoundException("OFFLINE");
-  if (outcome.kind === "SignedOut") throw new RoundException("SIGNED_OUT");
-  if (outcome.kind === "Failed") throw new RoundException(outcome.error);
 }

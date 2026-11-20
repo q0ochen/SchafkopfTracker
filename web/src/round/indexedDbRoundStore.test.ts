@@ -47,6 +47,7 @@ const LINK: RoundLink = roundLink({
     { userId: "konto-1", playerId: P1 },
     { userId: "konto-2", playerId: null },
   ],
+  unreadable: ["abend-von-morgen", "noch-einer"],
 });
 
 describe("Datenbank Version 2", () => {
@@ -226,6 +227,22 @@ describe("Was sich das Gerät zur Runde merkt", () => {
     expect(await store.link()).toBeNull();
     expect([...(await store.eveningBases()).keys()]).toEqual(["abend-5"]);
     expect(await store.playerBases()).toEqual(new Map());
+    db.close();
+  });
+
+  it("ein Stand von vor dem 20.11.2026 kennt keine unlesbaren Abende; Doppeltes und Fremdes darin zählt nicht", async () => {
+    const db = await openDatabase(freshName());
+    const store = new IndexedDbRoundStore(db, roundStoreCodec);
+    await store.setLink(LINK);
+    const { unreadable: _, ...older } = JSON.parse((await db.get("round", "link")) ?? "{}") as Record<string, unknown>;
+    await db.put("round", JSON.stringify(older), "link");
+
+    expect(await new IndexedDbRoundStore(db, roundStoreCodec).link()).toEqual({ ...LINK, unreadable: [] });
+
+    await db.put("round", JSON.stringify({ ...older, unreadable: ["abend-1", 7, "abend-1", null, "abend-2"] }), "link");
+    expect((await new IndexedDbRoundStore(db, roundStoreCodec).link())?.unreadable).toEqual(["abend-1", "abend-2"]);
+    await db.put("round", JSON.stringify({ ...older, unreadable: "abend-1" }), "link");
+    expect((await new IndexedDbRoundStore(db, roundStoreCodec).link())?.unreadable).toEqual([]);
     db.close();
   });
 

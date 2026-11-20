@@ -6,9 +6,9 @@
  * Lässt sich die Sitzung nur gerade nicht erneuern (kein Netz), bleibt das zuletzt bekannte Konto angemeldet;
  * supabase-js erneuert sie später von selbst.
  */
-import { isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
+import { isAuthPKCECodeVerifierMissingError, isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { RoundException } from "../../core/round/RoundModels";
-import type { Account, RoundAuth } from "../backend";
+import { NO_SIGN_IN_PENDING, type Account, type RoundAuth } from "../backend";
 import { within } from "./within";
 
 /** Ablage der Sitzung (im Browser `localStorage`). */
@@ -150,6 +150,8 @@ export class SupabaseRoundAuth implements RoundAuth {
       throw new RoundException("SIGNED_OUT", "Anmeldung", error);
     }
     const { data, error } = result;
+    // Zu diesem Code gibt es auf dem Gerät keinen Schlüssel: keine begonnene Anmeldung (oder sie ist schon eingelöst).
+    if (isAuthPKCECodeVerifierMissingError(error)) throw new RoundException("SIGNED_OUT", NO_SIGN_IN_PENDING);
     if (error || !data.session) {
       throw new RoundException(error && isAuthRetryableFetchError(error) ? "OFFLINE" : "SIGNED_OUT", "Anmeldung");
     }

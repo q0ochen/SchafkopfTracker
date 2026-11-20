@@ -7,15 +7,16 @@ import { storageCodec } from "../../app/formatAdapters";
 import { defaultPlayers } from "../../app/players";
 import { AppStore, type Clock } from "../../app/store";
 import { instantFromEpochMillis } from "../../core/instant";
-import type { Evening, EveningId, GameEntry } from "../../core/model";
+import type { Evening, EveningId, GameEntry, PlayerId } from "../../core/model";
 import { InMemoryRoundStore, type InMemoryRoundServer, type InMemoryRoundSession } from "../../core/round/InMemoryRound";
-import { RoundException } from "../../core/round/RoundModels";
+import { RoundException, type EveningBase, type RemotePlayer, type RoundLink } from "../../core/round/RoundModels";
 import { InMemoryRepository } from "../../data/repository";
-import type { Account, RoundAuth, RoundBackend } from "../backend";
-import { RoundController } from "../controller";
+import { NO_SIGN_IN_PENDING, type Account, type RoundAuth, type RoundBackend } from "../backend";
+import { RoundController, type ObservableRoundStore } from "../controller";
 import { deferredApi } from "../deferredApi";
 import type { InviteMemory } from "../inviteMemory";
 import { RoundScreenModel } from "../screenModel";
+import type { SignInReturn } from "../signInReturn";
 import { StoreAdapters } from "../storeAdapters";
 
 /** Die Start-Adresse der Web-App in Tests. */
@@ -27,8 +28,14 @@ export class FakeAuth implements RoundAuth {
   private readonly listeners = new Set<(account: Account | null) => void>();
   /** So oft wurde die Anmeldung bei Google begonnen. */
   signInsStarted = 0;
+  /** So oft wurde abgemeldet. */
+  signOuts = 0;
   /** Mit diesem Konto kehrt die nächste Anmeldung zurück (Code „gut“). */
   nextAccount: Account | null = null;
+  /** Zur Rückkehr gibt es keine begonnene Anmeldung (zum Beispiel, weil dieselbe Adresse ein zweites Mal kommt). */
+  noPendingSignIn = false;
+  /** Solange gesetzt, hängt das Einlösen der Anmeldung, bis der Test das Versprechen erfüllt. */
+  exchange: Promise<void> | null = null;
 
   constructor(initial: Account | null = null) {
     this.current = initial;
@@ -54,12 +61,15 @@ export class FakeAuth implements RoundAuth {
   }
 
   async completeSignIn(code: string): Promise<Account> {
+    if (this.exchange !== null) await this.exchange;
+    if (this.noPendingSignIn) throw new RoundException("SIGNED_OUT", NO_SIGN_IN_PENDING);
     if (code !== "gut" || this.nextAccount === null) throw new RoundException("SIGNED_OUT", "Anmeldung");
     this.set(this.nextAccount);
     return this.nextAccount;
   }
 
   async signOut(): Promise<void> {
+    this.signOuts++;
     this.set(null);
   }
 
@@ -67,6 +77,65 @@ export class FakeAuth implements RoundAuth {
   set(account: Account | null): void {
     this.current = account;
     for (const listener of [...this.listeners]) listener(account);
+  }
+}
+
+/**
+ * Eine Sicht auf die Ablage, die wie `IndexedDbRoundStore` aus dem Arbeitsspeicher antwortet: Was ein anderes Fenster
+ * in die Ablage schreibt, sieht sie erst nach {@link invalidate}. Die Basen reicht sie unverändert durch.
+ */
+export class CachedRoundStore implements ObservableRoundStore {
+  private cached: { readonly link: RoundLink | null } | null = null;
+  private readonly listeners = new Set<() => void>();
+
+  constructor(private readonly inner: InMemoryRoundStore) {}
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(): void {
+    for (const listener of [...this.listeners]) listener();
+  }
+
+  invalidate(): void {
+    this.cached = null;
+    this.notify();
+  }
+
+  async link(): Promise<RoundLink | null> {
+    this.cached ??= { link: await this.inner.link() };
+    return this.cached.link;
+  }
+
+  async setLink(link: RoundLink | null): Promise<void> {
+    await this.inner.setLink(link);
+    this.cached = { link };
+    this.notify();
+  }
+
+  eveningBases(): Promise<ReadonlyMap<EveningId, EveningBase>> {
+    return this.inner.eveningBases();
+  }
+
+  setEveningBase(id: EveningId, base: EveningBase | null): Promise<void> {
+    return this.inner.setEveningBase(id, base);
+  }
+
+  playerBases(): Promise<ReadonlyMap<PlayerId, RemotePlayer>> {
+    return this.inner.playerBases();
+  }
+
+  setPlayerBase(id: PlayerId, base: RemotePlayer | null): Promise<void> {
+    return this.inner.setPlayerBase(id, base);
+  }
+
+  async clearBases(): Promise<void> {
+    await this.inner.clearBases();
+    this.notify();
   }
 }
 
@@ -84,14 +153,20 @@ export class Phone {
   readonly auth: FakeAuth;
   readonly roundStore = new InMemoryRoundStore();
   readonly adapters: StoreAdapters;
-  readonly controller: RoundController;
+  /** Die Steuerung; nach {@link reload} eine neue, wie nach dem Neuladen der Seite. */
+  controller: RoundController;
   /** Was sich das Handy als Einladung gemerkt hat. */
   invite: string | null = null;
   /** `true`: Die Anbindung an den Server lässt sich gerade nicht laden. */
   backendFails = false;
+  /** Solange gesetzt, hängt das Laden der Anbindung, bis der Test das Versprechen erfüllt (langsames Netz). */
+  backendGate: Promise<void> | null = null;
   /** So oft wurde versucht, die Anbindung zu laden. */
   backendLoads = 0;
   private readonly sessions = new Map<string, InMemoryRoundSession>();
+  private readonly backend: RoundBackend;
+  /** Was die Steuerung als Ablage sieht: die Ablage selbst oder eine zwischenspeichernde Sicht darauf. */
+  private readonly view: ObservableRoundStore;
 
   private constructor(
     private readonly server: InMemoryRoundServer,
@@ -99,16 +174,12 @@ export class Phone {
     /** Der Speicher des Handys (zum Stören: `failWrites`). */
     readonly repository: InMemoryRepository,
     signedIn: Account | null,
+    cachedStore: boolean,
   ) {
+    this.view = cachedStore ? new CachedRoundStore(this.roundStore) : this.roundStore;
     this.auth = new FakeAuth(signedIn);
     this.adapters = new StoreAdapters(store, storageCodec.encodeEvening);
-    const invites: InviteMemory = {
-      get: () => this.invite,
-      set: (token) => {
-        this.invite = token;
-      },
-    };
-    const backend: RoundBackend = {
+    this.backend = {
       auth: this.auth,
       api: deferredApi(async () => {
         const current = this.auth.account();
@@ -116,25 +187,59 @@ export class Phone {
         return this.session(current.userId);
       }),
     };
-    this.controller = new RoundController({
+    this.controller = this.newController(null);
+  }
+
+  private newController(initialLink: RoundLink | null): RoundController {
+    const invites: InviteMemory = {
+      get: () => this.invite,
+      set: (token) => {
+        this.invite = token;
+      },
+    };
+    return new RoundController({
       loadBackend: async () => {
         this.backendLoads++;
+        if (this.backendGate !== null) await this.backendGate;
         if (this.backendFails) throw new Error("Anbindung nicht ladbar (Test)");
-        return backend;
+        return this.backend;
       },
-      store: this.roundStore,
+      store: this.view,
       data: this.adapters,
       invites,
       placeholders: defaultPlayers(),
       webAppUrl: WEB_APP_URL,
-      ids: { newId: () => store.clock.newId() },
+      ids: { newId: () => this.store.clock.newId() },
+      initialLink,
     });
   }
 
-  /** Ein frisch installiertes Handy; `signedIn`: Dieses Konto ist schon angemeldet. */
-  static async create(server: InMemoryRoundServer, name: string, signedIn: Account | null = null): Promise<Phone> {
+  /**
+   * Lädt die Seite neu: Die alte Steuerung hört auf, eine neue beginnt über denselben Daten, derselben Anmeldung und
+   * demselben Gemerkten der Runde – wie nach der Rückkehr aus der Anmeldung.
+   */
+  async reload(signInReturn: SignInReturn | null = null, visible = true): Promise<RoundController> {
+    this.controller.stop();
+    this.view.invalidate?.();
+    this.controller = this.newController(await this.view.link());
+    this.controller.start(visible, signInReturn);
+    return this.controller;
+  }
+
+  /**
+   * Ein frisch installiertes Handy; `signedIn`: Dieses Konto ist schon angemeldet.
+   *
+   * @param options.cachedStore Die Steuerung sieht die Ablage wie im Browser durch einen Zwischenspeicher
+   *   ({@link CachedRoundStore}); was ein anderes Fenster direkt in {@link roundStore} schreibt, sieht sie erst später.
+   */
+  static async create(
+    server: InMemoryRoundServer,
+    name: string,
+    signedIn: Account | null = null,
+    options: { cachedStore?: boolean } = {},
+  ): Promise<Phone> {
     const repository = new InMemoryRepository(storageCodec);
-    return new Phone(server, await AppStore.load(repository, testClock(name)), repository, signedIn);
+    return new Phone(server, await AppStore.load(repository, testClock(name)), repository, signedIn, options.cachedStore ?? false);
   }
 
   /** Der Zugang des Kontos beim Server (zum Stören und Zählen). */

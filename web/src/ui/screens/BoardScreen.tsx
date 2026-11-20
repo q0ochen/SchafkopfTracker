@@ -365,6 +365,8 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
           }
         >
           <p>Alle Einträge dieses Abends werden gelöscht. Das lässt sich nicht rückgängig machen.</p>
+          {/* Mit gemeinsamer Runde verschwindet der Abend bei allen: Das soll vorher dastehen. */}
+          {linked ? <p class="error-text">Der Abend wird für alle in der Runde gelöscht.</p> : null}
         </Dialog>
       ) : null}
 

@@ -13,6 +13,7 @@ import {
   replaceText,
   roundErrorText,
   roundStatus,
+  SIGN_IN_MESSAGES,
   statusIconLabel,
   type RoundStatusInput,
 } from "./texts";
@@ -102,11 +103,13 @@ describe("Meldungen und Rückfragen", () => {
     expect(messageText("SIGN_IN_FAILED")).toBe("Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen.");
     expect(messageText("SIGN_IN_CANCELLED")).toBe("Die Anmeldung wurde abgebrochen.");
     expect(messageText("OTHER_ACCOUNT")).toBe(
-      "Du bist jetzt mit einem anderen Konto angemeldet. Die Runde wurde von diesem Gerät getrennt; die Daten bleiben hier.",
+      "Diese Runde gehört zu einem anderen Google-Konto. Melde dich mit dem Konto an, mit dem du der Runde beigetreten bist.",
     );
     expect(messageText("DETACHED")).toBe(
       "Die Runde gibt es nicht mehr, oder du gehörst nicht mehr dazu. Die Daten bleiben als Kopie auf diesem Gerät.",
     );
+    // Eine geglückte Anmeldung erledigt die Meldungen zur Anmeldung, nicht aber die über eine aufgelöste Runde.
+    expect([...SIGN_IN_MESSAGES].sort()).toEqual(["OTHER_ACCOUNT", "SIGN_IN_CANCELLED", "SIGN_IN_FAILED"]);
   });
 
   it("Zahlen in Einzahl und Mehrzahl", () => {

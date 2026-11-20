@@ -64,11 +64,17 @@ export function importPlan(preview: ImportPreview, options: { takeNames: boolean
   };
 }
 
-/** Ob die Vorschau überhaupt etwas zu übernehmen anbietet. */
-export function hasAnythingToImport(preview: ImportPreview): boolean {
+/**
+ * Ob die Vorschau überhaupt etwas zu übernehmen anbietet.
+ *
+ * @param options.renames Ob abweichende Namen vorhandener Spieler übernommen werden können. Mit gemeinsamer Runde
+ *   nicht: Dort kommen die Namen aus der Runde, und ein Umbenennen aus einer Sicherung träfe alle.
+ */
+export function hasAnythingToImport(preview: ImportPreview, options: { renames?: boolean } = {}): boolean {
+  const renames = (options.renames ?? true) && preview.differingPlayers.length > 0;
   return (
     preview.error === null &&
-    (preview.newPlayers.length > 0 || preview.newEvenings.length > 0 || preview.differingPlayers.length > 0 || preview.defaultRules !== null)
+    (preview.newPlayers.length > 0 || preview.newEvenings.length > 0 || renames || preview.defaultRules !== null)
   );
 }
 

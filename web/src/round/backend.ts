@@ -15,6 +15,12 @@ export interface Account {
   readonly email: string | null;
 }
 
+/**
+ * `RoundException.detail`, wenn {@link RoundAuth.completeSignIn} ohne begonnene Anmeldung gerufen wird (zum Beispiel,
+ * weil dieselbe Rückkehr-Adresse ein zweites Mal geöffnet wird). Wie `RoundAccount.NO_SIGN_IN_PENDING` der Android-App.
+ */
+export const NO_SIGN_IN_PENDING = "keine begonnene Anmeldung";
+
 /** Die Anmeldung dieses Geräts beim Server: nur Google, im Browser, mit PKCE. */
 export interface RoundAuth {
   /** Liest die gespeicherte Anmeldung (einmal) und liefert das angemeldete Konto. */
@@ -28,7 +34,10 @@ export interface RoundAuth {
   /** Beginnt die Anmeldung bei Google. Die Seite wird dafür verlassen und kehrt mit einem Code zurück. */
   signIn(): Promise<void>;
 
-  /** Schließt die Anmeldung mit dem Code aus der Rückkehr-Adresse ab. */
+  /**
+   * Schließt die Anmeldung mit dem Code aus der Rückkehr-Adresse ab. Gibt es dazu keine begonnene Anmeldung, scheitert
+   * das mit `SIGNED_OUT` und dem Zusatz {@link NO_SIGN_IN_PENDING}.
+   */
   completeSignIn(code: string): Promise<Account>;
 
   /** Meldet dieses Gerät ab. Das klappt auch ohne Netz; der Server lässt die Sitzung dann ablaufen. */

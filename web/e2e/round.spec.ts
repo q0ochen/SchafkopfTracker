@@ -3,8 +3,11 @@
  * nachgestellten Supabase-Projekt: anmelden, Runde anlegen, „Das bin ich“, einladen, beitreten, Statuszeile.
  */
 import { expect, test } from "@playwright/test";
-import { ROUND_APP_URL } from "./roundConfig";
+import { FAKE_SUPABASE_URL, ROUND_APP_URL } from "./roundConfig";
+import type { Evening, Player } from "../src/core/model";
 import { InviteLinks } from "../src/core/round/InviteLinks";
+import { RuleSets } from "../src/core/rules/RuleSet";
+import { writeBackup } from "../src/data/format";
 import {
   anotherDevice,
   claim,
@@ -281,29 +284,46 @@ test("ist die Anmeldung abgelaufen, bleibt nur „Mit Google anmelden“; danach
   await expect(page.getByRole("status").filter({ hasText: "Abgeglichen" })).toBeVisible(SYNC);
 });
 
-test("wer sich mit einem anderen Konto anmeldet, wird von der Runde getrennt und behält die Daten", async ({ page }) => {
+test("wer sich mit einem anderen Konto anmeldet, wird gleich wieder abgemeldet; die Runde bleibt verbunden, nichts geht verloren", async ({
+  page,
+}) => {
   await foundRound(page, fake);
   fake.revokeSessions();
   await expect(page.getByRole("button", { name: "Mit Google anmelden" })).toBeVisible(SYNC);
+  // Inzwischen wird weiter eingetragen; das Spiel wartet.
+  await openRunningEvening(page);
+  await enterGame(page, { players: ["Ost", "West"], won: true });
+  await openRound(page);
 
   fake.nextSignIn = KONTO_2;
   await page.getByRole("button", { name: "Mit Google anmelden" }).click();
 
   const message = page.getByRole("status").filter({
-    hasText: "Du bist jetzt mit einem anderen Konto angemeldet. Die Runde wurde von diesem Gerät getrennt; die Daten bleiben hier.",
+    hasText: "Diese Runde gehört zu einem anderen Google-Konto. Melde dich mit dem Konto an, mit dem du der Runde beigetreten bist.",
   });
   await expect(message).toBeVisible();
-  await expect(page.getByText(`Angemeldet als ${KONTO_2.email}`)).toBeVisible();
+  // Die Runde bleibt verbunden; angemeldet ist niemand, und unter dem fremden Konto lief nichts.
+  await expect(page.getByRole("heading", { level: 2, name: "Stammtisch" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Anmeldung abgelaufen – bitte neu anmelden" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mit Google anmelden" })).toBeEnabled();
+  await expect(page.getByText(`Angemeldet als ${KONTO_2.email}`)).toBeHidden();
+  expect(fake.session(KONTO_2.userId).calls).toEqual([]);
   await expectAccessible(page);
   // Die Meldung bleibt stehen, bis man sie wegtippt.
   await message.getByRole("button", { name: "OK" }).click();
   await expect(message).toBeHidden();
-  await openApp(page);
-  await expect(page.getByText("Abend läuft")).toBeVisible();
-  await expect(roundRow(page)).toContainText("Alle tragen vom eigenen Handy ein");
+
+  // Mit dem richtigen Konto geht das wartende Spiel hoch.
+  fake.nextSignIn = KONTO_1;
+  await page.getByRole("button", { name: "Mit Google anmelden" }).click();
+  await expect(page.getByRole("button", { name: "Jetzt abgleichen" })).toBeVisible(SYNC);
+  const [round] = await fake.session(KONTO_1.userId).myRounds();
+  await expect.poll(() => fake.server.evenings(round.id)[0].entries.length, SYNC).toBe(2);
+  await expect(page.getByRole("status").filter({ hasText: "Abgeglichen" })).toBeVisible(SYNC);
+  expect(fake.session(KONTO_2.userId).calls).toEqual([]);
 });
 
-test("eine abgebrochene Anmeldung wird gemeldet", async ({ page }) => {
+test("eine abgebrochene Anmeldung wird gemeldet; eine geglückte räumt die Meldung weg", async ({ page }) => {
   await openRound(page);
   fake.cancelNextSignIn = true;
   await page.getByRole("button", { name: "Mit Google anmelden" }).click();
@@ -314,6 +334,145 @@ test("eine abgebrochene Anmeldung wird gemeldet", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 2, name: "Gemeinsam eintragen" })).toBeVisible();
   await message.getByRole("button", { name: "OK" }).click();
   await expect(message).toBeHidden();
+
+  fake.cancelNextSignIn = true;
+  await page.getByRole("button", { name: "Mit Google anmelden" }).click();
+  await expect(message).toBeVisible();
+  await signIn(page, fake, KONTO_1);
+  await expect(message).toBeHidden();
+});
+
+test("kommt die Rückkehr aus der Anmeldung ein zweites Mal, ist das kein Fehler, solange jemand angemeldet ist", async ({ page }) => {
+  await openRound(page);
+  await signIn(page, fake, KONTO_1);
+  const code = (fake.calls("POST", "/auth/v1/token")[0].body as { auth_code: string }).auth_code;
+  const failed = page.getByRole("status").filter({ hasText: "Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen." });
+
+  // Dieselbe Adresse noch einmal, zum Beispiel aus dem Verlauf.
+  await page.goto(`./?code=${code}`);
+  await expect(page.getByText(`Angemeldet als ${KONTO_1.email}`)).toBeVisible();
+  await expect(page.getByRole("form", { name: "Neue Runde anlegen" })).toBeVisible();
+  await expect(failed).toBeHidden();
+  expect(new URL(page.url()).search).toBe("");
+
+  // Ohne Anmeldung ist dieselbe Rückkehr aber ein Fehler.
+  await page.getByRole("button", { name: "Abmelden" }).click();
+  await page.getByRole("dialog", { name: "Abmelden?" }).getByRole("button", { name: "Abmelden" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Gemeinsam eintragen" })).toBeVisible();
+  await page.goto(`./?code=${code}`);
+  await expect(failed).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Gemeinsam eintragen" })).toBeVisible();
+});
+
+test("während die Anmeldung nach der Rückkehr eingelöst wird, ruhen die Knöpfe", async ({ page, context }) => {
+  await foundRound(page, fake);
+  fake.revokeSessions();
+  await expect(page.getByRole("button", { name: "Mit Google anmelden" })).toBeVisible(SYNC);
+  // Das Einlösen des Codes dauert (langsames Netz).
+  let release = (): void => undefined;
+  const slow = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await context.route(`${FAKE_SUPABASE_URL}/auth/v1/token**`, async (route) => {
+    const request = route.request();
+    if (request.method() === "POST" && new URL(request.url()).searchParams.get("grant_type") === "pkce") await slow;
+    await route.fallback();
+  });
+
+  fake.nextSignIn = KONTO_1;
+  await page.getByRole("button", { name: "Mit Google anmelden" }).click();
+
+  await expect(page.getByText("Einen Moment …")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Stammtisch" })).toBeVisible();
+  for (const name of ["Jetzt abgleichen", "Einladen", "Runde verlassen", "Abmelden"]) {
+    await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
+  }
+  await expectAccessible(page);
+  release();
+  await expect(page.getByRole("button", { name: "Jetzt abgleichen" })).toBeEnabled(SYNC);
+  await expect(page.getByText("Einen Moment …")).toBeHidden();
+  await expect(page.getByRole("status").filter({ hasText: "Abgeglichen" })).toBeVisible(SYNC);
+});
+
+test("ließen sich „Deine Runden“ nicht laden, steht das da; „Erneut versuchen“ holt sie", async ({ page }) => {
+  await fake.session(KONTO_1.userId).createRound("Stammtisch");
+  fake.override = (request) => (request.url.pathname === "/rest/v1/rpc/my_rounds" ? { status: 503, body: { message: "Gerade nicht" } } : null);
+  await openRound(page);
+  await signIn(page, fake, KONTO_1);
+
+  await expect(page.getByRole("heading", { level: 2, name: "Deine Runden" })).toBeVisible();
+  await expect(page.getByText("Deine Runden ließen sich nicht laden.")).toBeVisible();
+  await expectAccessible(page);
+
+  fake.override = null;
+  await page.getByRole("button", { name: "Erneut versuchen" }).click();
+  const rounds = page.getByRole("list", { name: "Deine Runden" });
+  await expect(rounds.getByRole("listitem")).toContainText(["Stammtisch"]);
+  await expect(page.getByText("Deine Runden ließen sich nicht laden.")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Erneut versuchen" })).toBeHidden();
+});
+
+test("„Abend löschen?“ sagt mit Runde, dass der Abend für alle gelöscht wird", async ({ page, browser }) => {
+  // Ohne Runde fehlt der Satz.
+  const alone = await anotherDevice(browser, fake);
+  await startEvening(alone);
+  await alone.getByRole("button", { name: "Mehr" }).click();
+  await alone.getByRole("button", { name: "Abend löschen" }).click();
+  await expect(alone.getByRole("dialog", { name: "Abend löschen?" })).toContainText("Das lässt sich nicht rückgängig machen.");
+  await expect(alone.getByText("Der Abend wird für alle in der Runde gelöscht.")).toBeHidden();
+  await alone.context().close();
+
+  await foundRound(page, fake);
+  await openRunningEvening(page);
+  await page.getByRole("button", { name: "Mehr" }).click();
+  await page.getByRole("button", { name: "Abend löschen" }).click();
+  const dialog = page.getByRole("dialog", { name: "Abend löschen?" });
+  await expect(dialog.getByText("Alle Einträge dieses Abends werden gelöscht. Das lässt sich nicht rückgängig machen.")).toBeVisible();
+  await expect(dialog.getByText("Der Abend wird für alle in der Runde gelöscht.")).toBeVisible();
+  await expectAccessible(page);
+
+  await dialog.getByRole("button", { name: "Abend löschen" }).click();
+  const [round] = await fake.session(KONTO_1.userId).myRounds();
+  await expect.poll(() => fake.server.evenings(round.id).length, SYNC).toBe(0);
+});
+
+test("Sicherung einlesen mit Runde: Hinweis, dass es bei allen erscheint; die Namen bleiben die der Runde", async ({ page }) => {
+  await foundRound(page, fake);
+  // Eine Sicherung von früher: dieselben Spieler unter anderen Namen und ein Abend, den die Runde noch nicht kennt.
+  const players: Player[] = ["Anna", "Bert", "Cilli", "Done"].map((name, index) => ({
+    id: `spieler-${index + 1}`,
+    name,
+    colorIndex: index,
+    archived: false,
+  }));
+  const earlier: Evening = {
+    id: "abend-von-frueher",
+    startedAt: "2026-11-14T18:00:00Z",
+    finishedAt: "2026-11-14T22:00:00Z",
+    location: "Wirtshaus",
+    seating: players.map((it) => it.id),
+    firstDealer: "spieler-1",
+    rules: RuleSets.standard(),
+    entries: [{ kind: "thrown_in", id: "wurf-1", recordedAt: "2026-11-14T18:05:00Z" }],
+  };
+  const text = writeBackup(players, [earlier], RuleSets.standard(), "0.1.0", "2026-11-15T10:00:00Z");
+
+  await openApp(page, "/einstellungen");
+  await page.locator('input[type="file"]').setInputFiles({ name: "sicherung.json", mimeType: "application/json", buffer: Buffer.from(text) });
+  const dialog = page.getByRole("dialog", { name: "Sicherung einlesen?" });
+  await expect(dialog.getByText("Dieses Gerät gehört zu einer gemeinsamen Runde. Was du einliest, erscheint bei allen.")).toBeVisible();
+  await expect(dialog).toContainText("1 neuer Abend kommt dazu.");
+  await expect(dialog.getByText(/Spieler wie in der Sicherung benennen/)).toBeHidden();
+  await expectAccessible(page);
+  await dialog.getByRole("button", { name: "Einlesen" }).click();
+  await expect(page.getByText("Sicherung eingelesen.")).toBeVisible();
+
+  // Die Namen bleiben die der Runde, und der Abend geht in die Runde hoch.
+  await openApp(page, "/spieler");
+  await expect(page.getByRole("list", { name: "Alle Spieler" }).getByRole("listitem")).toHaveText(["Nord", "Ost", "Süd", "West"]);
+  const [round] = await fake.session(KONTO_1.userId).myRounds();
+  await expect.poll(() => fake.server.evenings(round.id).map((it) => it.id), SYNC).toContain("abend-von-frueher");
+  expect(fake.server.players(round.id).map((it) => it.name)).toEqual(["Nord", "Ost", "Süd", "West"]);
 });
 
 test("Fehlertexte: kein Code, abgelaufene Einladung, zu langer Name der Runde", async ({ page }) => {
@@ -360,6 +519,15 @@ test("die Einladungsseite ohne gültigen Code", async ({ page }) => {
   await expect(page.getByText("Das ist kein gültiger Einladungslink.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Hier beitreten" })).toBeHidden();
   await expectAccessible(page);
+  // Auch ein verstümmelter Link sagt es, statt still auf den Start-Bildschirm zu führen.
+  for (const broken of ["./#/einladung/", "./#/einladung/0123456789abcdef/kaputt"]) {
+    await page.goto(broken);
+    await expect(page.getByText("Das ist kein gültiger Einladungslink.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Hier beitreten" })).toBeHidden();
+  }
+  // Steht der Code irgendwo im Link, gilt er.
+  await page.goto("./#/einladung/0123456789abcdef0123456789abcdef/");
+  await expect(page.getByRole("button", { name: "Hier beitreten" })).toBeVisible();
 });
 
 test("Spieler: ein fester Name lässt sich nur vom Ersteller ändern, ein Spieler mit Besitzer nicht löschen", async ({ page, browser }) => {

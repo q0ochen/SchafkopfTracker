@@ -135,6 +135,7 @@ export class IndexedDbRoundStore implements RoundStore {
       cursor: link.cursor,
       rulesBase: link.rulesBase === null ? null : this.codec.encodeRules(link.rulesBase),
       members: link.members.map((member) => ({ userId: member.userId, playerId: member.playerId })),
+      unreadable: link.unreadable,
     });
   }
 
@@ -152,6 +153,11 @@ export class IndexedDbRoundStore implements RoundStore {
       if (!isRecord(member) || typeof member.userId !== "string") continue;
       members.push({ userId: member.userId, playerId: textOrNull(member.playerId) ?? null });
     }
+    // Fehlt in Ständen von vor dem 20.11.2026: dann keine. Jede Kennung zählt nur einmal; was keine ist, entfällt.
+    const unreadable = new Set<EveningId>();
+    for (const id of Array.isArray(value.unreadable) ? (value.unreadable as unknown[]) : []) {
+      if (typeof id === "string") unreadable.add(id);
+    }
     return {
       roundId,
       roundName,
@@ -162,6 +168,7 @@ export class IndexedDbRoundStore implements RoundStore {
       // Lässt sich das gemerkte Regelwerk nicht lesen, gilt es als unbekannt: Dann gewinnt beim nächsten Abgleich das des Servers.
       rulesBase: rulesText === null ? null : this.codec.decodeRulesOrNull(rulesText),
       members,
+      unreadable: [...unreadable],
     };
   }
 

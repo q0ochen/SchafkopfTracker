@@ -156,24 +156,194 @@ describe("Anmelden", () => {
     expect(one.auth.signInsStarted).toBe(1);
   });
 
-  it("wer sich mit einem anderen Konto anmeldet als dem der Runde, wird von ihr getrennt; die Daten bleiben", async () => {
+  it("meldet sich nach der Rückkehr ein anderes Konto an, bleibt die Runde verbunden und das Konto wird wieder abgemeldet", async () => {
     const one = await founder();
-    one.auth.set(null);
-    await pass();
+    const id = one.state.link?.roundId ?? "";
+    // Die Anmeldung ist abgelaufen; inzwischen wurde ein Spiel eingetragen, das noch wartet.
+    one.mine.signedOut = true;
+    await one.addGame("abend-1");
+    await pass(500);
     expect(needsSignIn(one.state)).toBe(true);
+    expect(one.state.pending).toBe(1);
+    one.session("konto-1").signedOut = false;
+    one.session("konto-1").calls.length = 0;
+    one.auth.nextAccount = account(2);
 
+    await one.reload({ kind: "code", code: "gut" });
+    await pass(10_000);
+
+    // Nichts lief unter dem fremden Konto, und nichts ging verloren.
+    expect(one.state.link?.roundId).toBe(id);
+    expect(one.state.message).toBe("OTHER_ACCOUNT");
+    expect(one.state.account).toBeNull();
+    expect(needsSignIn(one.state)).toBe(true);
+    expect(one.auth.signOuts).toBe(1);
+    expect(one.session("konto-2").calls).toEqual([]);
+    expect(one.session("konto-1").calls).toEqual([]);
+    expect(one.state.pending).toBe(1);
+    expect(status(one)).toBe("Anmeldung abgelaufen – bitte neu anmelden");
+
+    // Mit dem richtigen Konto geht das wartende Spiel hoch, und die Meldung ist erledigt.
+    one.auth.nextAccount = account(1);
+    await one.reload({ kind: "code", code: "gut" });
+    await pass();
+    expect(one.state.message).toBeNull();
+    expect(one.state.pending).toBe(0);
+    expect(status(one)).toBe("Abgeglichen");
+    expect(server.evenings(id)[0].entries).toHaveLength(2);
+  });
+
+  it("meldet sich in einem anderen Fenster ein anderes Konto an, wird es hier gleich wieder abgemeldet; abgeglichen wird nie unter seinem Namen", async () => {
+    const one = await founder();
+    const id = one.state.link?.roundId ?? "";
+    one.mine.offline = true;
+    await one.addGame("abend-1");
+    await pass(500);
+    one.mine.offline = false;
+
+    one.auth.set(account(2));
+    // Was in diesem Augenblick noch an den Server geht, scheitert, statt unter fremdem Namen zu laufen.
+    await expect(one.controller.inviteLink()).rejects.toMatchObject({ error: "SIGNED_OUT" });
+    await pass(10_000);
+
+    expect(one.state.link?.roundId).toBe(id);
+    expect(one.state.message).toBe("OTHER_ACCOUNT");
+    expect(one.state.account).toBeNull();
+    expect(one.auth.signOuts).toBe(1);
+    expect(one.session("konto-2").calls).toEqual([]);
+    expect(await one.controller.pendingCount()).toBe(1);
+
+    // Mit dem richtigen Konto geht es weiter.
+    one.auth.set(account(1));
+    await pass();
+    expect(status(one)).toBe("Abgeglichen");
+    expect(server.evenings(id)[0].entries).toHaveLength(2);
+  });
+
+  it("hat ein anderes Fenster die Runde schon gelöst, bleibt das dort neu angemeldete Konto angemeldet", async () => {
+    const one = await Phone.create(server, "eins", account(1), { cachedStore: true });
+    phones.push(one);
+    one.controller.start(true);
+    await pass();
+    expect((await one.controller.create("Stammtisch")).kind).toBe("Synced");
+    await pass();
+    // Ein anderes Fenster derselben App hat abgemeldet und die Runde gelöst; dieses Fenster hat noch den alten Stand.
+    await one.roundStore.setLink(null);
+    await one.roundStore.clearBases();
+    expect(one.state.link).not.toBeNull();
+
+    // Dort meldet sich jemand mit einem anderen Konto an.
     one.auth.set(account(2));
     await pass();
 
-    expect(one.state.link).toBeNull();
-    expect(one.state.message).toBe("OTHER_ACCOUNT");
+    expect(one.auth.signOuts).toBe(0);
     expect(one.state.account).toEqual(account(2));
-    expect(one.store.getState().evenings).toHaveLength(1);
-    expect(await one.roundStore.eveningBases()).toEqual(new Map());
-    // Konto 2 sieht die Runde von Konto 1 nicht, und abgeglichen wird nichts mehr.
-    one.session("konto-2").calls.length = 0;
-    await pass(10_000);
-    expect(one.session("konto-2").calls).toEqual([]);
+    expect(one.state.link).toBeNull();
+    expect(one.state.message).toBeNull();
+  });
+
+  it("während die Anmeldung eingelöst wird, ist das zu sehen", async () => {
+    const one = await phone("eins");
+    let release = (): void => undefined;
+    one.auth.exchange = new Promise((resolve) => {
+      release = resolve;
+    });
+    one.auth.nextAccount = account(1);
+
+    one.controller.start(true, { kind: "code", code: "gut" });
+    await pass();
+    expect(one.state.signingIn).toBe(true);
+    expect(one.state.loaded).toBe(false);
+
+    release();
+    await pass();
+    expect(one.state.signingIn).toBe(false);
+    expect(one.state.loaded).toBe(true);
+    expect(one.state.account).toEqual(account(1));
+  });
+
+  it("kommt dieselbe Rückkehr ein zweites Mal, gibt es keine Fehlermeldung", async () => {
+    const one = await phone("eins");
+    one.auth.nextAccount = account(1);
+    one.controller.start(true, { kind: "code", code: "gut" });
+    await pass();
+    expect(one.state.account).toEqual(account(1));
+
+    // Zur Rückkehr gibt es keine begonnene Anmeldung mehr; angemeldet ist längst jemand.
+    one.auth.noPendingSignIn = true;
+    await one.reload({ kind: "code", code: "gut" });
+    await pass();
+
+    expect(one.state.message).toBeNull();
+    expect(one.state.account).toEqual(account(1));
+    expect(one.state.signingIn).toBe(false);
+
+    // Ohne Anmeldung ist eine solche Rückkehr aber ein Fehler.
+    const two = await phone("zwei");
+    two.auth.noPendingSignIn = true;
+    two.controller.start(true, { kind: "code", code: "gut" });
+    await pass();
+    expect(two.state.message).toBe("SIGN_IN_FAILED");
+    expect(two.state.account).toBeNull();
+  });
+});
+
+describe("Statuszeile beim Start", () => {
+  it("was beim Start schon wartet, zeigt die Statuszeile gleich, nicht erst nach dem ersten Abgleich", async () => {
+    const one = await founder();
+    one.mine.offline = true;
+    await one.addGame("abend-1");
+    await pass(500);
+    one.mine.offline = false;
+
+    // Neu geladen mit langsamem Netz: Die Anbindung an den Server lässt auf sich warten.
+    let release = (): void => undefined;
+    one.backendGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await one.reload();
+    await pass();
+    expect(one.state.loaded).toBe(false);
+    expect(one.state.pending).toBe(1);
+    expect(status(one)).toBe("1 Änderung wartet");
+
+    // Die Anbindung ist da, aber die erste Antwort des Servers dauert: Auch dann steht das Wartende da.
+    const head = one.mine.head.bind(one.mine);
+    let answer = (): void => undefined;
+    const slow = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    one.mine.head = async (round) => {
+      await slow;
+      return head(round);
+    };
+    release();
+    await pass();
+    expect(one.state.syncing).toBe(true);
+    expect(one.state.pending).toBe(1);
+    expect(status(one)).toBe("1 Änderung wartet");
+
+    answer();
+    await pass();
+    expect(status(one)).toBe("Abgeglichen");
+  });
+
+  it("Abende, die diese Version nicht lesen kann, stehen nach dem Neuladen gleich in der Statuszeile", async () => {
+    const one = await founder();
+    const two = await guest(one);
+    await one.startEvening("abend-2");
+    await pass(500);
+    server.makeUnreadable(one.state.link?.roundId ?? "", "abend-2");
+    await pass(4000);
+    expect(two.state.unreadable).toBe(1);
+
+    two.backendGate = new Promise(() => undefined);
+    await two.reload();
+    await pass();
+
+    expect(two.state.loaded).toBe(false);
+    expect(two.state.unreadable).toBe(1);
+    expect(status(two)).toBe("1 Abend kann diese Version nicht lesen – bitte die App aktualisieren");
   });
 });
 
@@ -416,6 +586,13 @@ describe("Abgleich im Betrieb", () => {
     await pass(500);
     expect(two.state.refused).toBe(1);
     expect(two.state.pending).toBe(1);
+    // Beide Warnungen bleiben stehen, auch wenn spätere Abgleiche die Abende nicht mehr anfassen.
+    expect(two.state.unreadable).toBe(1);
+    await two.startEvening("abend-3");
+    await pass(4500);
+    expect(two.state.unreadable).toBe(1);
+    expect(two.state.refused).toBe(1);
+    expect(status(two)).toBe("1 Abend kann diese Version nicht lesen – bitte die App aktualisieren");
   });
 
   it("Hinweise aus dem Abgleich sammeln sich (höchstens 20) und lassen sich ausblenden", async () => {

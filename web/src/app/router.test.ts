@@ -49,9 +49,13 @@ describe("Router", () => {
     // Der Einladungslink, wie ihn `InviteLinks.webLink` baut.
     expect(parseRoute("#/einladung/0123456789abcdef0123456789abcdef")).toEqual({ name: "invite", token: "0123456789abcdef0123456789abcdef" });
     expect(parseRoute("#/einladung/")).toEqual({ name: "invite", token: "" });
-    // Was im Link steht, prüft erst die Seite.
+    // Was im Link steht, prüft erst die Seite – auch ein verstümmelter Link führt dorthin (und nicht still zum Start).
     expect(parseRoute("#/einladung/kein-code")).toEqual({ name: "invite", token: "kein-code" });
-    expect(parseRoute("#/einladung/a/b")).toEqual({ name: "start" });
+    expect(parseRoute("#/einladung/a/b")).toEqual({ name: "invite", token: "a/b" });
+    expect(parseRoute("#/einladung/%E0%A4%A")).toEqual({ name: "invite", token: "%E0%A4%A" });
+    const token = "0123456789abcdef0123456789abcdef";
+    expect(parseRoute(`#/einladung/${token}/`)).toEqual({ name: "invite", token });
+    expect(parseRoute(pathOf({ name: "invite", token: "a/b" }))).toEqual({ name: "invite", token: "a/b" });
     expect(parentOf({ name: "round" })).toEqual({ name: "start" });
     expect(parentOf({ name: "invite", token: "x" })).toEqual({ name: "start" });
   });

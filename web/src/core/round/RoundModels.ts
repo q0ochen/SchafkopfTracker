@@ -132,6 +132,9 @@ export interface SavedEvening {
  * @property playerId Der eigene Spieler; `null`, solange „Das bin ich“ noch aussteht.
  * @property cursor Das größte `rev`, das dieses Gerät vollständig verarbeitet hat.
  * @property rulesBase Das zuletzt abgeglichene Regelwerk für neue Abende.
+ * @property unreadable Abende des Servers, die dieses Gerät nicht lesen oder nicht speichern konnte (zum Beispiel von
+ *   einer neueren App), jede Kennung höchstens einmal (Kotlin: `Set<EveningId>`). Sie liegen hinter `cursor` und werden
+ *   deshalb bei jedem Abgleich einzeln neu gelesen.
  */
 export interface RoundLink {
   readonly roundId: RoundId;
@@ -142,11 +145,12 @@ export interface RoundLink {
   readonly cursor: number;
   readonly rulesBase: RuleSet | null;
   readonly members: readonly RoundMember[];
+  readonly unreadable: readonly EveningId[];
 }
 
 /** Ein `RoundLink` mit den Standardwerten der Kotlin-Klasse für alles, was nicht angegeben ist. */
 export function roundLink(fields: Pick<RoundLink, "roundId" | "roundName" | "userId"> & Partial<RoundLink>): RoundLink {
-  return { playerId: null, isCreator: false, cursor: 0, rulesBase: null, members: [], ...fields };
+  return { playerId: null, isCreator: false, cursor: 0, rulesBase: null, members: [], unreadable: [], ...fields };
 }
 
 /**

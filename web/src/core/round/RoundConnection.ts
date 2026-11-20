@@ -10,9 +10,15 @@ import { kotlinTrim } from "../kotlin";
 import type { Player, PlayerId } from "../model";
 import { nextColorIndex } from "../players";
 import { samePlayer } from "./equality";
-import { roundLink, type RoundLink, type RoundSummary } from "./RoundModels";
+import { RoundException, roundLink, type RoundId, type RoundLink, type RoundSummary } from "./RoundModels";
 import type { EveningRepository, IdGenerator, PlayerRepository, RoundApi, RoundStore } from "./RoundPorts";
 import { SyncOutcome, type RoundSync } from "./RoundSync";
+
+/** Den Stand `rev = 1` hat eine Runde nur unmittelbar nach dem Anlegen. */
+const FRESH_REV = 1;
+
+/** Wie Javas „\s+“: Folgen von ASCII-Leerraum. */
+const WHITESPACE = /[ \t\n\v\f\r]+/g;
 
 export class RoundConnection {
   constructor(
@@ -38,12 +44,14 @@ export class RoundConnection {
   /**
    * Legt eine Runde an und bringt die Daten dieses Geräts mit: Alle Abende und Spieler gehen beim ersten Abgleich
    * hoch. Vorbelegte Spieler, die noch niemand umbenannt hat und die in keinem Abend vorkommen, entfallen vorher.
+   * Hat das Konto schon eine eigene, noch leere Runde dieses Namens (die Antwort auf einen früheren Versuch ging
+   * verloren), wird sie verwendet statt eine zweite anzulegen.
    *
    * @param userId Das angemeldete Konto.
    */
   async create(name: string, userId: string, placeholders: readonly Player[]): Promise<SyncOutcome> {
     await this.sync.exclusive(async () => {
-      const round = await this.api.createRound(name);
+      const round = (await this.emptyOwnRound(name)) ?? (await this.api.createRound(name));
       const all = await this.evenings.evenings();
       const untouched = (await this.players.players()).filter(
         (player) => isPlaceholder(player, placeholders) && !all.some((evening) => involves(evening, player.id)),
@@ -57,7 +65,8 @@ export class RoundConnection {
 
   /**
    * Tritt der Runde hinter dem Einladungscode bei und übernimmt deren Daten. **Abende und Spieler dieses Geräts
-   * werden dabei gelöscht** (vorher nachfragen, siehe {@link hasOwnData}).
+   * werden dabei gelöscht** (vorher nachfragen, siehe {@link hasOwnData}) – aber erst, wenn der Server die Runde
+   * gezeigt hat. Antwortet er nicht, bleibt das Gerät, wie es ist.
    */
   async join(token: string, userId: string): Promise<SyncOutcome> {
     const info = await this.api.inviteInfo(token);
@@ -67,7 +76,8 @@ export class RoundConnection {
 
   /**
    * Verwendet eine Runde, der das Konto schon angehört, auf diesem Gerät (zum Beispiel auf einem neuen Handy).
-   * **Abende und Spieler dieses Geräts werden dabei gelöscht.**
+   * **Abende und Spieler dieses Geräts werden dabei gelöscht**, sobald der Server die Runde gezeigt hat; gibt es sie
+   * für dieses Konto nicht (mehr), scheitert der Aufruf mit `NOT_MEMBER`, und das Gerät bleibt, wie es ist.
    */
   use(round: RoundSummary, userId: string): Promise<SyncOutcome> {
     return this.attach(
@@ -76,14 +86,30 @@ export class RoundConnection {
   }
 
   private async attach(link: RoundLink): Promise<SyncOutcome> {
+    // Erst fragen, dann leeren: Ohne Antwort des Servers bleibt das Gerät, wie es ist. Sonst stünde man ohne Netz mit
+    // einem leeren Gerät da, das schon mit der Runde verbunden ist.
+    if ((await this.api.head(link.roundId)) === null) throw new RoundException("NOT_MEMBER");
     await this.sync.exclusive(async () => {
-      // Erst leeren, dann verbinden: Bräche es dazwischen ab, ginge sonst der Rest als neu in die Runde hoch.
+      // Erst Verbindung und Basen weg, dann die Daten, dann verbinden. Mit Basen sähe das Leeren aus wie Löschen und
+      // ginge beim nächsten Abgleich als Löschung in die Runde hoch; und bräche es vor dem Verbinden ab, ginge der Rest
+      // sonst als neu hoch.
+      await this.store.setLink(null);
+      await this.store.clearBases();
       for (const evening of await this.evenings.evenings()) await this.evenings.delete(evening.id);
       for (const player of await this.players.players()) await this.players.delete(player.id);
-      await this.store.clearBases();
       await this.store.setLink(link);
     });
     return this.sync.sync();
+  }
+
+  /**
+   * Eine eigene, noch leere Runde dieses Namens. Sie stammt von einem Versuch, dessen Antwort verloren ging; ohne
+   * diese Prüfung legte der zweite Versuch eine zweite Runde an, und die erste bliebe für immer leer liegen.
+   */
+  private async emptyOwnRound(name: string): Promise<RoundId | null> {
+    const wanted = kotlinTrim(name).replace(WHITESPACE, " ");
+    const rounds = await this.api.myRounds();
+    return rounds.find((it) => it.isCreator && it.memberCount === 1 && it.rev === FRESH_REV && it.name === wanted)?.id ?? null;
   }
 
   /**

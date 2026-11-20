@@ -5,6 +5,11 @@
  *
  * Die Anbindung an den Server (supabase-js) wird erst hier und erst bei Bedarf geladen. Solange sie nicht da ist,
  * weiß die Oberfläche noch nicht, wer angemeldet ist (`loaded` ist `false`).
+ *
+ * Mit verbundener Runde spricht das Gerät nur als das Konto mit dem Server, mit dem es der Runde beigetreten ist. Mit
+ * einem anderen Konto sähe der Server die Runde nicht, und der Abgleich hielte sie für aufgelöst und trennte sie. Ein
+ * anderes Konto wird deshalb gleich wieder abgemeldet; die Runde bleibt verbunden, und was noch wartet, geht nicht
+ * verloren.
  */
 import type { Player, PlayerId } from "../core/model";
 import { InviteLinks } from "../core/round/InviteLinks";
@@ -26,12 +31,12 @@ import type {
   SettingsRepository,
 } from "../core/round/RoundPorts";
 import { RoundSync, SyncOutcome, type SyncNotice } from "../core/round/RoundSync";
-import type { Account, RoundBackend } from "./backend";
+import { NO_SIGN_IN_PENDING, type Account, type RoundBackend } from "./backend";
 import { deferredApi } from "./deferredApi";
 import type { InviteMemory } from "./inviteMemory";
 import { SyncScheduler, type SchedulerTiming } from "./scheduler";
 import type { SignInReturn } from "./signInReturn";
-import type { RoundMessage, RoundProblem } from "./texts";
+import { SIGN_IN_MESSAGES, type RoundMessage, type RoundProblem } from "./texts";
 
 /**
  * Der Stand der gemeinsamen Runde für die Oberfläche (in der Android-App `RoundState`).
@@ -39,7 +44,10 @@ import type { RoundMessage, RoundProblem } from "./texts";
  * @property configured `false`: Diese App wurde ohne Adresse des Servers gebaut; die Funktion ist abgeschaltet.
  * @property loaded Die Anmeldung ist gelesen (vorher weiß die Oberfläche noch nicht, ob jemand angemeldet ist).
  * @property pending So viele Änderungen dieses Geräts sind noch nicht auf dem Server.
+ * @property unreadable So viele Abende des Servers kann diese Version nicht lesen (gemerkt in `RoundLink.unreadable`).
+ * @property refused So viele Abende hat der Server in dieser Sitzung nicht angenommen.
  * @property players Der Stand der Spieler auf dem Server (Besitzer, fester Name), solange eine Runde verbunden ist.
+ * @property signingIn Die Anmeldung wird nach der Rückkehr aus dem Browser gerade eingelöst; solange ruhen die Knöpfe.
  */
 export interface RoundState {
   readonly configured: boolean;
@@ -55,6 +63,7 @@ export interface RoundState {
   readonly players: ReadonlyMap<PlayerId, RemotePlayer>;
   readonly pendingInvite: string | null;
   readonly message: RoundMessage | null;
+  readonly signingIn: boolean;
 }
 
 /** Der Stand einer App, die ohne Server gebaut wurde. */
@@ -72,18 +81,37 @@ export const NOT_CONFIGURED: RoundState = {
   players: new Map(),
   pendingInvite: null,
   message: null,
+  signingIn: false,
 };
 
-/** Verbunden, aber die Anmeldung fehlt oder ist abgelaufen: Bis zur neuen Anmeldung wird nichts abgeglichen. */
+/**
+ * Ob angemeldet ist, wer zur verbundenen Runde gehört. Nur dann wird abgeglichen: Mit einem anderen Konto sähe der
+ * Server die Runde nicht, und der Abgleich hielte sie für aufgelöst.
+ */
+function signedInForRound(state: Pick<RoundState, "account" | "link">): boolean {
+  return state.link !== null && state.account !== null && state.account.userId === state.link.userId;
+}
+
+/**
+ * Verbunden, aber die Anmeldung fehlt, ist abgelaufen oder gehört (für einen Augenblick, bis es abgemeldet ist) zu
+ * einem anderen Konto: Bis zur neuen Anmeldung wird nichts abgeglichen.
+ */
 export function needsSignIn(state: RoundState): boolean {
-  return state.loaded && state.link !== null && (state.account === null || state.problem === "SIGNED_OUT");
+  return state.loaded && state.link !== null && (!signedInForRound(state) || state.problem === "SIGNED_OUT");
 }
 
 /** So viele Hinweise aus dem Abgleich bleiben höchstens stehen. */
 const MAX_NOTICES = 20;
 
 /** Was sich das Gerät zum Abgleich merkt, mit Meldung bei Änderungen. */
-export type ObservableRoundStore = RoundStore & { subscribe(listener: () => void): () => void };
+export type ObservableRoundStore = RoundStore & {
+  subscribe(listener: () => void): () => void;
+  /**
+   * Vergisst, was im Arbeitsspeicher steht, und liest beim nächsten Mal neu (ein anderes Fenster der App kann
+   * geschrieben haben). Fehlt bei einem Speicher, der nichts zwischenspeichert.
+   */
+  invalidate?(): void;
+};
 
 /** Spieler, Abende und Einstellungen dieses Geräts, wie der Abgleich sie braucht (in der App: `StoreAdapters`). */
 export interface RoundData {
@@ -129,20 +157,27 @@ export class RoundController {
   private loading: Promise<boolean> | null = null;
   private signInReturn: SignInReturn | null = null;
   private started = false;
+  private stopped = false;
+  /** Was beim Aufhören abbestellt wird (Speicher, Daten, Anmeldung). */
+  private readonly subscriptions: Array<() => void> = [];
 
   /** Wer angemeldet und welche Runde verbunden ist, als ein Text: Ändert er sich, wird sofort abgeglichen. */
   private known: string | null = null;
   private refreshing: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: RoundControllerOptions) {
-    this.api = deferredApi(async () => (await this.loadBackend()).api);
+    this.api = deferredApi(async () => {
+      const backend = await this.loadBackend();
+      await this.requireRoundAccount(backend);
+      return backend.api;
+    });
     const { store, data } = options;
     this.sync = new RoundSync(this.api, store, data.players, data.evenings, data.settings, data.editor);
     this.connection = new RoundConnection(this.api, store, data.players, data.evenings, this.sync, options.ids);
     this.scheduler = new SyncScheduler(
       {
         // Solange die Anmeldung nicht gelesen ist, versucht die Schleife das (mit wachsendem Abstand, wenn es scheitert).
-        canSync: () => !this.state.loaded || (this.state.link !== null && this.state.account !== null),
+        canSync: () => !this.state.loaded || signedInForRound(this.state),
         pending: () => this.state.pending,
         run: (full) => this.run(full),
       },
@@ -178,8 +213,10 @@ export class RoundController {
     this.started = true;
     this.signInReturn = signInReturn;
     this.setState({ pendingInvite: this.options.invites.get() });
-    this.options.store.subscribe(() => void this.refresh());
-    this.options.data.onLocalChange(() => this.scheduler.localChange());
+    this.subscriptions.push(this.options.store.subscribe(() => void this.refresh()));
+    this.subscriptions.push(this.options.data.onLocalChange(() => this.scheduler.localChange()));
+    // Die Runde und was darin schon wartet gleich zeigen, noch bevor die Anmeldung gelesen ist.
+    void this.refresh();
     // Die Anmeldung auch dann lesen, wenn die App im Hintergrund startet; abgeglichen wird erst, wenn sie zu sehen ist.
     void this.ensureLoaded();
     this.scheduler.start(visible);
@@ -187,7 +224,9 @@ export class RoundController {
 
   /** Hört auf zu arbeiten (zum Beispiel, wenn die Datenbank nicht mehr benutzbar ist, und in Tests). */
   stop(): void {
+    this.stopped = true;
     this.scheduler.stop();
+    for (const unsubscribe of this.subscriptions.splice(0)) unsubscribe();
   }
 
   /** Die App ist zu sehen bzw. nicht mehr zu sehen. */
@@ -212,7 +251,7 @@ export class RoundController {
     this.backendLoading ??= this.options.loadBackend().then(
       (backend) => {
         this.backend = backend;
-        backend.auth.subscribe(() => void this.refresh());
+        if (!this.stopped) this.subscriptions.push(backend.auth.subscribe(() => void this.refresh()));
         return backend;
       },
       (error: unknown) => {
@@ -222,6 +261,16 @@ export class RoundController {
       },
     );
     return this.backendLoading;
+  }
+
+  /**
+   * Mit verbundener Runde spricht dieses Gerät nur als das Konto der Runde mit dem Server. Ist (für einen Augenblick,
+   * bis es abgemeldet ist) ein anderes angemeldet, scheitert jeder Aufruf, als wäre die Anmeldung abgelaufen.
+   */
+  private async requireRoundAccount(backend: RoundBackend): Promise<void> {
+    const link = await this.options.store.link();
+    const account = backend.auth.account();
+    if (link !== null && account !== null && account.userId !== link.userId) throw new RoundException("SIGNED_OUT", "anderes Konto");
   }
 
   /** Lädt die Anbindung und liest die Anmeldung. @returns `false`, wenn das (noch) nicht geklappt hat. */
@@ -243,22 +292,55 @@ export class RoundController {
     await backend.auth.load();
     const back = this.signInReturn;
     this.signInReturn = null;
-    let message: RoundMessage | null = null;
     let signedIn = false;
     if (back?.kind === "failure") {
-      message = back.error === "access_denied" ? "SIGN_IN_CANCELLED" : "SIGN_IN_FAILED";
+      this.setState({ message: back.error === "access_denied" ? "SIGN_IN_CANCELLED" : "SIGN_IN_FAILED" });
     } else if (back?.kind === "code") {
+      // Solange die Anmeldung eingelöst wird, ruhen die Knöpfe, und es steht „Einen Moment …“ da.
+      this.setState({ signingIn: true });
       try {
-        await backend.auth.completeSignIn(back.code);
-        signedIn = true;
-      } catch (error) {
-        console.warn("Schafkopf Tracker: Anmeldung nicht abgeschlossen", error);
-        message = "SIGN_IN_FAILED";
+        signedIn = await this.completeSignIn(backend, back.code);
+      } finally {
+        this.setState({ signingIn: false });
       }
     }
-    this.setState({ loaded: true, ...(message === null ? {} : { message }) });
+    this.setState({ loaded: true });
     await this.refresh();
     if (signedIn) this.scheduler.syncNow();
+  }
+
+  /**
+   * Löst die Rückkehr aus der Anmeldung ein. Gehört die verbundene Runde zu einem anderen Konto, wird das neue Konto
+   * gleich wieder abgemeldet: Der Abgleich darf nie unter fremdem Namen laufen; trennen wäre aber zu viel (was noch
+   * wartet, käme nie mehr an).
+   *
+   * @returns ob jetzt das richtige Konto angemeldet ist.
+   */
+  private async completeSignIn(backend: RoundBackend, code: string): Promise<boolean> {
+    let account: Account;
+    try {
+      account = await backend.auth.completeSignIn(code);
+    } catch (error) {
+      // Eine Rückkehr, zu der keine Anmeldung (mehr) offen ist, während längst jemand angemeldet ist (zum Beispiel
+      // dieselbe Adresse ein zweites Mal): kein Grund für eine Fehlermeldung.
+      const stale = error instanceof RoundException && error.detail === NO_SIGN_IN_PENDING;
+      const someone = backend.auth.account() !== null && this.state.problem !== "SIGNED_OUT";
+      if (!(stale && someone)) {
+        console.warn("Schafkopf Tracker: Anmeldung nicht abgeschlossen", error);
+        this.setState({ message: "SIGN_IN_FAILED" });
+      }
+      return false;
+    }
+    const link = await this.options.store.link();
+    if (link !== null && link.userId !== account.userId) {
+      await backend.auth.signOut();
+      this.setState({ message: "OTHER_ACCOUNT" });
+      return false;
+    }
+    // Geklappt: Ältere Meldungen zur Anmeldung gelten nicht mehr.
+    const message = this.state.message;
+    if (message !== null && SIGN_IN_MESSAGES.has(message)) this.setState({ message: null });
+    return true;
   }
 
   /**
@@ -276,24 +358,29 @@ export class RoundController {
   private async refreshNow(): Promise<void> {
     let link = await this.options.store.link();
     if (!this.state.loaded) {
-      // Die Anmeldung ist noch nicht gelesen: nur die Verbindung zeigen.
+      // Die Anmeldung ist noch nicht gelesen: nur die Verbindung zeigen – und gleich, was darin schon wartet, statt bis
+      // zum ersten Abgleich „Abgeglichen“.
       const players = link === null ? new Map<PlayerId, RemotePlayer>() : new Map(await this.options.store.playerBases());
-      this.setState({ link, players });
+      this.setState({ link, players, unreadable: link?.unreadable.length ?? 0 });
+      if (link !== null) await this.refreshPending();
       return;
     }
-    let otherAccount = false;
     const signedIn = this.backend?.auth.account() ?? null;
-    if (signedIn !== null && link !== null && link.userId !== signedIn.userId) {
-      // Die Runde hängt an einem anderen Konto: lösen, sonst liefe der Abgleich unter falschem Namen.
-      await this.connection.disconnect();
+    if (this.backend !== null && signedIn !== null && link !== null && link.userId !== signedIn.userId) {
+      // Angemeldet ist ein anderes Konto als das der Runde (zum Beispiel aus einem anderen Fenster). Vorher frisch
+      // nachsehen: Vielleicht hat das andere Fenster die Runde schon gelöst, dann ist das neue Konto ganz richtig.
+      this.options.store.invalidate?.();
       link = await this.options.store.link();
-      otherAccount = true;
+      if (link !== null && link.userId !== signedIn.userId) {
+        // Gleich wieder abmelden. Die Runde bleibt verbunden; was noch wartet, geht nicht verloren.
+        this.setState({ message: "OTHER_ACCOUNT" });
+        await this.backend.auth.signOut();
+      }
     }
     const players = link === null ? new Map<PlayerId, RemotePlayer>() : new Map(await this.options.store.playerBases());
     // Ab hier ohne Unterbrechung: Was inzwischen an Meldungen und Zählern dazukam, bleibt stehen.
     const account = this.backend?.auth.account() ?? null;
     const current = this.state;
-    const message: Partial<RoundState> = otherAccount ? { message: "OTHER_ACCOUNT" } : {};
     if (link === null) {
       // Ohne Runde gibt es nichts abzugleichen: alle Zähler zurück.
       this.setState({
@@ -306,21 +393,22 @@ export class RoundController {
         refused: 0,
         notices: [],
         players,
-        ...message,
       });
     } else {
       this.setState({
         account,
         link,
         players,
+        unreadable: link.unreadable.length,
         // Nach einer neuen Anmeldung gilt die alte Meldung nicht mehr.
         problem: current.problem === "SIGNED_OUT" && !sameAccount(account, current.account) ? null : current.problem,
-        ...message,
       });
     }
     const now = `${account?.userId ?? ""}|${link?.roundId ?? ""}`;
     if (now !== this.known) {
       this.known = now;
+      // Was schon vor dem ersten Abgleich wartet, soll die Statuszeile gleich zeigen.
+      if (link !== null) await this.refreshPending();
       this.scheduler.wake();
     }
   }
@@ -355,6 +443,10 @@ export class RoundController {
     return this.connection.hasOwnData(this.options.placeholders);
   }
 
+  /**
+   * Legt eine Runde an. Geschafft ist das, sobald der Server sie angenommen hat; scheitert nur der Abgleich danach,
+   * sagt es die Statuszeile, und die App holt ihn von selbst nach.
+   */
   async create(name: string): Promise<SyncOutcome> {
     const seen = this.scheduler.seen();
     return this.applied(await this.connection.create(name, this.userId(), this.options.placeholders), seen);
@@ -421,10 +513,11 @@ export class RoundController {
 
   // --- Abgleich ---
 
+  /** Das angemeldete Konto, wie die Anmeldung es gerade kennt (der Stand der Oberfläche kann einen Augenblick nachhängen). */
   private userId(): string {
-    const userId = this.state.account?.userId;
-    if (userId === undefined) throw new RoundException("SIGNED_OUT");
-    return userId;
+    const account = this.backend !== null ? this.backend.auth.account() : this.state.account;
+    if (account === null) throw new RoundException("SIGNED_OUT");
+    return account.userId;
   }
 
   private async run(full: boolean): Promise<SyncOutcome> {
@@ -432,7 +525,8 @@ export class RoundController {
       await this.apply(SyncOutcome.Offline);
       return SyncOutcome.Offline;
     }
-    if (this.state.link === null || this.state.account === null) return SyncOutcome.NotLinked;
+    // Nie unter fremdem Namen (siehe oben); ohne Runde oder Anmeldung gibt es ohnehin nichts abzugleichen.
+    if (!signedInForRound(this.state)) return SyncOutcome.NotLinked;
     this.setState({ syncing: true });
     let outcome: SyncOutcome;
     try {
@@ -446,7 +540,10 @@ export class RoundController {
     return outcome;
   }
 
-  /** Das Ergebnis eines Abgleichs außerhalb der Schleife (Verbinden, „Das bin ich“). */
+  /**
+   * Das Ergebnis eines Abgleichs außerhalb der Schleife (Verbinden, „Das bin ich“). Ist es kein Erfolg, ist das kein
+   * Fehler der Aktion: Die Statuszeile sagt es.
+   */
   private async applied(outcome: SyncOutcome, seen: number): Promise<SyncOutcome> {
     this.scheduler.applied(outcome, seen);
     await this.refresh();
@@ -497,5 +594,16 @@ export class RoundController {
       // Der gemerkte Wert bleibt stehen.
     }
     this.setState({ syncing: false, problem, pending });
+  }
+
+  /** Zählt, was auf dem Gerät noch wartet; lässt sich das gerade nicht lesen, bleibt der gemerkte Wert. */
+  private async refreshPending(): Promise<void> {
+    let pending: number;
+    try {
+      pending = await this.sync.pendingCount();
+    } catch {
+      return;
+    }
+    this.setState({ pending });
   }
 }

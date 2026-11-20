@@ -9,7 +9,8 @@ import { RuleSets } from "../rules/RuleSet";
 import { DuplicateCheck } from "./DuplicateCheck";
 import { EveningMerge } from "./EveningMerge";
 import { InMemoryRoundServer } from "./InMemoryRound";
-import { RoundException, toPlayer, type RemoteEvening, type RoundId } from "./RoundModels";
+import { RoundConnection } from "./RoundConnection";
+import { RoundException, toPlayer, type RemoteEvening, type RoundId, type RoundSummary } from "./RoundModels";
 import { EveningNotStorableError } from "./RoundPorts";
 import { RoundSync, SyncOutcome, type SyncNotice } from "./RoundSync";
 import { delegate, Device, errorOf, game, P1, P2, P3, P4, PLACEHOLDERS, player, START, TestClock } from "./testing/fixtures";
@@ -96,8 +97,10 @@ describe("Verbinden", () => {
       cursor: 7,
       rulesBase: RuleSets.sauspiel(),
       members: [{ userId: one.userId, playerId: null }],
+      unreadable: [],
     });
     expect(one.session.calls).toEqual([
+      "myRounds",
       "createRound",
       "head",
       "members",
@@ -111,6 +114,92 @@ describe("Verbinden", () => {
       "saveEvening",
       "head",
     ]);
+  });
+
+  it("geht die Antwort auf das Anlegen verloren, entsteht beim zweiten Versuch keine zweite Runde", async () => {
+    await one.firstStart();
+    one.session.loseNextAnswer = true;
+
+    expect(await errorOf(() => one.connection.create("Stammtisch", one.userId, PLACEHOLDERS))).toBe("OFFLINE");
+
+    expect(await one.link()).toBeNull();
+    expect(await one.api.myRounds()).toHaveLength(1);
+    // Der zweite Versuch nimmt die leere Runde vom ersten.
+    expect((await one.connection.create("  Stammtisch ", one.userId, PLACEHOLDERS)).kind).toBe("Synced");
+    expect((await one.api.myRounds()).map((it) => it.id)).toEqual([await one.roundId()]);
+    // Eine Runde, in der schon etwas liegt, oder eine mit anderem Namen wird nie wiederverwendet.
+    await one.connection.disconnect();
+    expect((await one.connection.create("Stammtisch", one.userId, PLACEHOLDERS)).kind).toBe("Synced");
+    expect(await one.api.myRounds()).toHaveLength(2);
+    await one.connection.disconnect();
+    expect((await one.connection.create("Zweite Runde", one.userId, PLACEHOLDERS)).kind).toBe("Synced");
+    expect(await one.api.myRounds()).toHaveLength(3);
+  });
+
+  it("auch ein Name mit Leerraum innen findet die leere Runde vom ersten Versuch wieder", async () => {
+    await one.firstStart();
+    one.session.loseNextAnswer = true;
+    expect(await errorOf(() => one.connection.create("Stamm tisch", one.userId, PLACEHOLDERS))).toBe("OFFLINE");
+
+    expect((await one.connection.create(" Stamm \t tisch ", one.userId, PLACEHOLDERS)).kind).toBe("Synced");
+
+    expect(await one.api.myRounds()).toHaveLength(1);
+    expect((await one.link())?.roundName).toBe("Stamm tisch");
+  });
+
+  it("ohne Netz bleibt das Gerät beim Verwenden einer Runde, wie es ist", async () => {
+    await round();
+    await three.firstStart();
+    await three.startEvening("eigener");
+    await three.api.joinRound(await one.api.createInvite(await one.roundId()));
+    const [summary] = await three.api.myRounds();
+    three.session.offline = true;
+
+    expect(await errorOf(() => three.connection.use(summary, three.userId))).toBe("OFFLINE");
+
+    expect(await three.link()).toBeNull();
+    expect((await three.allEvenings()).map((it) => it.id)).toEqual(["eigener"]);
+    expect(await three.allPlayers()).toEqual(PLACEHOLDERS);
+    // Mit Netz klappt es, und erst dann werden die Daten des Geräts ersetzt.
+    three.session.offline = false;
+    expect((await three.connection.use(summary, three.userId)).kind).toBe("Synced");
+    await one.synced();
+    expect(await three.allEvenings()).toEqual(await one.allEvenings());
+    expect(await three.allPlayers()).toEqual(await one.allPlayers());
+  });
+
+  it("eine Runde, die es nicht mehr gibt, lässt das Gerät unberührt", async () => {
+    await three.firstStart();
+    await three.startEvening("eigener");
+    const gone: RoundSummary = { id: "gibt-es-nicht", name: "Verschwunden", rev: 3, memberCount: 1, myPlayerId: null, isCreator: false };
+
+    expect(await errorOf(() => three.connection.use(gone, three.userId))).toBe("NOT_MEMBER");
+
+    expect(await three.link()).toBeNull();
+    expect(await three.allEvenings()).toHaveLength(1);
+    expect(await three.allPlayers()).toEqual(PLACEHOLDERS);
+  });
+
+  it("ohne Netz bleibt das Gerät auch beim Beitreten, wie es ist", async () => {
+    await round();
+    await three.firstStart();
+    await three.startEvening("eigener");
+    const token = await one.api.createInvite(await one.roundId());
+    // Die Einladung lässt sich noch lesen und annehmen, danach reißt die Verbindung ab.
+    const cut = delegate(three.api, {
+      head: async () => {
+        throw new RoundException("OFFLINE");
+      },
+    });
+    const connection = new RoundConnection(cut, three.store, three.players, three.evenings, three.sync, three.ids);
+
+    expect(await errorOf(() => connection.join(token, three.userId))).toBe("OFFLINE");
+
+    expect(await three.link()).toBeNull();
+    expect((await three.allEvenings()).map((it) => it.id)).toEqual(["eigener"]);
+    // Mitglied ist das Konto jetzt schon; der zweite Versuch verbindet das Gerät.
+    expect((await three.connection.join(token, three.userId)).kind).toBe("Synced");
+    expect(await three.allEvenings()).toEqual(await one.allEvenings());
   });
 
   it("beim Anlegen entfallen vorbelegte Spieler, die niemand umbenannt hat und kein Abend braucht", async () => {
@@ -561,9 +650,9 @@ describe("Dokumente, die diese Version nicht lesen kann oder der Server nicht an
     expect(server.eveningRow(id, huge)).toBeNull();
     expect(server.eveningRow(id, normal)?.evening).toEqual(await two.evening(normal));
 
-    // Derselbe Stand wird nicht noch einmal versucht; nach einer Änderung schon.
+    // Derselbe Stand wird nicht noch einmal versucht, bleibt aber gezählt; nach einer Änderung geht er hoch.
     two.session.calls.length = 0;
-    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 0, pending: 1 }));
+    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 0, pending: 1, refused: 1 }));
     expect(two.session.calls).not.toContain("saveEvening");
     await two.editor.update(huge, (it) => ({ ...it, entries: it.entries.slice(0, 3) }));
     expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 1, pending: 0 }));
@@ -609,8 +698,52 @@ describe("Dokumente, die diese Version nicht lesen kann oder der Server nicht an
     expect((await two.evening(abend))?.entries).toHaveLength(InMemoryRoundServer.MAX_ENTRIES + 2);
     expect(server.eveningRow(id, abend)?.evening?.entries).toHaveLength(2);
     two.session.calls.length = 0;
-    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 0, pending: 1 }));
+    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 0, pending: 1, refused: 1 }));
     expect(two.session.calls).not.toContain("saveEvening");
+    // Löscht man den Abend hier, ist auch die Zählung weg (der Server hat ihn weiter in der alten Fassung).
+    await two.evenings.delete(abend);
+    expect(await two.sync.sync()).toMatchObject({ kind: "Synced", refused: 0 });
+  });
+
+  it("ein unlesbarer Abend bleibt gemerkt und kommt an, sobald er sich lesen lässt", async () => {
+    const id = await round();
+    const newer = await one.startEvening("abend-neu");
+    await one.addGame(newer);
+    await one.synced();
+    const content = (await one.evening(newer)) as Evening;
+    // Eine neuere App schreibt den Abend in einer Form, die Handy zwei nicht lesen kann.
+    server.makeUnreadable(id, newer);
+
+    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 0, pending: 0, unreadable: 1 }));
+    expect(await two.evening(newer)).toBeNull();
+    expect((await two.link())?.unreadable).toEqual([newer]);
+
+    // Der Abend liegt jetzt hinter dem Lesezeichen. Er bleibt trotzdem gemerkt und gezählt.
+    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 0, pending: 0, unreadable: 1 }));
+    await two.addGame(abend);
+    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 1, pending: 0, unreadable: 1 }));
+    expect(await two.sync.sync(true)).toEqual(SyncOutcome.Unchanged);
+
+    // Nach dem Update der App lässt er sich lesen; auf dem Server hat sich dabei nichts geändert.
+    server.makeReadable(id, newer, content);
+    expect(await two.sync.sync()).toEqual(synced({ pulled: 1, pushed: 0, pending: 0 }));
+    expect(await two.evening(newer)).toEqual(content);
+    expect((await two.link())?.unreadable).toEqual([]);
+    await one.synced();
+    await expectSameEverywhere(id, one, two);
+  });
+
+  it("ein unlesbarer Abend, den es nicht mehr gibt, ist vergessen", async () => {
+    const id = await round();
+    const newer = await one.startEvening("abend-neu");
+    await one.synced();
+    server.makeUnreadable(id, newer);
+    expect(await two.sync.sync()).toMatchObject({ kind: "Synced", unreadable: 1 });
+
+    server.forgetEvening(id, newer);
+
+    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 0, pending: 0 }));
+    expect((await two.link())?.unreadable).toEqual([]);
   });
 
   it("kommt ein Abend beim Lesen zweimal, zählt die neuere Fassung", async () => {
@@ -1270,13 +1403,26 @@ describe("nur in der Web-App: Ergänzungen zum Port", () => {
     expect(outcome).toEqual(synced({ pulled: 1, pushed: 0, pending: 0, unreadable: 1 }));
     expect(await two.evening("fremd")).toBeNull();
     expect(await two.evening("gut")).not.toBeNull();
-    // Auf dem Server bleibt der fremde Abend unberührt, und der nächste Abgleich versucht es nicht noch einmal.
-    expect(server.eveningRow(id, "fremd")?.version).toBe(1);
     expect(two.session.calls).toEqual(["head", "members", "playersSince", "eveningsSince"]);
+    // Auf dem Server bleibt der fremde Abend unberührt. Das Gerät merkt ihn sich und liest ihn bei jedem Abgleich
+    // einzeln nach (vielleicht lässt er sich später speichern), schreibt aber nichts.
+    expect((await two.link())?.unreadable).toEqual(["fremd"]);
     two.session.calls.length = 0;
-    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 0, pending: 0 }));
-    expect(two.session.calls).toEqual(["head"]);
+    expect(await two.sync.sync()).toEqual(synced({ pulled: 0, pushed: 0, pending: 0, unreadable: 1 }));
+    expect(two.session.calls).toEqual(["head", "evening"]);
+    expect(server.eveningRow(id, "fremd")?.version).toBe(1);
+    expect(await two.evening("fremd")).toBeNull();
     expect((await two.link())?.cursor).toBe(server.rev(id));
+    // Das schnelle Nachfragen kostet weiter nur eine Anfrage.
+    two.session.calls.length = 0;
+    expect(await two.sync.sync(true)).toEqual(SyncOutcome.Unchanged);
+    expect(two.session.calls).toEqual(["head"]);
+
+    // Lässt er sich später speichern, kommt er an, ohne dass sich auf dem Server etwas geändert hat.
+    two.evenings.save = save;
+    expect(await two.sync.sync()).toEqual(synced({ pulled: 1, pushed: 0, pending: 0 }));
+    expect(await two.evening("fremd")).toEqual(server.eveningRow(id, "fremd")?.evening);
+    expect((await two.link())?.unreadable).toEqual([]);
   });
 
   it("es läuft immer nur ein Abgleich gleichzeitig, in der Reihenfolge der Aufrufe", async () => {
