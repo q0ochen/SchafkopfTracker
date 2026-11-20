@@ -30,9 +30,9 @@ jobs:
   build:
     name: Prüfen, testen und bauen
     runs-on: ubuntu-latest
-    # Ein ganzer Lauf dauert sonst 3 bis 4 Minuten. Am 20.11.2026 hing das Herunterladen von WebKit eine halbe Stunde;
-    # ohne Grenze liefe so ein Lauf bis zu sechs Stunden.
-    timeout-minutes: 30
+    # Ein ganzer Lauf dauert sonst 3 bis 4 Minuten. Am 20.11.2026 brauchte das Herunterladen von WebKit mehr als eine
+    # halbe Stunde; ohne Grenze liefe so ein Lauf bis zu sechs Stunden.
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: web
@@ -75,9 +75,11 @@ jobs:
         run: npm run test:e2e
 
       # Zusätzlich mit der Safari-Engine, so nah am iPhone wie ohne Gerät möglich.
-      # Hängt das Herunterladen, wird es nach 5 Minuten einmal neu versucht.
+      # Lädt rund 180 Pakete über apt. Nicht mittendrin abbrechen und neu versuchen: apt liefe im Hintergrund weiter und
+      # hielte die Sperre fest (so geschehen am 20.11.2026). Stattdessen eine großzügige Grenze für den ganzen Schritt.
       - name: WebKit für Playwright
-        run: timeout 300 npx playwright install --with-deps webkit || timeout 300 npx playwright install --with-deps webkit
+        timeout-minutes: 20
+        run: npx playwright install --with-deps webkit
 
       - name: Oberflächen-Tests mit WebKit (Safari-Engine, iPhone-Größe)
         env:
