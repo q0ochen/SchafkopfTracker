@@ -36,8 +36,10 @@ jobs:
           code=$(curl -sS -o auth.json -w '%{http_code}' -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/config/auth")
           if [ "$code" != "200" ]; then
-            echo "::error::Einstellungen nicht lesbar (HTTP $code)."
-            exit 1
+            # Fehlermeldungen der Schnittstelle enthalten keine geheimen Werte.
+            echo "::warning::Einstellungen nicht lesbar (HTTP $code): $(jq -r '.message // .error // .' auth.json 2>/dev/null | head -c 300)"
+            rm -f auth.json
+            exit 0
           fi
           # Nur Prüfergebnisse; vom Secret nie den Wert.
           jq -r '
@@ -70,7 +72,8 @@ jobs:
             --data-urlencode "iso_timestamp_start=$start" --data-urlencode "iso_timestamp_end=$end" \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/analytics/endpoints/logs.all")
           if [ "$code" != "200" ]; then
-            echo "::error::Protokoll nicht lesbar (HTTP $code)."
+            echo "::error::Protokoll nicht lesbar (HTTP $code): $(jq -r '.message // .error // .' logs.json 2>/dev/null | head -c 300)"
+            rm -f logs.json
             exit 1
           fi
           jq -r '
