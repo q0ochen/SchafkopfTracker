@@ -122,6 +122,21 @@ class RoundSetupTest {
     }
 
     @Test
+    fun `die zuletzt erzeugte Einladung uebersteht einen Neustart`() {
+        val memory = PreferencesInviteMemory(context)
+        assertNull(memory.issued())
+        val invite = IssuedInvite("runde-1", "0123456789abcdef0123456789abcdef", Instant.parse("2026-12-01T18:00:00.123Z"))
+
+        memory.setIssued(invite)
+
+        assertEquals(invite, PreferencesInviteMemory(context).issued())
+        // Die gemerkte Einladung zum Beitreten ist davon unabhängig.
+        assertNull(memory.get())
+        memory.setIssued(null)
+        assertNull(PreferencesInviteMemory(context).issued())
+    }
+
+    @Test
     fun `Runde und Abend stehen als Text in der Datenbank und lassen sich wieder lesen`() {
         val link = RoundLink(
             roundId = RoundId("runde"),

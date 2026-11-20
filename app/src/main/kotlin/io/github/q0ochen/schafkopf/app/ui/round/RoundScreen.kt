@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.q0ochen.schafkopf.R
+import androidx.compose.ui.graphics.Color
 import io.github.q0ochen.schafkopf.app.round.RoundMessage
 import io.github.q0ochen.schafkopf.app.round.RoundState
 import io.github.q0ochen.schafkopf.app.ui.common.ChoiceTile
@@ -73,6 +74,9 @@ class RoundActions(
     val joinInvited: () -> Unit = {},
     val discardInvite: () -> Unit = {},
     val use: (RoundSummary) -> Unit = {},
+    val leaveRound: (RoundSummary) -> Unit = {},
+    val confirmLeaveRound: () -> Unit = {},
+    val cancelLeaveRound: () -> Unit = {},
     val refresh: () -> Unit = {},
     val confirmReplace: () -> Unit = {},
     val cancelReplace: () -> Unit = {},
@@ -127,6 +131,9 @@ fun RoundScreen(navigator: Navigator) {
                     joinInvited = viewModel::joinInvited,
                     discardInvite = viewModel::discardInvite,
                     use = viewModel::use,
+                    leaveRound = viewModel::askLeaveRound,
+                    confirmLeaveRound = viewModel::confirmLeaveRound,
+                    cancelLeaveRound = viewModel::cancelLeaveRound,
                     refresh = viewModel::refresh,
                     confirmReplace = viewModel::confirmReplace,
                     cancelReplace = viewModel::cancelReplace,
@@ -224,14 +231,43 @@ fun RoundContent(state: RoundState, ui: RoundUi, players: List<Player>, actions:
         )
     }
 
+    ui.leaving?.let { round ->
+        AlertDialog(
+            onDismissRequest = actions.cancelLeaveRound,
+            title = { Text(stringResource(R.string.round_leave_other_title, round.name)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.round_leave_other_text))
+                    if (round.memberCount <= 1) {
+                        Text(stringResource(R.string.round_leave_last_member), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = actions.confirmLeaveRound) {
+                    Text(stringResource(R.string.round_leave_other), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = actions.cancelLeaveRound) { Text(stringResource(R.string.common_cancel)) } },
+        )
+    }
+
     ui.farewell?.let { kind ->
         val leaving = kind == Farewell.LEAVE
+        // Ist man das einzige Mitglied, löscht der Server die Runde beim Verlassen; ohne Runde wird nur abgemeldet.
+        val lastMember = state.link?.members?.all { it.userId == state.link.userId } == true
+        val text = when {
+            leaving && lastMember -> R.string.round_leave_last_member_linked
+            leaving -> R.string.round_leave_text
+            state.link == null -> R.string.round_sign_out_text_unlinked
+            else -> R.string.round_sign_out_text
+        }
         AlertDialog(
             onDismissRequest = actions.cancelFarewell,
             title = { Text(stringResource(if (leaving) R.string.round_leave_title else R.string.round_sign_out_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(if (leaving) R.string.round_leave_text else R.string.round_sign_out_text))
+                    Text(stringResource(text), color = if (leaving && lastMember) MaterialTheme.colorScheme.error else Color.Unspecified)
                     if (ui.farewellPending > 0) {
                         Text(
                             pluralStringResource(R.plurals.round_pending_warning, ui.farewellPending, ui.farewellPending),
@@ -381,6 +417,11 @@ private fun SignedIn(state: RoundState, ui: RoundUi, actions: RoundActions) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     QuietButton(stringResource(R.string.round_use), onClick = { actions.use(round) }, enabled = !ui.busy)
+                    TextButton(
+                        onClick = { actions.leaveRound(round) },
+                        enabled = !ui.busy,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) { Text(stringResource(R.string.round_leave_other), color = MaterialTheme.colorScheme.error) }
                 }
             }
         }

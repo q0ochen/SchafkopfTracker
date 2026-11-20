@@ -7,6 +7,7 @@ import io.github.q0ochen.schafkopf.domain.round.InMemoryRoundServer
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.SyncNotice
 import io.github.q0ochen.schafkopf.domain.round.SyncOutcome
+import io.github.q0ochen.schafkopf.domain.round.InviteLinks
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -17,10 +18,16 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 /**
  * Der Koordinator der gemeinsamen Runde: wann abgeglichen wird, was die Oberfläche davon erfährt und wie Links
@@ -498,6 +505,65 @@ class RoundCoordinatorTest {
     }
 
     // --- Runden ---
+
+    /** Eine Uhr, die der Test stellt. */
+    private class MovableClock(var now: Instant = Instant.parse("2026-12-01T18:00:00Z")) : Clock() {
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+
+        override fun withZone(zone: ZoneId?): Clock = this
+
+        override fun instant(): Instant = now
+    }
+
+    @Test
+    fun `einladen nimmt eine eigene Einladung, solange sie juenger als 13 Tage ist`() = runTest {
+        val clock = MovableClock()
+        val kit = RoundTestKit(backgroundScope, clock = clock)
+        kit.seed()
+        kit.coordinator.start()
+        runCurrent()
+        kit.coordinator.create("Stammtisch")
+        runCurrent()
+        kit.session.calls.clear()
+
+        val first = kit.coordinator.inviteLink()
+        clock.now = clock.now.plus(Duration.ofDays(12))
+        val again = kit.coordinator.inviteLink()
+
+        assertEquals(first, again)
+        assertEquals(1, kit.session.calls.count { it == "createInvite" })
+        // Kurz vor dem Ablauf gibt es eine neue; sie gilt wieder 14 Tage.
+        clock.now = clock.now.plus(Duration.ofDays(1))
+        val fresh = kit.coordinator.inviteLink()
+        assertNotEquals(first, fresh)
+        assertEquals(2, kit.session.calls.count { it == "createInvite" })
+        // Beide Codes lassen sich einlösen, solange sie gelten.
+        assertEquals("Stammtisch", kit.coordinator.inviteInfo(InviteLinks.tokenFrom(fresh)!!).roundName)
+
+        // Nach dem Verlassen ist die gemerkte Einladung vergessen.
+        kit.coordinator.leave()
+        assertNull(kit.invites.issued())
+    }
+
+    @Test
+    fun `eine Runde, die nicht verbunden ist, laesst sich verlassen, ohne dass sich auf dem Geraet etwas aendert`() = runTest {
+        val server = InMemoryRoundServer()
+        val host = linked(server)
+        val token = host.session.createInvite(host.state.link!!.roundId)
+        val kit = RoundTestKit(backgroundScope, server, userId = "konto-2")
+        kit.seed("eigener-abend")
+        kit.coordinator.start()
+        runCurrent()
+        kit.session.joinRound(token)
+        val round = kit.coordinator.myRounds().single()
+
+        kit.coordinator.leaveRound(round)
+
+        assertEquals(emptyList<Any>(), kit.coordinator.myRounds())
+        assertNull(kit.state.link)
+        assertEquals(listOf("eigener-abend"), kit.evenings.evenings.first().map { it.id.value })
+        assertEquals(1, host.coordinator.myRounds().single().memberCount)
+    }
 
     @Test
     fun `beitreten loest die Einladung ein und ersetzt die Daten des Geraets`() = runTest {

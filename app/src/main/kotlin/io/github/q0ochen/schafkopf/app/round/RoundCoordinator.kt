@@ -34,6 +34,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.time.Clock
+import java.time.Duration
 import java.util.concurrent.atomic.AtomicLong
 
 /** Warum der letzte Abgleich nicht geklappt hat. */
@@ -125,6 +127,7 @@ class RoundCoordinator(
     private val scope: CoroutineScope,
     private val onBackground: () -> Unit = {},
     private val timing: Timing = Timing(),
+    private val clock: Clock = Clock.systemUTC(),
 ) {
     /** Die Abstände des Abgleichs in Millisekunden. */
     data class Timing(
@@ -236,6 +239,7 @@ class RoundCoordinator(
     /** Meldet ab und löst die Verbindung auf diesem Gerät. Die Daten bleiben als Kopie hier. */
     suspend fun signOut() {
         connection.disconnect()
+        invites.setIssued(null)
         account.signOut()
     }
 
@@ -315,12 +319,35 @@ class RoundCoordinator(
     /** „Das bin ich“; `player == null` heißt „Ich bin neu“. */
     suspend fun claim(player: PlayerId?, name: String): SyncOutcome = applied(connection.claim(player, name))
 
-    suspend fun leave() = connection.leave()
+    suspend fun leave() {
+        connection.leave()
+        invites.setIssued(null)
+    }
 
-    /** Erzeugt eine Einladung und liefert den Link zum Weitergeben. */
+    /**
+     * Verlässt eine Runde des Kontos, die nicht mit diesem Gerät verbunden ist. Auf dem Gerät ändert sich nichts; war
+     * das Konto das letzte Mitglied, löscht der Server die Runde.
+     */
+    suspend fun leaveRound(round: RoundSummary) {
+        api.leaveRound(round.id)
+        if (invites.issued()?.roundId == round.id.value) invites.setIssued(null)
+    }
+
+    /**
+     * Der Link zum Weitergeben. Eine Einladung, die dieses Gerät vor weniger als 13 Tagen für diese Runde erzeugt hat,
+     * wird wiederverwendet (gültig sind 14): Sonst stieße wiederholtes „Einladen“ an die Grenze von 20 gültigen
+     * Einladungen je Runde.
+     */
     suspend fun inviteLink(): String {
         val link = state.value.link ?: throw RoundException(RoundError.NOT_MEMBER)
-        return InviteLinks.webLink(webAppUrl, api.createInvite(link.roundId))
+        val now = clock.instant()
+        val reusable = invites.issued()?.takeIf {
+            it.roundId == link.roundId.value && !it.createdAt.isAfter(now) && it.createdAt.isAfter(now.minus(INVITE_REUSE))
+        }
+        val token = reusable?.token ?: api.createInvite(link.roundId).also {
+            invites.setIssued(IssuedInvite(link.roundId.value, it, now))
+        }
+        return InviteLinks.webLink(webAppUrl, token)
     }
 
     /** Wie viele Änderungen gerade noch warten (für die Rückfrage vor dem Verlassen). */
@@ -448,6 +475,9 @@ class RoundCoordinator(
     private companion object {
         /** So viele Hinweise aus dem Abgleich bleiben höchstens stehen. */
         const val MAX_NOTICES = 20
+
+        /** So lange wird eine selbst erzeugte Einladung wiederverwendet (sie gilt 14 Tage). */
+        val INVITE_REUSE: Duration = Duration.ofDays(13)
 
         /** Meldungen, die eine geglückte Anmeldung erledigt. */
         val SIGN_IN_MESSAGES = setOf(RoundMessage.SIGN_IN_FAILED, RoundMessage.SIGN_IN_CANCELLED, RoundMessage.OTHER_ACCOUNT)

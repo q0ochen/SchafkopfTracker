@@ -56,6 +56,7 @@ sealed interface RoundUiError {
  * @property replace Wartet auf die Rückfrage „Daten dieses Geräts ersetzen?“.
  * @property eveningCount So viele Abende lägen beim Ersetzen auf dem Gerät.
  * @property farewell Wartet auf die Rückfrage vor dem Verlassen oder Abmelden; [farewellPending] Änderungen warten noch.
+ * @property leaving Wartet auf die Rückfrage, ob das Konto diese (nicht verbundene) Runde verlassen will.
  * @property signInUrl Diese Adresse soll der Browser jetzt öffnen.
  * @property shareLink Diesen Einladungslink soll das Teilen-Menü jetzt anbieten.
  */
@@ -70,6 +71,7 @@ data class RoundUi(
     val eveningCount: Int = 0,
     val farewell: Farewell? = null,
     val farewellPending: Int = 0,
+    val leaving: RoundSummary? = null,
     val signInUrl: String? = null,
     val shareLink: String? = null,
 )
@@ -174,6 +176,21 @@ class RoundViewModel(
     }
 
     fun use(round: RoundSummary) = requestAttach(PendingAttach.Use(round))
+
+    /** „Verlassen“ bei einer Runde des Kontos, die nicht mit diesem Gerät verbunden ist: erst die Rückfrage. */
+    fun askLeaveRound(round: RoundSummary) = mutable.update { it.copy(leaving = round) }
+
+    fun cancelLeaveRound() = mutable.update { it.copy(leaving = null) }
+
+    fun confirmLeaveRound() {
+        val round = mutable.value.leaving ?: return
+        mutable.update { it.copy(leaving = null) }
+        busy {
+            coordinator.leaveRound(round)
+            mutable.update { ui -> ui.copy(rounds = ui.rounds?.filterNot { it.id == round.id }) }
+            refresh()
+        }
+    }
 
     fun discardInvite() {
         coordinator.rememberInvite(null)

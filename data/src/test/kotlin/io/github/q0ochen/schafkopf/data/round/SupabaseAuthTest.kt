@@ -127,6 +127,7 @@ class SupabaseAuthTest {
         assertEquals("schafkopftracker://auth-callback", url.queryParameter("redirect_to"))
         assertEquals("CHALLENGE", url.queryParameter("code_challenge"))
         assertEquals("s256", url.queryParameter("code_challenge_method"))
+        assertEquals("select_account", url.queryParameter("prompt"))
         // Der Schlüssel gehört in die Kopfzeile, nicht in die Adresse, die der Browser sieht.
         assertFalse(url.toString().contains("sb_publishable"))
     }

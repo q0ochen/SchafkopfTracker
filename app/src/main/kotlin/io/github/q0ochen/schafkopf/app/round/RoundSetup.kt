@@ -19,6 +19,7 @@ import kotlinx.coroutines.CancellationException
 import okhttp3.OkHttpClient
 import org.json.JSONException
 import org.json.JSONObject
+import java.time.Instant
 
 /**
  * Der Server der gemeinsamen Runde, wie diese App ihn kennt: ob er eingerichtet ist, die Anmeldung und die Aufrufe.
@@ -115,7 +116,15 @@ interface InviteMemory {
     fun get(): String?
 
     fun set(token: String?)
+
+    /** Die zuletzt auf diesem Gerät erzeugte Einladung (zum Wiederverwenden); `null`, wenn keine. */
+    fun issued(): IssuedInvite?
+
+    fun setIssued(invite: IssuedInvite?)
 }
+
+/** Eine Einladung, die dieses Gerät erzeugt hat (docs/ARCHITEKTUR.md, 8.4). */
+data class IssuedInvite(val roundId: String, val token: String, val createdAt: Instant)
 
 /** Der Einladungscode in den Einstellungen der App. Er ist kein Geheimnis: Ohne Anmeldung nützt er niemandem. */
 class PreferencesInviteMemory(context: Context) : InviteMemory {
@@ -125,8 +134,30 @@ class PreferencesInviteMemory(context: Context) : InviteMemory {
 
     override fun set(token: String?) = prefs.edit { if (token == null) remove(KEY) else putString(KEY, token) }
 
+    override fun issued(): IssuedInvite? {
+        val roundId = prefs.getString(ISSUED_ROUND, null) ?: return null
+        val token = prefs.getString(ISSUED_TOKEN, null) ?: return null
+        val createdAt = prefs.getLong(ISSUED_AT, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE } ?: return null
+        return IssuedInvite(roundId, token, Instant.ofEpochMilli(createdAt))
+    }
+
+    override fun setIssued(invite: IssuedInvite?) = prefs.edit {
+        if (invite == null) {
+            remove(ISSUED_ROUND)
+            remove(ISSUED_TOKEN)
+            remove(ISSUED_AT)
+        } else {
+            putString(ISSUED_ROUND, invite.roundId)
+            putString(ISSUED_TOKEN, invite.token)
+            putLong(ISSUED_AT, invite.createdAt.toEpochMilli())
+        }
+    }
+
     private companion object {
         const val FILE = "gemeinsame-runde"
         const val KEY = "einladung"
+        const val ISSUED_ROUND = "erzeugt-runde"
+        const val ISSUED_TOKEN = "erzeugt-code"
+        const val ISSUED_AT = "erzeugt-am"
     }
 }

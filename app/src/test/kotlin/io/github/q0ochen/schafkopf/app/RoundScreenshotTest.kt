@@ -69,6 +69,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -348,6 +349,45 @@ class RoundScreenshotTest {
         compose.onNodeWithText("Schafkopfrunde").assertExists()
         compose.onNodeWithText("Mit Google anmelden").assertIsEnabled()
         capture("57_runde_anderes_konto")
+    }
+
+    @Test
+    fun eine_runde_ohne_verbindung_laesst_sich_verlassen() {
+        var asked: RoundSummary? = null
+        var confirmed = 0
+        val other = RoundSummary(RoundId("runde-2"), "Betriebsrunde", rev = 12, memberCount = 1, myPlayerId = null, isCreator = true)
+        content(
+            RoundState(configured = true, loaded = true, account = account),
+            RoundUi(rounds = listOf(other), leaving = other),
+            RoundActions(leaveRound = { asked = it }, confirmLeaveRound = { confirmed++ }),
+        )
+
+        compose.onNodeWithText("Betriebsrunde verlassen?").assertExists()
+        compose.onNodeWithText("Du gehörst danach nicht mehr zu dieser Runde. Auf diesem Gerät ändert sich nichts.").assertExists()
+        compose.onNodeWithText("Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht.").assertExists()
+        capture("58_runde_andere_verlassen")
+        compose.onAllNodesWithText("Verlassen").let { it[it.fetchSemanticsNodes().lastIndex] }.performClick()
+        assertEquals(1, confirmed)
+        assertNull(asked)
+    }
+
+    @Test
+    fun abmelden_ohne_runde_und_verlassen_als_letztes_mitglied_sagen_was_passiert() {
+        content(RoundState(configured = true, loaded = true, account = account), RoundUi(farewell = Farewell.SIGN_OUT))
+        compose.onNodeWithText("Dieses Gerät wird abgemeldet.").assertExists()
+        compose.onNodeWithText("Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier.").assertDoesNotExist()
+    }
+
+    @Test
+    fun verlassen_als_letztes_mitglied_sagt_dass_die_runde_verschwindet() {
+        val alone = linked.copy(link = link.copy(members = listOf(RoundMember("konto-1", ids[0]))))
+        content(alone, RoundUi(farewell = Farewell.LEAVE))
+
+        compose.onNodeWithText(
+            "Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht. Auf diesem Gerät bleiben sie als Kopie.",
+        ).assertExists()
+        compose.onNodeWithText("Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt in der Runde.").assertDoesNotExist()
+        capture("59_runde_letztes_mitglied_verlassen")
     }
 
     @Test

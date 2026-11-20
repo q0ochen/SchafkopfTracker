@@ -319,7 +319,7 @@ Anmeldung ist das Schwesterprojekt DrinkWithMe (dort `docs/ARCHITEKTUR.md`, Absc
 | Lokal zuerst | Jedes Gerät hält alle Abende und Spieler selbst und funktioniert ohne Netz und ohne Server. Abgeglichen wird im Hintergrund. Ein pausiertes oder unerreichbares Supabase-Projekt hält einen Abend nie auf. |
 | Server ist die gemeinsame Fassung | Je Abend liegt auf dem Server **ein** JSON-Dokument mit Versionsnummer. Geschrieben wird nur mit „erwartete Version“ (Vergleichen und Ersetzen). Wer zu spät kommt, führt zusammen (8.5) und versucht es erneut. Alle Geräte übernehmen am Ende die Fassung des Servers. |
 | Nur Tatsachen | Hochgeladen werden Abende im Dateiformat der Sicherung (`StorageCodec.encodeEvening`), Spieler und das Regelwerk für neue Abende. Stand, Geber, Bock-Zähler und Statistik rechnet jedes Gerät selbst. |
-| Anmeldung | Nur Google über Supabase Auth (PKCE im Browser, nie WebView). Zustimmungsbildschirm bei Google „In Produktion“, Bereiche nur `openid email profile`. |
+| Anmeldung | Nur Google über Supabase Auth (PKCE im Browser, nie WebView). Zustimmungsbildschirm bei Google „In Produktion“, Bereiche nur `openid email profile`. Google fragt bei jeder Anmeldung, welches Konto (`prompt=select_account`), damit sich ein falsch gewähltes Konto korrigieren lässt. |
 | Eine Runde je Gerät | Ein Gerät hängt an höchstens einer Runde. Wer eine Runde anlegt, bringt die Daten seines Geräts mit; wer beitritt, übernimmt die Daten der Runde (die eigenen werden nach Rückfrage ersetzt). |
 | Eigener Name | Jedes Mitglied legt seinen Namen selbst fest („Das bin ich“). Danach ist er fest; andere können ihn nicht ändern. Spieler ohne Konto (Gäste) kann jedes Mitglied anlegen und umbenennen. |
 | Jeder darf eintragen | Es gibt keine Sperre. Die App zeigt nur, wer gibt („Du gibst – trag dieses Spiel ein“), und weist auf vermutlich doppelt eingetragene Spiele hin. |
@@ -409,7 +409,15 @@ Lesen über PostgREST (`apikey` = Publishable Key, `Authorization: Bearer <Acces
   `owner?`, `nameLocked`, `rev`).
 
 Ein Abend ist „geändert“, wenn er von seiner Basis abweicht oder keine hat; „gelöscht“, wenn es die Basis noch gibt,
-den Abend aber nicht mehr. Für Spieler gilt dasselbe. Die Sitzung (Refresh-Token) liegt getrennt und verschlüsselt.
+den Abend aber nicht mehr. Für Spieler gilt dasselbe. Die Sitzung (Refresh-Token) liegt getrennt: in Android
+verschlüsselt (Android Keystore), in der Web-App im `localStorage`. Bekannte Grenze der Web-App: Alle Seiten unter
+`https://q0ochen.github.io/` (auch die Web-App von Drink With Me) sind für den Browser dieselbe Herkunft und könnten
+Sitzung und Daten der anderen lesen; abhilft nur eine eigene Adresse (eigene Domain oder eigenes Konto für GitHub
+Pages). Auf dem iPhone hat jede App vom Home-Bildschirm ohnehin ihren eigenen Speicher.
+
+Zuletzt erzeugte Einladung je Runde (Kennung der Runde, Code, Zeitpunkt): Sie wird wiederverwendet, solange sie
+jünger als 13 Tage ist (gültig sind 14), damit wiederholtes „Einladen“ nicht an die Grenze von 20 gültigen
+Einladungen je Runde stößt.
 
 ### 8.5 Zusammenführen (`EveningMerge.merge3(base, local, remote)`, reine Funktion, Port in `web/src/core/round`)
 
@@ -550,7 +558,17 @@ Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disc
   (`Screen.Round`), Hinweise auf Start-Bildschirm und Abend.
 - Web: `web/src/core/round` (Port von `EveningMerge`, `DuplicateCheck`, `InviteLinks`, `RoundSync` mit Golden-Tests
   aus `WebGoldenTest`), `web/src/round` (Supabase-Zugriff, `RoundStore` in IndexedDB), Seiten `#/runde` und
-  `#/einladung/<token>`; Anmeldung mit `signInWithOAuth` (PKCE), Rückkehr auf die Start-Adresse.
+  `#/einladung/<token>`; Anmeldung mit `signInWithOAuth` (PKCE), Rückkehr auf die Start-Adresse. Weil der Browser
+  anders speichert als Room, gilt dort zusätzlich:
+  - Der Abgleich arbeitet nur mit Gespeichertem: Bevor er einen Abend liest oder ersetzt oder eine Basis setzt, ist
+    alles in IndexedDB angekommen; scheitert das Speichern, bricht er ab. Eine Basis ist so nie neuer als das Gerät.
+  - Was sich auf dem Gerät nicht lesen lässt (ein Abend, die Spielerliste, die Einstellungen), gilt nie als gelöscht
+    oder leer: Basen unlesbarer Abende bleiben unberührt; ist die Spielerliste oder sind die Einstellungen unlesbar,
+    ruht der Abgleich (Statuszeile wie bei „der Browser speichert nicht“).
+  - Höchstens ein Abgleich gleichzeitig über alle Fenster (`navigator.locks`, wo es fehlt: wie bisher je Fenster);
+    vor jedem Abgleich liest er den Gerätezustand frisch aus IndexedDB; Änderungen meldet ein Fenster den anderen als
+    Ereignis (`BroadcastChannel`), damit keines mit einem veralteten Stand schreibt.
+  - Einlösen der Anmeldung mit Zeitlimit (20 Sekunden); danach gilt es als „keine Verbindung“.
 
 ### 8.9 Oberfläche (Android-App und Web-App gleich, Texte wörtlich)
 
@@ -566,6 +584,7 @@ Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutr
 | Abende, die diese Version nicht lesen kann | „‹n› Abende kann diese Version nicht lesen – bitte die App aktualisieren“ (bei 1: „1 Abend kann …“) |
 | Abende, die der Server nicht annimmt | „‹n› Abende nimmt der Server nicht an“ (bei 1: „1 Abend nimmt der Server nicht an“) |
 | keine Verbindung | „Kein Netz – ‹n› Änderungen warten“ (bei 1: „… 1 Änderung wartet“, bei 0: „Kein Netz“) |
+| nur Web: der Browser speichert nicht (IndexedDB) | „Speichern auf diesem Gerät gescheitert – bitte die App neu laden“ |
 | Server antwortet mit Fehler | „Server nicht erreichbar – ‹n› Änderungen warten“ (bei 0: „Server nicht erreichbar“) |
 | es wartet etwas | „‹n› Änderungen warten“ (bei 1: „1 Änderung wartet“) |
 | sonst | „Abgeglichen“ |
@@ -581,10 +600,14 @@ Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutr
 - *Angemeldet, ohne Runde:* „Angemeldet als ‹E-Mail›“ (ohne bekannte Adresse nur „Angemeldet“). Wartet eine
   Einladung: Karte „Einladung in die Runde ‹Name›“ (‹n› Mitglieder; solange der Name noch geladen wird, „…“), Knopf
   „Beitreten“, darunter „Einladung verwerfen“. Hat das Konto Runden: „Deine Runden“, je Runde ‹Name› und
-  „‹n› Mitglieder“, Knopf „Auf diesem Gerät verwenden“. Ließen sich die Runden nicht laden: „Deine Runden ließen
-  sich nicht laden.“ mit dem Knopf „Erneut versuchen“ (sonst sähe es auf einem neuen Handy aus, als gäbe es keine). „Neue Runde anlegen“: Feld „Name der Runde“ (Vorgabe
-  „Schafkopfrunde“), Hinweis „Alle Abende und Spieler dieses Geräts kommen mit in die Runde.“, Knopf „Runde
-  anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten „Abmelden“.
+  „‹n› Mitglieder“, Knöpfe „Auf diesem Gerät verwenden“ und „Verlassen“ (Rückfrage „‹Name› verlassen?“ – „Du gehörst
+  danach nicht mehr zu dieser Runde. Auf diesem Gerät ändert sich nichts.“; ist das Konto das einzige Mitglied,
+  zusätzlich „Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht.“; Knöpfe
+  „Verlassen“, „Abbrechen“). Ließen sich die Runden nicht laden: „Deine Runden ließen sich nicht laden.“ mit dem
+  Knopf „Erneut versuchen“ (sonst sähe es auf einem neuen Handy aus, als gäbe es keine). „Neue Runde anlegen“: Feld
+  „Name der Runde“ (Vorgabe „Schafkopfrunde“), Hinweis „Alle Abende und Spieler dieses Geräts kommen mit in die
+  Runde.“, Knopf „Runde anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten „Abmelden“
+  (Rückfrage „Abmelden?“ – „Dieses Gerät wird abgemeldet.“).
 - *Rückfrage vor dem Beitreten oder Verwenden*, wenn `hasOwnData`: „Daten dieses Geräts ersetzen?“ – „Auf diesem
   Gerät liegen ‹n› Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten
   willst.“ (bei 1: „Auf diesem Gerät liegt 1 Abend. Er wird durch die Daten der Runde ersetzt. Sichere ihn vorher,
@@ -598,9 +621,12 @@ Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutr
 - *Verbunden:* ‹Name der Runde›, Statuszeile, Knopf „Jetzt abgleichen“. „Mitglieder“: je Mitglied der Name seines
   Spielers, das eigene mit „(du)“, ohne Spieler „Noch ohne Namen“. Knopf „Einladen“: erzeugt den Link und gibt ihn
   weiter (Android: Teilen; Web: Teilen oder Kopieren) mit dem Text „Komm in unsere Schafkopfrunde ‹Name›: ‹Link›“;
-  darunter „Der Link gilt 14 Tage.“ Unten „Runde verlassen“ (Rückfrage „Runde verlassen?“ – „Die Daten bleiben als
-  Kopie auf diesem Gerät. Dein Name bleibt in der Runde.“) und „Abmelden“ (Rückfrage „Abmelden?“ – „Dieses Gerät
-  wird von der Runde getrennt. Die Daten bleiben als Kopie hier.“). Wartet noch etwas, steht in beiden Rückfragen
+  darunter „Der Link gilt 14 Tage.“ (Ein Link, der jünger als 13 Tage ist, wird wieder angeboten, siehe 8.4.) Unten
+  „Runde verlassen“ (Rückfrage „Runde verlassen?“ – „Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt
+  in der Runde.“; ist das Konto das einzige Mitglied, stattdessen „Du bist das letzte Mitglied: Die Runde wird mit
+  allen Abenden auf dem Server gelöscht. Auf diesem Gerät bleiben sie als Kopie.“) und „Abmelden“ (Rückfrage
+  „Abmelden?“ – „Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier.“). Wartet noch etwas,
+  steht in beiden Rückfragen
   zusätzlich: „‹n› Änderungen sind noch nicht hochgeladen und kommen nicht mehr in der Runde an.“ (bei 1: „1
   Änderung ist noch nicht hochgeladen und kommt nicht mehr in der Runde an.“)
 - *Verbunden, Anmeldung abgelaufen:* statt „Jetzt abgleichen“, „Wer bist du?“, „Einladen“ und „Runde verlassen“
@@ -648,6 +674,11 @@ kommen aus der Runde).
 nur der Ersteller der Runde darf ihn korrigieren. Löschen lassen sich nur Spieler ohne Besitzer; sonst steht dort
 „Dieser Spieler gehört zu einem Mitglied der Runde und lässt sich nicht löschen.“
 
-**Einladungsseite der Web-App** (`#/einladung/‹Code›`): „Einladung in eine Schafkopfrunde“, Knöpfe „In der
-Android-App öffnen“ und „Hier beitreten“ (weiter nach `#/runde`, der Code wird gemerkt). Ohne gültigen Code: „Das
-ist kein gültiger Einladungslink.“
+**Einladungsseite der Web-App** (`#/einladung/‹Code›`): „Einladung in eine Schafkopfrunde“, darunter der Code und
+der Knopf „Code kopieren“ (danach „Code kopiert“). Auf einem iPhone, das die Seite nicht als App vom Home-Bildschirm
+zeigt (Links aus Nachrichten öffnen sich in Safari, und die App vom Home-Bildschirm hat einen eigenen Speicher):
+„Benutzt du den Schafkopf Tracker vom Home-Bildschirm? Dann kopiere den Code, öffne die App über ihr Symbol und füge
+ihn unter „Gemeinsame Runde“ → „Einladung einlösen“ ein.“ Der Knopf „In der Android-App öffnen“ nur auf Android;
+„Hier beitreten“ (weiter nach `#/runde`, der Code wird gemerkt) immer. Ist dieses Gerät schon mit einer Runde
+verbunden, wird der Code nicht gemerkt; statt „Hier beitreten“ steht „Dieses Gerät ist schon mit der Runde ‹Name›
+verbunden.“ mit dem Knopf „Zur gemeinsamen Runde“. Ohne gültigen Code: „Das ist kein gültiger Einladungslink.“

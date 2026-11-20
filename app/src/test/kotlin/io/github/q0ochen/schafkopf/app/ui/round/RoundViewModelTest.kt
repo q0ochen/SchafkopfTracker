@@ -5,6 +5,7 @@ import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.round.InMemoryRoundServer
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.RoundId
+import io.github.q0ochen.schafkopf.domain.round.RoundSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -314,5 +315,27 @@ class RoundViewModelTest {
         advanceUntilIdle()
         assertEquals("Stammtisch", kit.state.link?.roundName)
         assertNull(viewModel.ui.value.error)
+    }
+    @Test
+    fun `eine nicht verbundene Runde verlassen, mit Rueckfrage`() = runTest(dispatcher) {
+        val (_, token) = existingRound()
+        val (kit, viewModel) = device()
+        kit.session.joinRound(token)
+        viewModel.refresh()
+        advanceUntilIdle()
+        val round = viewModel.ui.value.rounds!!.single()
+
+        viewModel.askLeaveRound(round)
+        assertEquals(round, viewModel.ui.value.leaving)
+        viewModel.cancelLeaveRound()
+        assertNull(viewModel.ui.value.leaving)
+        viewModel.askLeaveRound(round)
+        viewModel.confirmLeaveRound()
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.value.leaving)
+        assertEquals(emptyList<RoundSummary>(), viewModel.ui.value.rounds)
+        assertEquals(emptyList<RoundSummary>(), kit.session.myRounds())
+        assertNull(kit.state.link)
     }
 }

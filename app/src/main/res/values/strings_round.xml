@@ -60,6 +60,10 @@
     <string name="round_invite_discard">Einladung verwerfen</string>
     <string name="round_my_rounds">Deine Runden</string>
     <string name="round_use">Auf diesem Gerät verwenden</string>
+    <string name="round_leave_other">Verlassen</string>
+    <string name="round_leave_other_title">%1$s verlassen?</string>
+    <string name="round_leave_other_text">Du gehörst danach nicht mehr zu dieser Runde. Auf diesem Gerät ändert sich nichts.</string>
+    <string name="round_leave_last_member">Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht.</string>
     <string name="round_my_rounds_failed">Deine Runden ließen sich nicht laden.</string>
     <string name="round_retry">Erneut versuchen</string>
     <string name="round_create_heading">Neue Runde anlegen</string>
@@ -105,8 +109,10 @@
     <string name="round_leave">Runde verlassen</string>
     <string name="round_leave_title">Runde verlassen?</string>
     <string name="round_leave_text">Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt in der Runde.</string>
+    <string name="round_leave_last_member_linked">Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht. Auf diesem Gerät bleiben sie als Kopie.</string>
     <string name="round_sign_out_title">Abmelden?</string>
     <string name="round_sign_out_text">Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier.</string>
+    <string name="round_sign_out_text_unlinked">Dieses Gerät wird abgemeldet.</string>
     <plurals name="round_pending_warning">
         <item quantity="one">%1$d Änderung ist noch nicht hochgeladen und kommt nicht mehr in der Runde an.</item>
         <item quantity="other">%1$d Änderungen sind noch nicht hochgeladen und kommen nicht mehr in der Runde an.</item>

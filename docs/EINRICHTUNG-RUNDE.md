@@ -154,6 +154,9 @@ vorher und bietet eine Sicherung an).
    sich danach nicht mehr ändern.
 3. **A:** **Einladen** und den Link verschicken (er gilt 14 Tage).
 4. **B:** Den Link antippen, anmelden, **Beitreten**, bei „Wer bist du?“ den eigenen Spieler wählen.
+   **iPhone:** Der Link öffnet sich in Safari, nicht in der App vom Home-Bildschirm (die hat einen eigenen
+   Speicher). Dort **Code kopieren**, dann die App über ihr Symbol öffnen und den Code unter „Gemeinsame Runde“ →
+   „Einladung einlösen“ einfügen.
 5. Beide sehen jetzt dieselben vier Namen.
 6. **A** startet einen Abend und trägt ein Spiel ein. Es erscheint nach ein paar Sekunden bei **B**.
 7. **B** trägt ein Spiel ein. Es erscheint bei **A**.
@@ -185,6 +188,7 @@ pausiert.
 | Anmelden klappt, läuft aber nach einer Woche ab | Der Zustimmungsbildschirm steht noch auf „Testen“ | Schritt 2, Punkt 4 |
 | „Server nicht erreichbar“, obwohl Internet da ist | Das Supabase-Projekt ist pausiert | Schritt 7 |
 | „Die Einladung ist abgelaufen oder ungültig.“ | Der Link ist älter als 14 Tage oder unvollständig kopiert | Neu einladen |
+| iPhone: Die Anmeldung endet in einem Safari-Fenster, oder Google meldet „disallowed_useragent“ | Eigenheit von Apps vom Home-Bildschirm (noch nicht auf einem echten iPhone ausprobiert) | Fenster mit **Fertig** schließen, die App neu öffnen und nachsehen, ob du angemeldet bist. Sonst den Ablauf notieren und Claude schicken; bis dahin den Schafkopf Tracker direkt in Safari benutzen, dort klappt die Anmeldung |
 | „Diese Runde gehört zu einem anderen Google-Konto.“ | Beim Anmelden wurde ein anderes Google-Konto gewählt als beim Beitreten | Noch einmal anmelden und das richtige Konto wählen; es geht nichts verloren |
 | „Supabase Deploy“ bricht ab | Ein Secret oder eine Variable fehlt | Die Meldung im Lauf nennt den fehlenden Wert |
 

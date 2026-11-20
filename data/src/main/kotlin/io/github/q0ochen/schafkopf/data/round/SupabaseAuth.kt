@@ -90,6 +90,8 @@ class SupabaseAuthApi(
             "redirect_to" to REDIRECT_URL,
             "code_challenge" to codeChallenge,
             "code_challenge_method" to "s256",
+            // Google fragt jedes Mal, welches Konto: Sonst käme man von einem falsch gewählten Konto nicht mehr weg.
+            "prompt" to "select_account",
         ),
     ).toString()
 

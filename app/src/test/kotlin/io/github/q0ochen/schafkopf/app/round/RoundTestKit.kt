@@ -83,10 +83,18 @@ internal class GatedApi(private val inner: RoundApi) : RoundApi by inner {
 }
 
 internal class MemoryInvites(private var token: String? = null) : InviteMemory {
+    private var issued: IssuedInvite? = null
+
     override fun get(): String? = token
 
     override fun set(token: String?) {
         this.token = token
+    }
+
+    override fun issued(): IssuedInvite? = issued
+
+    override fun setIssued(invite: IssuedInvite?) {
+        issued = invite
     }
 }
 
@@ -133,6 +141,7 @@ internal class RoundTestKit(
         scope = scope,
         onBackground = { backgroundRequests++ },
         timing = timing,
+        clock = clock,
     )
 
     val state: RoundState get() = coordinator.state.value
