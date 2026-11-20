@@ -10,7 +10,12 @@
  * einem anderen Konto sähe der Server die Runde nicht, und der Abgleich hielte sie für aufgelöst und trennte sie. Ein
  * anderes Konto wird deshalb gleich wieder abgemeldet; die Runde bleibt verbunden, und was noch wartet, geht nicht
  * verloren.
+ *
+ * Lässt der Speicher des Browsers den Abgleich nicht sicher arbeiten (Speichern gescheitert, Spielerliste oder
+ * Einstellungen unlesbar), ruht er; die Statuszeile sagt „Speichern auf diesem Gerät gescheitert – bitte die App neu
+ * laden“ (docs/ARCHITEKTUR.md, Abschnitt 8.8 und 8.9).
  */
+import { DeviceStorageError, UnreadableDataError } from "../app/store";
 import type { Player, PlayerId } from "../core/model";
 import { InviteLinks } from "../core/round/InviteLinks";
 import { RoundConnection } from "../core/round/RoundConnection";
@@ -18,6 +23,7 @@ import {
   RoundException,
   type InviteInfo,
   type RemotePlayer,
+  type RoundId,
   type RoundLink,
   type RoundSummary,
 } from "../core/round/RoundModels";
@@ -30,13 +36,15 @@ import type {
   RoundStore,
   SettingsRepository,
 } from "../core/round/RoundPorts";
-import { RoundSync, SyncOutcome, type SyncNotice } from "../core/round/RoundSync";
+import { RoundSync, SyncOutcome, type SyncGuard, type SyncNotice } from "../core/round/RoundSync";
 import { NO_SIGN_IN_PENDING, type Account, type RoundBackend } from "./backend";
 import { deferredApi } from "./deferredApi";
-import type { InviteMemory } from "./inviteMemory";
+import { reusableInvite, type InviteMemory, type IssuedInviteMemory } from "./inviteMemory";
 import { SyncScheduler, type SchedulerTiming } from "./scheduler";
 import type { SignInReturn } from "./signInReturn";
 import { SIGN_IN_MESSAGES, type RoundMessage, type RoundProblem } from "./texts";
+import { WindowBusyError } from "./windows";
+import { SIGN_IN_EXCHANGE_MILLIS, TimeoutError, within } from "./within";
 
 /**
  * Der Stand der gemeinsamen Runde für die Oberfläche (in der Android-App `RoundState`).
@@ -109,8 +117,10 @@ export type ObservableRoundStore = RoundStore & {
   /**
    * Vergisst, was im Arbeitsspeicher steht, und liest beim nächsten Mal neu (ein anderes Fenster der App kann
    * geschrieben haben). Fehlt bei einem Speicher, der nichts zwischenspeichert.
+   *
+   * @param notify Auch melden (Standard); vor einem Abgleich ist das nicht nötig.
    */
-  invalidate?(): void;
+  invalidate?(notify?: boolean): void;
 };
 
 /** Spieler, Abende und Einstellungen dieses Geräts, wie der Abgleich sie braucht (in der App: `StoreAdapters`). */
@@ -121,6 +131,11 @@ export interface RoundData {
   readonly editor: EveningEditor;
   /** Meldet jede Änderung an Spielern, Abenden und dem Regelwerk für neue Abende, die nicht der Abgleich gemacht hat. */
   onLocalChange(listener: () => void): () => void;
+  /**
+   * Ob der Abgleich ruhen muss, weil sich Spielerliste oder Einstellungen auf dem Gerät nicht lesen ließen (sonst sähe
+   * das aus wie „hier gelöscht“). Fehlt die Angabe: nie.
+   */
+  blocked?(): boolean;
 }
 
 export interface RoundControllerOptions {
@@ -129,6 +144,8 @@ export interface RoundControllerOptions {
   readonly store: ObservableRoundStore;
   readonly data: RoundData;
   readonly invites: InviteMemory;
+  /** Die zuletzt erzeugte Einladung je Runde (wird wieder angeboten, solange sie jünger als 13 Tage ist). */
+  readonly issuedInvites: IssuedInviteMemory;
   /** Die vorbelegten Spieler der App (siehe `RoundConnection.create`). */
   readonly placeholders: readonly Player[];
   /** Die Start-Adresse der Web-App, für Einladungslinks. */
@@ -137,10 +154,52 @@ export interface RoundControllerOptions {
   /** Die verbundene Runde, wie sie beim Start der App im Speicher stand (damit die Oberfläche sie sofort zeigt). */
   readonly initialLink?: RoundLink | null;
   readonly timing?: SchedulerTiming;
+  /** Läuft um jeden Abgleich (in der App: Sperre über alle Fenster und frisches Lesen, siehe `windows.ts`). */
+  readonly guard?: SyncGuard;
+  /** So lange darf das Einlösen der Anmeldung dauern (Millisekunden); danach gilt es als „keine Verbindung“. */
+  readonly signInMillis?: number;
 }
 
 function sameAccount(a: Account | null, b: Account | null): boolean {
   return a?.userId === b?.userId && a?.email === b?.email;
+}
+
+/**
+ * Der Ausgang eines Abgleichs, den der Speicher des Geräts verhindert hat. Für den Planer ist es ein Fehler (er
+ * versucht es mit wachsendem Abstand wieder), die Statuszeile sagt „Speichern auf diesem Gerät gescheitert …“.
+ * Erkannt wird er an genau diesem Objekt.
+ */
+const STORAGE_FAILURE: SyncOutcome = { kind: "Failed", error: "SERVER" };
+
+/** Ein anderes Fenster gleicht gerade ab: Dieser Versuch fällt aus; für den Planer ist es ein Fehler, sonst ändert sich nichts. */
+const BUSY_ELSEWHERE: SyncOutcome = { kind: "Failed", error: "SERVER" };
+
+/**
+ * Der Abgleich der Web-App: Ruht, solange Spielerliste oder Einstellungen unlesbar sind, und macht aus einem Fehler
+ * des Speichers auf dem Gerät den Ausgang {@link STORAGE_FAILURE}, statt den Fehler weiterzureichen. So ist auch beim
+ * Verbinden und bei „Das bin ich“ ein gescheiterter Abgleich danach kein Fehler der Aktion.
+ */
+class DeviceSync extends RoundSync {
+  constructor(
+    api: RoundApi,
+    store: RoundStore,
+    private readonly data: RoundData,
+    guard: SyncGuard | undefined,
+  ) {
+    super(api, store, data.players, data.evenings, data.settings, data.editor, guard);
+  }
+
+  override async sync(quick = false): Promise<SyncOutcome> {
+    if (this.data.blocked?.() === true) return STORAGE_FAILURE;
+    try {
+      return await super.sync(quick);
+    } catch (error) {
+      if (error instanceof WindowBusyError) return BUSY_ELSEWHERE;
+      if (!(error instanceof DeviceStorageError)) throw error;
+      console.warn("Schafkopf Tracker: Abgleich am Speicher des Geräts gescheitert", error);
+      return STORAGE_FAILURE;
+    }
+  }
 }
 
 export class RoundController {
@@ -163,6 +222,8 @@ export class RoundController {
 
   /** Wer angemeldet und welche Runde verbunden ist, als ein Text: Ändert er sich, wird sofort abgeglichen. */
   private known: string | null = null;
+  /** Wer beim letzten Auffrischen nach dem Laden angemeldet war; `undefined` vor dem ersten Mal. */
+  private lastAccount: string | null | undefined = undefined;
   private refreshing: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: RoundControllerOptions) {
@@ -172,7 +233,7 @@ export class RoundController {
       return backend.api;
     });
     const { store, data } = options;
-    this.sync = new RoundSync(this.api, store, data.players, data.evenings, data.settings, data.editor);
+    this.sync = new DeviceSync(this.api, store, data, options.guard);
     this.connection = new RoundConnection(this.api, store, data.players, data.evenings, this.sync, options.ids);
     this.scheduler = new SyncScheduler(
       {
@@ -319,7 +380,11 @@ export class RoundController {
   private async completeSignIn(backend: RoundBackend, code: string): Promise<boolean> {
     let account: Account;
     try {
-      account = await backend.auth.completeSignIn(code);
+      // Mit Zeitlimit: Danach gilt es als „keine Verbindung“, und die Knöpfe sind wieder frei. Kommt die Antwort doch
+      // noch, meldet die Anmeldung das Konto von selbst (siehe `refreshNow`).
+      account = await within(backend.auth.completeSignIn(code), this.options.signInMillis ?? SIGN_IN_EXCHANGE_MILLIS).catch((error: unknown) => {
+        throw error instanceof TimeoutError ? new RoundException("OFFLINE", "Anmeldung", error) : error;
+      });
     } catch (error) {
       // Eine Rückkehr, zu der keine Anmeldung (mehr) offen ist, während längst jemand angemeldet ist (zum Beispiel
       // dieselbe Adresse ein zweites Mal): kein Grund für eine Fehlermeldung.
@@ -381,6 +446,11 @@ export class RoundController {
     // Ab hier ohne Unterbrechung: Was inzwischen an Meldungen und Zählern dazukam, bleibt stehen.
     const account = this.backend?.auth.account() ?? null;
     const current = this.state;
+    // Eine Anmeldung, die nach einer Meldung doch noch geglückt ist (zum Beispiel, weil die Antwort beim Einlösen nach
+    // dem Zeitlimit kam), räumt die Meldungen zur Anmeldung weg – mit dem Konto der Runde oder ohne Runde.
+    const lateSignIn = this.lastAccount === null && account !== null && (link === null || link.userId === account.userId);
+    this.lastAccount = account?.userId ?? null;
+    if (lateSignIn && current.message !== null && SIGN_IN_MESSAGES.has(current.message)) this.setState({ message: null });
     if (link === null) {
       // Ohne Runde gibt es nichts abzugleichen: alle Zähler zurück.
       this.setState({
@@ -423,6 +493,7 @@ export class RoundController {
   /** Meldet ab und löst die Verbindung auf diesem Gerät. Die Daten bleiben als Kopie hier. */
   async signOut(): Promise<void> {
     await this.connection.disconnect();
+    this.options.issuedInvites.set(null);
     await (await this.loadBackend()).auth.signOut();
     await this.refresh();
   }
@@ -439,8 +510,17 @@ export class RoundController {
   }
 
   /** Ob auf dem Gerät etwas liegt, das beim Beitreten ersetzt würde. */
-  hasOwnData(): Promise<boolean> {
+  async hasOwnData(): Promise<boolean> {
+    this.requireReadableDevice();
     return this.connection.hasOwnData(this.options.placeholders);
+  }
+
+  /**
+   * Ließen sich Spielerliste oder Einstellungen nicht lesen, verbindet dieses Gerät nichts: Was im Zustand steht, ist
+   * nicht der echte Stand (beim Anlegen ginge er in die Runde, beim Beitreten ersetzte er nur einen Teil).
+   */
+  private requireReadableDevice(): void {
+    if (this.options.data.blocked?.() === true) throw new UnreadableDataError();
   }
 
   /**
@@ -448,12 +528,14 @@ export class RoundController {
    * sagt es die Statuszeile, und die App holt ihn von selbst nach.
    */
   async create(name: string): Promise<SyncOutcome> {
+    this.requireReadableDevice();
     const seen = this.scheduler.seen();
     return this.applied(await this.connection.create(name, this.userId(), this.options.placeholders), seen);
   }
 
   /** Tritt bei und übernimmt die Daten der Runde; die Daten dieses Geräts werden dabei ersetzt. */
   async join(token: string): Promise<SyncOutcome> {
+    this.requireReadableDevice();
     const seen = this.scheduler.seen();
     const outcome = await this.connection.join(token, this.userId());
     this.rememberInvite(null);
@@ -461,31 +543,63 @@ export class RoundController {
   }
 
   async use(round: RoundSummary): Promise<SyncOutcome> {
+    this.requireReadableDevice();
     const seen = this.scheduler.seen();
     return this.applied(await this.connection.use(round, this.userId()), seen);
   }
 
   /** „Das bin ich“; `player === null` heißt „Ich bin neu“. */
   async claim(player: PlayerId | null, name: string): Promise<SyncOutcome> {
+    this.requireReadableDevice();
     const seen = this.scheduler.seen();
     return this.applied(await this.connection.claim(player, name), seen);
   }
 
+  /** Verlässt die verbundene Runde und löst die Verbindung; die Daten bleiben als Kopie hier. */
   async leave(): Promise<void> {
     await this.connection.leave();
+    this.options.issuedInvites.set(null);
     await this.refresh();
   }
 
-  /** Erzeugt eine Einladung und liefert den Link zum Weitergeben. */
+  /**
+   * Verlässt eine Runde des Kontos, die nicht mit diesem Gerät verbunden ist („Deine Runden“). Auf diesem Gerät ändert
+   * sich nichts; ist das Konto das letzte Mitglied, löscht der Server die Runde.
+   */
+  async leaveRound(round: RoundId): Promise<void> {
+    if (this.state.link?.roundId === round) {
+      await this.leave();
+      return;
+    }
+    await this.api.leaveRound(round);
+    if (this.options.issuedInvites.get()?.roundId === round) this.options.issuedInvites.set(null);
+  }
+
+  /**
+   * Der Link zum Weitergeben: die zuletzt erzeugte Einladung dieser Runde, solange sie jünger als 13 Tage ist, sonst
+   * eine neue. So stößt wiederholtes „Einladen“ nicht an die Grenze von 20 gültigen Einladungen je Runde.
+   */
   async inviteLink(): Promise<string> {
     const link = this.state.link;
     if (link === null) throw new RoundException("NOT_MEMBER");
-    return InviteLinks.webLink(this.options.webAppUrl, await this.api.createInvite(link.roundId));
+    const kept = reusableInvite(this.options.issuedInvites.get(), link.roundId, Date.now());
+    if (kept !== null) return InviteLinks.webLink(this.options.webAppUrl, kept);
+    const token = await this.api.createInvite(link.roundId);
+    this.options.issuedInvites.set({ roundId: link.roundId, token, createdAt: Date.now() });
+    return InviteLinks.webLink(this.options.webAppUrl, token);
   }
 
-  /** Wie viele Änderungen gerade noch warten (für die Rückfrage vor dem Verlassen). */
-  pendingCount(): Promise<number> {
-    return this.sync.pendingCount();
+  /**
+   * Wie viele Änderungen gerade noch warten (für die Rückfrage vor dem Verlassen). Lässt sich das auf dem Gerät gerade
+   * nicht lesen, gilt der zuletzt bekannte Wert: Verlassen und Abmelden sollen auch dann gehen.
+   */
+  async pendingCount(): Promise<number> {
+    try {
+      return await this.sync.pendingCount();
+    } catch (error) {
+      if (error instanceof DeviceStorageError) return this.state.pending;
+      throw error;
+    }
   }
 
   rememberInvite(token: string | null): void {
@@ -502,9 +616,10 @@ export class RoundController {
   }
 
   /**
-   * Ein anderes Fenster der App hat die Daten auf dem Gerät geändert: neu lesen, während kein Abgleich läuft.
+   * Ein anderes Fenster der App hat die Daten auf dem Gerät geändert: neu lesen, während kein Abgleich läuft (auch in
+   * keinem anderen Fenster).
    *
-   * @param reload Liest Spieler, Abende, Einstellungen und das Gemerkte der Runde neu aus dem Speicher.
+   * @param reload Liest Spieler, Abende, Einstellungen und das Gemerkte der Runde neu aus dem Speicher, soweit nötig.
    */
   async changedElsewhere(reload: () => Promise<void>): Promise<void> {
     await this.sync.exclusive(reload);
@@ -532,7 +647,7 @@ export class RoundController {
     try {
       outcome = await this.sync.sync(!full);
     } catch (error) {
-      // Zum Beispiel ein Fehler der Datenbank: Der nächste Versuch kommt von selbst.
+      // Zum Beispiel ein unerwarteter Fehler der Datenbank: Der nächste Versuch kommt von selbst.
       console.warn("Schafkopf Tracker: Abgleich abgebrochen", error);
       outcome = SyncOutcome.failed("SERVER");
     }
@@ -571,17 +686,26 @@ export class RoundController {
         await this.failed("OFFLINE");
         break;
       case "Failed":
-        await this.failed("SERVER");
+        if (outcome === BUSY_ELSEWHERE) {
+          // Gleicht gerade ein anderes Fenster ab, fällt nur dieser Versuch aus: keine Störung, aber was wartet, zählt.
+          this.setState({ syncing: false });
+          await this.refreshPending();
+        } else {
+          await this.failed(outcome === STORAGE_FAILURE ? "STORAGE" : "SERVER");
+        }
         break;
       case "SignedOut":
         await this.failed("SIGNED_OUT");
         break;
       case "Detached":
+        this.options.issuedInvites.set(null);
         this.setState({ syncing: false, message: "DETACHED" });
         await this.refresh();
         break;
       case "NotLinked":
+        // Zum Beispiel hat ein anderes Fenster die Runde gelöst: zeigen.
         this.setState({ syncing: false });
+        await this.refresh();
         break;
     }
   }

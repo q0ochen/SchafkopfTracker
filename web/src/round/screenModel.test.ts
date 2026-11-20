@@ -179,6 +179,58 @@ describe("Angemeldet, ohne Runde", () => {
     expect(screen.getUi().rounds).toEqual([]);
   });
 
+  it("„Verlassen“ bei einer Runde des Kontos: erst die Rückfrage, dann ist sie aus der Liste; auf dem Gerät ändert sich nichts", async () => {
+    const one = await founder();
+    const id = one.state.link?.roundId ?? "";
+    const two = await phone("zwei", 2);
+    await two.screen().redeem(await inviteToken(one));
+    await pass();
+    await two.controller.signOut();
+    two.auth.set(account(2));
+    await pass();
+    await two.startEvening("eigener-abend");
+    const screen = await screenOf(two);
+    const [round] = screen.getUi().rounds ?? [];
+    expect(round).toMatchObject({ id, name: "Stammtisch", memberCount: 2 });
+
+    // „Abbrechen“ lässt alles, wie es ist.
+    screen.askLeave(round);
+    expect(screen.getUi().leaving).toEqual(round);
+    screen.cancelLeave();
+    expect(screen.getUi().leaving).toBeNull();
+    expect(await two.controller.myRounds()).toHaveLength(1);
+
+    screen.askLeave(round);
+    await screen.confirmLeave();
+    expect(screen.getUi().leaving).toBeNull();
+    expect(screen.getUi().error).toBeNull();
+    expect(screen.getUi().rounds).toEqual([]);
+    expect((await one.session("konto-1").members(id)).map((it) => it.userId)).toEqual(["konto-1"]);
+    expect(two.store.getState().evenings.map((it) => it.id)).toContain("eigener-abend");
+    expect(two.state.link).toBeNull();
+  });
+
+  it("verlässt das letzte Mitglied eine Runde, ist sie auf dem Server gelöscht; ohne Netz bleibt sie in der Liste", async () => {
+    const one = await founder();
+    const id = one.state.link?.roundId ?? "";
+    const other = await phone("neues-handy", 1);
+    const screen = await screenOf(other);
+    const [round] = screen.getUi().rounds ?? [];
+    expect(round.memberCount).toBe(1);
+
+    other.mine.offline = true;
+    screen.askLeave(round);
+    await screen.confirmLeave();
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "OFFLINE", roundName: false });
+    expect(screen.getUi().rounds).toEqual([round]);
+
+    other.mine.offline = false;
+    screen.askLeave(round);
+    await screen.confirmLeave();
+    expect(screen.getUi().rounds).toEqual([]);
+    expect(await one.session("konto-1").head(id)).toBeNull();
+  });
+
   it("ein geschlossener Bildschirm beobachtet nichts mehr", async () => {
     const two = await phone("zwei");
     const screen = await screenOf(two);
@@ -501,6 +553,22 @@ describe("Verbunden", () => {
     await screen.signIn();
     expect(one.auth.signInsStarted).toBe(1);
     expect(screen.getUi().error).toBeNull();
+  });
+
+  it("lassen sich Spielerliste oder Einstellungen auf dem Gerät nicht lesen, sagt der Fehler es, statt beizutreten", async () => {
+    const one = await founder();
+    const two = await phone("zwei", 2);
+    two.repository.players = "{kaputt";
+    await two.restart();
+    two.controller.start(true);
+    await pass();
+    const screen = await screenOf(two);
+
+    await screen.redeem(await inviteToken(one));
+
+    expect(screen.getUi().error).toEqual({ kind: "Storage" });
+    expect(two.state.link).toBeNull();
+    expect(two.session("konto-2").calls.filter((it) => it === "joinRound")).toEqual([]);
   });
 
   it("lässt sich die Anbindung nicht laden, sagt der Fehler „keine Verbindung“", async () => {

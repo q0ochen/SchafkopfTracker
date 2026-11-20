@@ -88,7 +88,7 @@ describe("Datenbank Version 2", () => {
 
     expect(store.getState().players.map((it) => it.name)).toEqual(["Gast"]);
     expect(store.getState().evenings.map((it) => it.id).sort()).toEqual(["abend-1", "abend-2"]);
-    expect(store.getState().unreadableEvenings).toBe(1);
+    expect(store.getState().unreadableEvenings).toEqual(["kaputt"]);
     db.close();
   });
 
@@ -301,6 +301,9 @@ describe("Was sich das Gerät zur Runde merkt", () => {
     const store = new IndexedDbRoundStore(db, roundStoreCodec);
     await store.setLink(LINK);
     await store.setEveningBase("abend-1", { version: 1, evening: evening([], "abend-1") });
+    // Gelesen wird erst bei Bedarf; hier ist alles schon einmal gelesen.
+    await store.eveningBases();
+    await store.playerBases();
     db.close();
 
     await expect(store.setLink(null)).rejects.toThrow();

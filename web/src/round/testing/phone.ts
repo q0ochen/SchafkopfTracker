@@ -10,11 +10,12 @@ import { instantFromEpochMillis } from "../../core/instant";
 import type { Evening, EveningId, GameEntry, PlayerId } from "../../core/model";
 import { InMemoryRoundStore, type InMemoryRoundServer, type InMemoryRoundSession } from "../../core/round/InMemoryRound";
 import { RoundException, type EveningBase, type RemotePlayer, type RoundLink } from "../../core/round/RoundModels";
+import type { SyncGuard } from "../../core/round/RoundSync";
 import { InMemoryRepository } from "../../data/repository";
 import { NO_SIGN_IN_PENDING, type Account, type RoundAuth, type RoundBackend } from "../backend";
 import { RoundController, type ObservableRoundStore } from "../controller";
 import { deferredApi } from "../deferredApi";
-import type { InviteMemory } from "../inviteMemory";
+import type { InviteMemory, IssuedInvite, IssuedInviteMemory } from "../inviteMemory";
 import { RoundScreenModel } from "../screenModel";
 import type { SignInReturn } from "../signInReturn";
 import { StoreAdapters } from "../storeAdapters";
@@ -101,9 +102,9 @@ export class CachedRoundStore implements ObservableRoundStore {
     for (const listener of [...this.listeners]) listener();
   }
 
-  invalidate(): void {
+  invalidate(notify = true): void {
     this.cached = null;
-    this.notify();
+    if (notify) this.notify();
   }
 
   async link(): Promise<RoundLink | null> {
@@ -152,11 +153,14 @@ export function testClock(prefix: string): Clock {
 export class Phone {
   readonly auth: FakeAuth;
   readonly roundStore = new InMemoryRoundStore();
-  readonly adapters: StoreAdapters;
+  /** Die Anbindung an den Zustand; nach {@link restart} eine neue. */
+  adapters: StoreAdapters;
   /** Die Steuerung; nach {@link reload} eine neue, wie nach dem Neuladen der Seite. */
   controller: RoundController;
   /** Was sich das Handy als Einladung gemerkt hat. */
   invite: string | null = null;
+  /** Die zuletzt erzeugte Einladung, wie sie das Handy im Speicher des Browsers hätte. */
+  issued: IssuedInvite | null = null;
   /** `true`: Die Anbindung an den Server lässt sich gerade nicht laden. */
   backendFails = false;
   /** Solange gesetzt, hängt das Laden der Anbindung, bis der Test das Versprechen erfüllt (langsames Netz). */
@@ -170,11 +174,15 @@ export class Phone {
 
   private constructor(
     private readonly server: InMemoryRoundServer,
-    readonly store: AppStore,
+    /** Der Zustand der App; nach {@link restart} ein neu geladener. */
+    public store: AppStore,
     /** Der Speicher des Handys (zum Stören: `failWrites`). */
     readonly repository: InMemoryRepository,
     signedIn: Account | null,
     cachedStore: boolean,
+    private readonly name: string,
+    /** Läuft um jeden Abgleich (wie in der App die Sperre über alle Fenster). */
+    private readonly guard: SyncGuard | undefined,
   ) {
     this.view = cachedStore ? new CachedRoundStore(this.roundStore) : this.roundStore;
     this.auth = new FakeAuth(signedIn);
@@ -197,6 +205,12 @@ export class Phone {
         this.invite = token;
       },
     };
+    const issuedInvites: IssuedInviteMemory = {
+      get: () => this.issued,
+      set: (invite) => {
+        this.issued = invite;
+      },
+    };
     return new RoundController({
       loadBackend: async () => {
         this.backendLoads++;
@@ -204,13 +218,15 @@ export class Phone {
         if (this.backendFails) throw new Error("Anbindung nicht ladbar (Test)");
         return this.backend;
       },
-      store: this.view,
+      store: this.adapters.shield(this.view),
       data: this.adapters,
       invites,
+      issuedInvites,
       placeholders: defaultPlayers(),
       webAppUrl: WEB_APP_URL,
       ids: { newId: () => this.store.clock.newId() },
       initialLink,
+      guard: this.guard,
     });
   }
 
@@ -227,6 +243,20 @@ export class Phone {
   }
 
   /**
+   * Startet die App ganz neu, wie nach dem Neuladen der Seite: Auch der Zustand der App wird neu aus dem Speicher
+   * geladen (zum Beispiel, nachdem ein Test ihn beschädigt hat). Die Steuerung beginnt noch nicht von selbst.
+   */
+  async restart(): Promise<RoundController> {
+    this.controller.stop();
+    this.view.invalidate?.();
+    const link = await this.view.link();
+    this.store = await AppStore.load(this.repository, testClock(`${this.name}-neu`), { seedPlayers: link === null });
+    this.adapters = new StoreAdapters(this.store, storageCodec.encodeEvening);
+    this.controller = this.newController(link);
+    return this.controller;
+  }
+
+  /**
    * Ein frisch installiertes Handy; `signedIn`: Dieses Konto ist schon angemeldet.
    *
    * @param options.cachedStore Die Steuerung sieht die Ablage wie im Browser durch einen Zwischenspeicher
@@ -236,10 +266,18 @@ export class Phone {
     server: InMemoryRoundServer,
     name: string,
     signedIn: Account | null = null,
-    options: { cachedStore?: boolean } = {},
+    options: { cachedStore?: boolean; guard?: SyncGuard } = {},
   ): Promise<Phone> {
     const repository = new InMemoryRepository(storageCodec);
-    return new Phone(server, await AppStore.load(repository, testClock(name)), repository, signedIn, options.cachedStore ?? false);
+    return new Phone(
+      server,
+      await AppStore.load(repository, testClock(name)),
+      repository,
+      signedIn,
+      options.cachedStore ?? false,
+      name,
+      options.guard,
+    );
   }
 
   /** Der Zugang des Kontos beim Server (zum Stören und Zählen). */

@@ -6,7 +6,7 @@ import { ROUND_API_METHODS } from "../core/round/RoundPorts";
 import { errorOf } from "../core/round/testing/fixtures";
 import { readRoundConfig } from "./config";
 import { deferredApi } from "./deferredApi";
-import { INVITE_STORAGE_KEY, storedInviteMemory } from "./inviteMemory";
+import { INVITE_REUSE_MILLIS, INVITE_STORAGE_KEY, ISSUED_INVITE_KEY, reusableInvite, storedInviteMemory, storedIssuedInvites } from "./inviteMemory";
 import { parseSignInReturn } from "./signInReturn";
 import { MemoryStorage } from "./testing/memoryStorage";
 
@@ -92,6 +92,51 @@ describe("gemerkte Einladung", () => {
     expect(memory.get()).toBe(TOKEN);
     memory.set(null);
     expect(memory.get()).toBeNull();
+  });
+});
+
+describe("zuletzt erzeugte Einladung", () => {
+  const TOKEN = "0123456789abcdef0123456789abcdef";
+  const DAY = 24 * 3600 * 1000;
+  const issued = { roundId: "runde-1", token: TOKEN, createdAt: 1_000_000 };
+
+  it("wird für dieselbe Runde wiederverwendet, solange sie jünger als 13 Tage ist", () => {
+    expect(INVITE_REUSE_MILLIS).toBe(13 * DAY);
+    expect(reusableInvite(issued, "runde-1", issued.createdAt)).toBe(TOKEN);
+    expect(reusableInvite(issued, "runde-1", issued.createdAt + 13 * DAY - 1)).toBe(TOKEN);
+    expect(reusableInvite(issued, "runde-1", issued.createdAt + 13 * DAY)).toBeNull();
+    expect(reusableInvite(issued, "runde-2", issued.createdAt)).toBeNull();
+    expect(reusableInvite(null, "runde-1", issued.createdAt)).toBeNull();
+    // Aus der Zukunft (die Uhr des Geräts wurde zurückgestellt): Wie alt sie ist, lässt sich nicht sagen.
+    expect(reusableInvite(issued, "runde-1", issued.createdAt - 1)).toBeNull();
+  });
+
+  it("steht im Speicher des Browsers und wird beim Verlassen vergessen", () => {
+    const storage = new MemoryStorage();
+    const memory = storedIssuedInvites(storage);
+    expect(memory.get()).toBeNull();
+
+    memory.set(issued);
+    expect(JSON.parse(storage.values.get(ISSUED_INVITE_KEY) ?? "null")).toEqual(issued);
+    expect(storedIssuedInvites(storage).get()).toEqual(issued);
+
+    memory.set(null);
+    expect(storage.values.has(ISSUED_INVITE_KEY)).toBe(false);
+    expect(memory.get()).toBeNull();
+  });
+
+  it("nur ein lesbarer Eintrag mit echtem Code zählt; ein gesperrter Speicher hält sie, solange die Seite offen ist", () => {
+    const storage = new MemoryStorage();
+    for (const broken of ["{kaputt", "[]", JSON.stringify({ ...issued, token: "<script>" }), JSON.stringify({ ...issued, createdAt: "gestern" })]) {
+      storage.setItem(ISSUED_INVITE_KEY, broken);
+      expect(storedIssuedInvites(storage).get(), broken).toBeNull();
+    }
+
+    const locked = new MemoryStorage();
+    locked.broken = true;
+    const memory = storedIssuedInvites(locked);
+    memory.set(issued);
+    expect(memory.get()).toEqual(issued);
   });
 });
 

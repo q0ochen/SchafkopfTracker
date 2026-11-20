@@ -9,17 +9,22 @@ import { InviteLinks } from "../src/core/round/InviteLinks";
 import { RuleSets } from "../src/core/rules/RuleSet";
 import { writeBackup } from "../src/data/format";
 import {
+  ANDROID_CHROME,
   anotherDevice,
   claim,
+  copiedTexts,
   createRound,
   FakeSupabase,
   foundRound,
+  fromHomeScreen,
   inviteLink,
+  IPHONE_SAFARI,
   KONTO_1,
   KONTO_2,
   nameRound,
   openRound,
   openRunningEvening,
+  recordClipboard,
   renamePlayer,
   roundRow,
   routeSupabase,
@@ -109,11 +114,12 @@ test("zwei Handys: einladen, beitreten, beide tragen ein und sehen dasselbe", as
   const link = await inviteLink(page);
   const token = InviteLinks.tokenFrom(link) ?? "";
 
-  // Das zweite Handy öffnet den Einladungslink.
+  // Das zweite Handy öffnet den Einladungslink (in einem Browser am Computer: kein Knopf für die Android-App).
   const two = await anotherDevice(browser, fake);
   await two.goto(link);
   await expect(two.getByRole("heading", { level: 2, name: "Einladung in eine Schafkopfrunde" })).toBeVisible();
-  await expect(two.getByRole("link", { name: "In der Android-App öffnen" })).toHaveAttribute("href", `schafkopftracker://einladung/${token}`);
+  await expect(two.getByText(token, { exact: true })).toBeVisible();
+  await expect(two.getByRole("link", { name: "In der Android-App öffnen" })).toBeHidden();
   await expectAccessible(two);
   await two.getByRole("button", { name: "Hier beitreten" }).click();
 
@@ -618,11 +624,25 @@ test("Runde verlassen und abmelden, mit Rückfrage und Hinweis auf Wartendes", a
 
   await page.getByRole("button", { name: "Runde verlassen" }).click();
   const leave = page.getByRole("dialog", { name: "Runde verlassen?" });
-  await expect(leave.getByText("Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt in der Runde.")).toBeVisible();
+  // Das Konto ist das einzige Mitglied: Die Runde wird gelöscht.
+  await expect(
+    leave.getByText(
+      "Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht. Auf diesem Gerät bleiben sie als Kopie.",
+    ),
+  ).toBeVisible();
+  await expect(leave.getByText("Dein Name bleibt in der Runde.", { exact: false })).toBeHidden();
   await expect(leave.getByText("1 Änderung ist noch nicht hochgeladen und kommt nicht mehr in der Runde an.")).toBeVisible();
   await expectAccessible(page);
   await leave.getByRole("button", { name: "Abbrechen" }).click();
   await expect(leave).toBeHidden();
+
+  // Mit verbundener Runde trennt „Abmelden“ das Gerät von der Runde.
+  await page.getByRole("button", { name: "Abmelden" }).click();
+  const linkedSignOut = page.getByRole("dialog", { name: "Abmelden?" });
+  await expect(linkedSignOut.getByText("Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier.")).toBeVisible();
+  await expect(linkedSignOut.getByText("1 Änderung ist noch nicht hochgeladen und kommt nicht mehr in der Runde an.")).toBeVisible();
+  await linkedSignOut.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(linkedSignOut).toBeHidden();
 
   // Ohne Netz lässt sich die Runde nicht verlassen.
   await page.getByRole("button", { name: "Runde verlassen" }).click();
@@ -639,9 +659,10 @@ test("Runde verlassen und abmelden, mit Rückfrage und Hinweis auf Wartendes", a
   await expect(page.getByText(`Angemeldet als ${KONTO_1.email}`)).toBeVisible();
   expect(await fake.session(KONTO_1.userId).myRounds()).toEqual([]);
 
+  // Ohne verbundene Runde wird nur abgemeldet.
   await page.getByRole("button", { name: "Abmelden" }).click();
   const signOut = page.getByRole("dialog", { name: "Abmelden?" });
-  await expect(signOut.getByText("Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier.")).toBeVisible();
+  await expect(signOut.getByText("Dieses Gerät wird abgemeldet.", { exact: true })).toBeVisible();
   await signOut.getByRole("button", { name: "Abmelden" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Gemeinsam eintragen" })).toBeVisible();
   // Die Daten sind als Kopie noch da.
@@ -706,4 +727,119 @@ test("auch im hellen Erscheinungsbild ist die gemeinsame Runde barrierefrei", as
   await openApp(page);
   await expect(roundRow(page)).toContainText("Kein Netz", SYNC);
   await expectAccessible(page);
+});
+
+// --- Einladungsseite (Links aus WhatsApp oder iMessage öffnen sich im Browser, nicht in der App vom Home-Bildschirm) ---
+
+const CODE = "0123456789abcdef0123456789abcdef";
+const IPHONE_HINT =
+  /^Benutzt du den Schafkopf Tracker vom Home-Bildschirm\? Dann kopiere den Code, öffne die App über ihr Symbol und füge ihn unter „Gemeinsame Runde“ → „Einladung einlösen“ ein\.$/;
+
+test.describe("Einladungsseite am iPhone im Browser", () => {
+  test.use({ userAgent: IPHONE_SAFARI });
+
+  test("der Code zum Kopieren, der Hinweis auf die App vom Home-Bildschirm; „Hier beitreten“ geht trotzdem", async ({ page }) => {
+    await recordClipboard(page);
+    await page.goto(`./#/einladung/${CODE}`);
+
+    await expect(page.getByRole("heading", { level: 2, name: "Einladung in eine Schafkopfrunde" })).toBeVisible();
+    await expect(page.getByText(CODE, { exact: true })).toBeVisible();
+    await expect(page.getByText(IPHONE_HINT)).toBeVisible();
+    await expect(page.getByRole("link", { name: "In der Android-App öffnen" })).toBeHidden();
+    await expectAccessible(page);
+
+    await page.getByRole("button", { name: "Code kopieren" }).click();
+    await expect(page.getByRole("button", { name: "Code kopiert" })).toBeVisible();
+    expect(await copiedTexts(page)).toEqual([CODE]);
+
+    // Wer doch hier im Browser beitreten will, kann das; der Code ist gemerkt.
+    await page.getByRole("button", { name: "Hier beitreten" }).click();
+    await expect(page.getByText("Du bist eingeladen. Melde dich an, um beizutreten.")).toBeVisible();
+  });
+
+  test("als App vom Home-Bildschirm: ohne den Hinweis", async ({ page }) => {
+    await fromHomeScreen(page);
+    await page.goto(`./#/einladung/${CODE}`);
+
+    await expect(page.getByRole("button", { name: "Hier beitreten" })).toBeVisible();
+    await expect(page.getByText(CODE, { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Code kopieren" })).toBeVisible();
+    await expect(page.getByText(IPHONE_HINT)).toBeHidden();
+    await expect(page.getByRole("link", { name: "In der Android-App öffnen" })).toBeHidden();
+  });
+});
+
+test.describe("Einladungsseite auf Android", () => {
+  test.use({ userAgent: ANDROID_CHROME });
+
+  test("„In der Android-App öffnen“ führt in die App; ohne Hinweis fürs iPhone", async ({ page }) => {
+    await page.goto(`./#/einladung/${CODE}`);
+
+    await expect(page.getByRole("link", { name: "In der Android-App öffnen" })).toHaveAttribute("href", `schafkopftracker://einladung/${CODE}`);
+    await expect(page.getByRole("button", { name: "Hier beitreten" })).toBeVisible();
+    await expect(page.getByText(IPHONE_HINT)).toBeHidden();
+    await expectAccessible(page);
+  });
+});
+
+test("Einladungsseite auf einem Gerät, das schon mit einer Runde verbunden ist: Der Code wird nicht gemerkt", async ({ page }) => {
+  await foundRound(page, fake);
+  await page.goto(`./#/einladung/${CODE}`);
+
+  await expect(page.getByText(CODE, { exact: true })).toBeVisible();
+  await expect(page.getByText("Dieses Gerät ist schon mit der Runde Stammtisch verbunden.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hier beitreten" })).toBeHidden();
+  await expectAccessible(page);
+  await page.getByRole("button", { name: "Zur gemeinsamen Runde" }).click();
+
+  await expect(page.getByRole("heading", { level: 2, name: "Stammtisch" })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("schafkopf-tracker-einladung"))).toBeNull();
+});
+
+// --- Runden des Kontos verlassen ---
+
+test("eine Runde aus „Deine Runden“ verlassen: mit Rückfrage, beim letzten Mitglied mit Hinweis; ohne Runde nur abmelden", async ({ page }) => {
+  const owner = fake.session(KONTO_1.userId);
+  const shared = await owner.createRound("Stammtisch");
+  await fake.session(KONTO_2.userId).joinRound(await owner.createInvite(shared));
+  const alone = await owner.createRound("Dienstagsrunde");
+  await startEvening(page);
+
+  await openRound(page);
+  await signIn(page, fake, KONTO_1);
+  const rounds = page.getByRole("list", { name: "Deine Runden" });
+  await expect(rounds.getByRole("listitem")).toHaveCount(2);
+
+  // Eine Runde mit weiteren Mitgliedern: Sie bleibt bestehen.
+  await rounds.getByRole("button", { name: "Stammtisch verlassen" }).click();
+  const leaveShared = page.getByRole("dialog", { name: "Stammtisch verlassen?" });
+  await expect(leaveShared.getByText("Du gehörst danach nicht mehr zu dieser Runde. Auf diesem Gerät ändert sich nichts.")).toBeVisible();
+  await expect(leaveShared.getByText(/letzte Mitglied/)).toBeHidden();
+  await expectAccessible(page);
+  await leaveShared.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(leaveShared).toBeHidden();
+  await expect(rounds.getByRole("listitem")).toHaveCount(2);
+
+  // Das letzte Mitglied: Die Runde wird gelöscht.
+  await rounds.getByRole("button", { name: "Dienstagsrunde verlassen" }).click();
+  const leaveAlone = page.getByRole("dialog", { name: "Dienstagsrunde verlassen?" });
+  await expect(leaveAlone.getByText("Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht.")).toBeVisible();
+  await leaveAlone.getByRole("button", { name: "Verlassen" }).click();
+  await expect(rounds.getByRole("listitem")).toHaveCount(1);
+  await expect(rounds.getByRole("listitem")).toContainText("Stammtisch");
+  expect(await fake.session(KONTO_1.userId).head(alone)).toBeNull();
+
+  await rounds.getByRole("button", { name: "Stammtisch verlassen" }).click();
+  await leaveShared.getByRole("button", { name: "Verlassen" }).click();
+  await expect(page.getByRole("list", { name: "Deine Runden" })).toBeHidden();
+  expect((await fake.session(KONTO_2.userId).members(shared)).map((it) => it.userId)).toEqual([KONTO_2.userId]);
+
+  // Auf dem Gerät hat sich nichts geändert; ohne Runde wird nur abgemeldet.
+  await page.getByRole("button", { name: "Abmelden" }).click();
+  const signOut = page.getByRole("dialog", { name: "Abmelden?" });
+  await expect(signOut.getByText("Dieses Gerät wird abgemeldet.", { exact: true })).toBeVisible();
+  await signOut.getByRole("button", { name: "Abmelden" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Gemeinsam eintragen" })).toBeVisible();
+  await openApp(page);
+  await expect(page.getByText("Abend läuft")).toBeVisible();
 });

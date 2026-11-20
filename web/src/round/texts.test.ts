@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import { ROUND_ERRORS } from "../core/round/RoundModels";
 import {
   dealerHint,
+  farewellText,
   GENERIC_ERROR,
   inviteMessage,
+  LAST_MEMBER_TEXT,
+  LEAVE_ROUND_TEXT,
   memberCountText,
   messageText,
   NO_CODE_ERROR,
@@ -15,6 +18,7 @@ import {
   roundStatus,
   SIGN_IN_MESSAGES,
   statusIconLabel,
+  STORAGE_FAILED_TEXT,
   type RoundStatusInput,
 } from "./texts";
 
@@ -36,8 +40,19 @@ describe("Statuszeile", () => {
     [{ ...CALM, unreadable: 1 }, "PROBLEM", "1 Abend kann diese Version nicht lesen – bitte die App aktualisieren"],
     [{ ...CALM, unreadable: 2 }, "PROBLEM", "2 Abende kann diese Version nicht lesen – bitte die App aktualisieren"],
     [{ ...CALM, needsSignIn: true }, "PROBLEM", "Anmeldung abgelaufen – bitte neu anmelden"],
+    [{ ...CALM, problem: "STORAGE" }, "PROBLEM", "Speichern auf diesem Gerät gescheitert – bitte die App neu laden"],
+    [{ ...CALM, problem: "STORAGE", pending: 3 }, "PROBLEM", "Speichern auf diesem Gerät gescheitert – bitte die App neu laden"],
   ] as const)("%o: %s „%s“", (input, kind, text) => {
     expect(roundStatus(input)).toEqual({ kind, text });
+  });
+
+  it("„Speichern auf diesem Gerät gescheitert“ steht hinter Anmeldung, unlesbaren und nicht angenommenen Abenden", () => {
+    const storage: RoundStatusInput = { needsSignIn: true, problem: "STORAGE", pending: 2, unreadable: 1, refused: 1 };
+    expect(roundStatus(storage).text).toBe("Anmeldung abgelaufen – bitte neu anmelden");
+    expect(roundStatus({ ...storage, needsSignIn: false }).text).toBe("1 Abend kann diese Version nicht lesen – bitte die App aktualisieren");
+    expect(roundStatus({ ...storage, needsSignIn: false, unreadable: 0 }).text).toBe("1 Abend nimmt der Server nicht an");
+    expect(roundStatus({ ...storage, needsSignIn: false, unreadable: 0, refused: 0 }).text).toBe(STORAGE_FAILED_TEXT);
+    expect(STORAGE_FAILED_TEXT).toBe("Speichern auf diesem Gerät gescheitert – bitte die App neu laden");
   });
 
   it("es gilt die erste zutreffende Zeile: Anmeldung, unlesbar, nicht angenommen, kein Netz, Server, wartend", () => {
@@ -124,6 +139,19 @@ describe("Meldungen und Rückfragen", () => {
     );
     expect(pendingWarning(1)).toBe("1 Änderung ist noch nicht hochgeladen und kommt nicht mehr in der Runde an.");
     expect(pendingWarning(3)).toBe("3 Änderungen sind noch nicht hochgeladen und kommen nicht mehr in der Runde an.");
+  });
+
+  it("die Rückfragen vor dem Verlassen und Abmelden", () => {
+    expect(farewellText("LEAVE", true, false)).toBe("Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt in der Runde.");
+    expect(farewellText("LEAVE", true, true)).toBe(
+      "Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht. Auf diesem Gerät bleiben sie als Kopie.",
+    );
+    expect(farewellText("SIGN_OUT", true, false)).toBe("Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier.");
+    expect(farewellText("SIGN_OUT", true, true)).toBe("Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier.");
+    expect(farewellText("SIGN_OUT", false, false)).toBe("Dieses Gerät wird abgemeldet.");
+    // Eine Runde aus „Deine Runden“ verlassen.
+    expect(LEAVE_ROUND_TEXT).toBe("Du gehörst danach nicht mehr zu dieser Runde. Auf diesem Gerät ändert sich nichts.");
+    expect(LAST_MEMBER_TEXT).toBe("Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht.");
   });
 
   it("der Text der Einladung und der Hinweis, wer gibt", () => {

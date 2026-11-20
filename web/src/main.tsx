@@ -12,7 +12,8 @@ import { browserPlatform } from "./platform/platform";
 import { readRoundConfig } from "./round/config";
 import type { RoundController } from "./round/controller";
 import { IndexedDbRoundStore } from "./round/indexedDbRoundStore";
-import { announcingRepository, createTabSignal, safeLocalStorage, startRound } from "./round/setup";
+import { announcingRepository, safeLocalStorage, startRound } from "./round/setup";
+import { coalescing, createTabChannel } from "./round/windows";
 import { App } from "./ui/App";
 import type { Services } from "./ui/context";
 import "./ui/styles.css";
@@ -135,9 +136,10 @@ async function start(): Promise<void> {
   let store: AppStore;
   if (import.meta.env.VITE_ROUND_ENABLED && roundConfig !== null) {
     const storage = safeLocalStorage(window);
-    const tabs = createTabSignal(storage, systemClock.newId());
-    repository = announcingRepository(repository, () => tabs.announce());
-    const roundStore = new IndexedDbRoundStore(db, roundStoreCodec);
+    // Die anderen Fenster der App erfahren jedes Speichern (kurz zusammengefasst) und lesen dann neu.
+    const channel = coalescing(createTabChannel(window, storage, systemClock.newId()));
+    repository = announcingRepository(repository, () => channel.post("data"));
+    const roundStore = new IndexedDbRoundStore(db, roundStoreCodec, { onWrite: () => channel.post("round") });
     const link = await roundStore.link();
     // Mit verbundener Runde kommen die Spieler vom Server; Platzhalter gingen sonst als neue Spieler hoch.
     store = await AppStore.load(repository, systemClock, { seedPlayers: link === null });
@@ -146,7 +148,7 @@ async function start(): Promise<void> {
       store,
       roundStore,
       initialLink: link,
-      tabs,
+      channel,
       storage,
       encodeEvening: storageCodec.encodeEvening,
       webAppUrl: new URL(import.meta.env.BASE_URL, window.location.origin).href,

@@ -84,8 +84,18 @@ Supabase-Server ab. Der Vertrag steht in `docs/ARCHITEKTUR.md`, Abschnitt 8; wie
   der Android-App, `screenModel.ts` dem `RoundViewModel`. Was sich das Gerät zur Runde merkt, steht in drei neuen
   Ablagen derselben IndexedDB (Version 2; vorhandene Daten bleiben beim Übergang erhalten). Die Sitzung liegt im
   `localStorage` des Browsers.
-- **Mehrere Fenster:** Hat ein anderes Fenster derselben App gespeichert, liest dieses Fenster die Daten neu. Wer
-  denselben Abend in zwei Fenstern gleichzeitig bearbeitet, kann trotzdem eine Eingabe verlieren.
+- **Speicher des Browsers:** Der Abgleich arbeitet nur mit dem, was wirklich in IndexedDB liegt: Er wartet vor jedem
+  Lesen, bis alles gespeichert ist, und bricht ab, wenn das Speichern scheitert (Statuszeile „Speichern auf diesem
+  Gerät gescheitert – bitte die App neu laden“). Was sich auf dem Gerät nicht lesen lässt, gilt nie als gelöscht:
+  Ein unlesbarer Abend bleibt in der Runde, und ist die Spielerliste oder sind die Einstellungen unlesbar, ruht der
+  Abgleich ganz (`src/round/storeAdapters.ts`).
+- **Mehrere Fenster:** Es gleicht höchstens ein Fenster gleichzeitig ab (`navigator.locks`), und vorher liest es den
+  Stand frisch aus IndexedDB; ein Zähler in der Datenbank verrät, ob ein anderes Fenster gespeichert hat. Jedes
+  Speichern meldet sich bei den anderen Fenstern (`BroadcastChannel`), die dann neu lesen (`src/round/windows.ts`).
+  Wer denselben Abend in zwei Fenstern gleichzeitig bearbeitet, kann trotzdem eine Eingabe verlieren.
+- **Einladungen:** Die Einladungsseite zeigt den Code zum Kopieren; am iPhone im Browser steht dabei, dass er in der
+  App vom Home-Bildschirm unter „Einladung einlösen“ einzufügen ist (sie hat einen eigenen Speicher). „Einladen“ bietet
+  die zuletzt erzeugte Einladung wieder an, solange sie jünger als 13 Tage ist.
 - **Tests:** Die Unit-Tests stellen Server und Anmeldung nach (`src/round/testing`); die Oberflächen-Tests bauen die
   App ein zweites Mal mit der Adresse eines Servers, den es nicht gibt, und beantworten dessen Anfragen selbst.
   Gegen ein echtes Supabase prüft `npm run test:live` (siehe unten).

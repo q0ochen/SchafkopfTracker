@@ -3,6 +3,7 @@
  * die Runden des Kontos, die wartende Einladung, Rückfragen, Fehler und ob gerade eine Aktion läuft. Reine Logik
  * ohne Oberfläche, damit sie sich prüfen lässt.
  */
+import { DeviceStorageError } from "../app/store";
 import type { PlayerId } from "../core/model";
 import { InviteLinks } from "../core/round/InviteLinks";
 import { RoundException, type InviteInfo, type RoundError, type RoundSummary } from "../core/round/RoundModels";
@@ -18,6 +19,8 @@ export type Farewell = "LEAVE" | "SIGN_OUT";
 export type RoundUiError =
   /** Im eingefügten Text steht kein Einladungscode. */
   | { readonly kind: "NoCode" }
+  /** Der Speicher des Browsers lässt sich gerade nicht verlässlich benutzen (wie in der Statuszeile). */
+  | { readonly kind: "Storage" }
   /** `roundName`: Es ging um den Namen einer Runde. */
   | { readonly kind: "Server"; readonly error: RoundError; readonly roundName: boolean };
 
@@ -29,6 +32,7 @@ export type RoundUiError =
  * @property replace Wartet auf die Rückfrage „Daten dieses Geräts ersetzen?“.
  * @property eveningCount So viele Abende lägen beim Ersetzen auf dem Gerät.
  * @property farewell Wartet auf die Rückfrage vor dem Verlassen oder Abmelden; `farewellPending` Änderungen warten noch.
+ * @property leaving Wartet auf die Rückfrage vor dem Verlassen dieser Runde aus „Deine Runden“ (nicht verbunden).
  * @property shareLink Dieser Einladungslink ist erzeugt und kann weitergegeben werden.
  */
 export interface RoundUi {
@@ -41,6 +45,7 @@ export interface RoundUi {
   readonly eveningCount: number;
   readonly farewell: Farewell | null;
   readonly farewellPending: number;
+  readonly leaving: RoundSummary | null;
   readonly shareLink: string | null;
 }
 
@@ -54,6 +59,7 @@ const INITIAL: RoundUi = {
   eveningCount: 0,
   farewell: null,
   farewellPending: 0,
+  leaving: null,
   shareLink: null,
 };
 
@@ -111,7 +117,7 @@ export class RoundScreenModel {
     this.watched = now;
     this.generation++;
     if (userId !== null && unlinked) void this.refresh();
-    else this.update({ rounds: null, roundsFailed: false, invite: null });
+    else this.update({ rounds: null, roundsFailed: false, invite: null, leaving: null });
   }
 
   /** Liest die Runden des Kontos und die wartende Einladung. Scheitert das, bleibt der Bildschirm benutzbar. */
@@ -173,6 +179,33 @@ export class RoundScreenModel {
     if (kind === null) return Promise.resolve();
     this.update({ farewell: null });
     return this.busy(() => (kind === "LEAVE" ? this.controller.leave() : this.controller.signOut()));
+  }
+
+  // --- Eine Runde aus „Deine Runden“ verlassen ---
+
+  /** „Verlassen“ bei einer Runde des Kontos, die nicht mit diesem Gerät verbunden ist: erst die Rückfrage. */
+  askLeave(round: RoundSummary): void {
+    if (this.ui.busy) return;
+    this.update({ leaving: round });
+  }
+
+  cancelLeave(): void {
+    this.update({ leaving: null });
+  }
+
+  /** Verlässt die Runde; danach wird die Liste neu geladen. Auf diesem Gerät ändert sich nichts. */
+  confirmLeave(): Promise<void> {
+    const round = this.ui.leaving;
+    if (round === null) return Promise.resolve();
+    this.update({ leaving: null });
+    return this.busy(async () => {
+      try {
+        await this.controller.leaveRound(round.id);
+      } finally {
+        // Auch wenn es scheiterte: Vielleicht hat der Server es doch angenommen (Antwort verloren).
+        await this.refresh();
+      }
+    });
   }
 
   // --- Runde anlegen, beitreten, verwenden ---
@@ -274,6 +307,7 @@ export class RoundScreenModel {
       await block();
     } catch (error) {
       if (error instanceof RoundException) this.update({ error: { kind: "Server", error: error.error, roundName } });
+      else if (error instanceof DeviceStorageError) this.update({ error: { kind: "Storage" } });
       else {
         console.warn("Schafkopf Tracker: Aktion der gemeinsamen Runde gescheitert", error);
         this.update({ error: { kind: "Server", error: "SERVER", roundName: false } });

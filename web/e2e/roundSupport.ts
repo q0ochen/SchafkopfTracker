@@ -4,7 +4,7 @@
  * Projekts werden abgefangen und von dort beantwortet – auch die Anmeldung „bei Google“, die sofort mit einem Code
  * zur App zurückkehrt.
  */
-import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from "@playwright/test";
 import { FakeSupabase, NETWORK_FAILURE, type FakeAccount } from "../src/round/testing/fakeSupabase";
 import { FAKE_SUPABASE_URL, ROUND_APP_URL } from "./roundConfig";
 import { enterGame, openApp, startEvening } from "./support";
@@ -65,9 +65,13 @@ export const NAMES = ["Nord", "Ost", "Süd", "West"] as const;
 /** So lange darf es dauern, bis ein Abgleich im Hintergrund auf dem Bildschirm ankommt (die App fragt alle vier Sekunden). */
 export const SYNC = { timeout: 15_000 };
 
-/** Ein weiteres Handy: eigener Browser mit eigenem Speicher, am selben nachgestellten Projekt. */
-export async function anotherDevice(browser: Browser, fake: FakeSupabase): Promise<Page> {
-  const context = await browser.newContext({ baseURL: ROUND_APP_URL, serviceWorkers: "block" });
+/**
+ * Ein weiteres Handy: eigener Browser mit eigenem Speicher, am selben nachgestellten Projekt.
+ *
+ * @param options Für Bildschirmfotos zum Beispiel die Größe und Kennung eines iPhones.
+ */
+export async function anotherDevice(browser: Browser, fake: FakeSupabase, options: BrowserContextOptions = {}): Promise<Page> {
+  const context = await browser.newContext({ ...options, baseURL: ROUND_APP_URL, serviceWorkers: "block" });
   await routeSupabase(context, fake);
   return context.newPage();
 }
@@ -166,6 +170,45 @@ export async function inviteLink(page: Page): Promise<string> {
 /** Die Statuszeile der Runde, wie sie auf dem Start-Bildschirm steht. */
 export function roundRow(page: Page) {
   return page.getByRole("button", { name: /^(Gemeinsame Runde|Runde: )/ });
+}
+
+// --- Geräte nachstellen (die App erkennt sie an der Kennung des Browsers, siehe `src/platform/platform.ts`) ---
+
+/** Safari auf dem iPhone (so meldet sich auch der Browser in WhatsApp oder iMessage). */
+export const IPHONE_SAFARI =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+
+/** Chrome auf einem Android-Handy. */
+export const ANDROID_CHROME =
+  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36";
+
+/** Die Seite läuft als App vom Home-Bildschirm des iPhones (wie dort `navigator.standalone`). */
+export async function fromHomeScreen(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "standalone", { configurable: true, get: () => true });
+  });
+}
+
+/** Eine Zwischenablage, die mitschreibt, was kopiert wurde (in jedem Browser gleich, ohne Berechtigung). */
+export async function recordClipboard(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const copied: string[] = [];
+    Object.defineProperty(window, "kopiert", { configurable: true, value: copied });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: (text: string) => {
+          copied.push(text);
+          return Promise.resolve();
+        },
+      },
+    });
+  });
+}
+
+/** Was seit dem Laden der Seite kopiert wurde (siehe {@link recordClipboard}). */
+export function copiedTexts(page: Page): Promise<string[]> {
+  return page.evaluate(() => [...((window as unknown as { kopiert?: string[] }).kopiert ?? [])]);
 }
 
 export { FakeSupabase };

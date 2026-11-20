@@ -8,6 +8,7 @@ import { errorOf } from "../../core/round/testing/fixtures";
 import { NO_SIGN_IN_PENDING, type Account } from "../backend";
 import { FakeSupabase, fakeFetch, NETWORK_FAILURE, type FakeAccount } from "../testing/fakeSupabase";
 import { MemoryStorage } from "../testing/memoryStorage";
+import { SIGN_IN_EXCHANGE_MILLIS } from "../within";
 import { AUTH_STORAGE_KEY, createSupabaseBackend } from "./index";
 
 const SUPABASE = "https://projekt.supabase.co";
@@ -15,11 +16,18 @@ const KEY = "sb_publishable_nur_fuer_tests";
 const START_URL = "https://example.org/SchafkopfTracker/";
 const ONE: FakeAccount = { userId: "konto-1", email: "konto-1@example.org" };
 
-function setUp(options: { stored?: Record<string, unknown>; waitMillis?: number } = {}) {
+function setUp(options: { stored?: Record<string, unknown>; waitMillis?: number; exchangeMillis?: number; hangExchange?: boolean } = {}) {
   const fake = new FakeSupabase();
   const storage = new MemoryStorage();
   if (options.stored !== undefined) storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(options.stored));
   const opened: string[] = [];
+  const answer = fakeFetch(fake);
+  // Auf Wunsch kommt auf das Einlösen des Codes nie eine Antwort (Netz hängt).
+  const send: typeof fetch = (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const exchanging = url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "pkce";
+    return options.hangExchange === true && exchanging ? new Promise<Response>(() => undefined) : answer(input, init);
+  };
   const create = () =>
     createSupabaseBackend(
       { url: SUPABASE, publishableKey: KEY },
@@ -27,9 +35,10 @@ function setUp(options: { stored?: Record<string, unknown>; waitMillis?: number 
         redirectTo: START_URL,
         openUrl: (url) => opened.push(url),
         storage,
-        fetch: fakeFetch(fake),
+        fetch: send,
         autoRefresh: false,
         waitMillis: options.waitMillis,
+        exchangeMillis: options.exchangeMillis,
       },
     );
   return { fake, storage, opened, create, ...create() };
@@ -61,6 +70,8 @@ describe("Anmelden", () => {
     expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43}$/);
     // Nur die üblichen Angaben des Kontos (openid, email, profile): keine weiteren Bereiche.
     expect(url.searchParams.get("scopes")).toBeNull();
+    // Google fragt jedes Mal, welches Konto: So lässt sich ein falsch gewähltes Konto korrigieren.
+    expect(url.searchParams.get("prompt")).toBe("select_account");
     // Der Schlüssel zum Code bleibt auf dem Gerät und übersteht das Verlassen der Seite.
     expect(storage.getItem(`${AUTH_STORAGE_KEY}-code-verifier`)).toBeTruthy();
     // Bis hierher ging nichts ans Netz.
@@ -148,6 +159,21 @@ describe("Anmelden", () => {
 
     expect(await errorOf(() => auth.completeSignIn(code))).toBe("OFFLINE");
     expect(auth.account()).toBeNull();
+  });
+
+  it("kommt auf das Einlösen keine Antwort, gilt es nach dem Zeitlimit als „keine Verbindung“", async () => {
+    const { fake, auth, opened } = setUp({ hangExchange: true, exchangeMillis: 50 });
+    await auth.signIn();
+    const code = await codeFor(fake, opened[0]);
+    const started = Date.now();
+
+    expect(await errorOf(() => auth.completeSignIn(code))).toBe("OFFLINE");
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(auth.account()).toBeNull();
+  });
+
+  it("das Zeitlimit beim Einlösen sind 20 Sekunden", () => {
+    expect(SIGN_IN_EXCHANGE_MILLIS).toBe(20_000);
   });
 });
 

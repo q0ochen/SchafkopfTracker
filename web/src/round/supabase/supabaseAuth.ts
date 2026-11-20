@@ -5,11 +5,14 @@
  * Abgemeldet ist nur, wer sich abmeldet, wessen Sitzung der Server ablehnt oder wer keine gespeicherte Sitzung hat.
  * Lässt sich die Sitzung nur gerade nicht erneuern (kein Netz), bleibt das zuletzt bekannte Konto angemeldet;
  * supabase-js erneuert sie später von selbst.
+ *
+ * Google fragt bei jeder Anmeldung, welches Konto (`prompt=select_account`): So lässt sich ein falsch gewähltes Konto
+ * korrigieren, statt dass Google stillschweigend das zuletzt benutzte nimmt.
  */
 import { isAuthPKCECodeVerifierMissingError, isAuthRetryableFetchError, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { RoundException } from "../../core/round/RoundModels";
 import { NO_SIGN_IN_PENDING, type Account, type RoundAuth } from "../backend";
-import { within } from "./within";
+import { SIGN_IN_EXCHANGE_MILLIS, TimeoutError, within } from "../within";
 
 /** Ablage der Sitzung (im Browser `localStorage`). */
 export type SessionStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -29,6 +32,8 @@ export interface SupabaseAuthOptions {
    * eine abgelaufene Sitzung bis zu einer halben Minute lang zu erneuern; so lange soll niemand warten müssen.
    */
   readonly waitMillis?: number;
+  /** So lange darf das Einlösen der Anmeldung nach der Rückkehr dauern; danach gilt es als „keine Verbindung“. */
+  readonly exchangeMillis?: number;
 }
 
 /**
@@ -136,7 +141,7 @@ export class SupabaseRoundAuth implements RoundAuth {
   async signIn(): Promise<void> {
     const { data, error } = await this.client.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: this.options.redirectTo, skipBrowserRedirect: true },
+      options: { redirectTo: this.options.redirectTo, skipBrowserRedirect: true, queryParams: { prompt: "select_account" } },
     });
     if (error || !data.url) throw new RoundException("SERVER", "Anmeldung");
     this.options.openUrl(data.url);
@@ -145,8 +150,10 @@ export class SupabaseRoundAuth implements RoundAuth {
   async completeSignIn(code: string): Promise<Account> {
     let result: Awaited<ReturnType<SupabaseClient["auth"]["exchangeCodeForSession"]>>;
     try {
-      result = await this.client.auth.exchangeCodeForSession(code);
+      result = await within(this.client.auth.exchangeCodeForSession(code), this.options.exchangeMillis ?? SIGN_IN_EXCHANGE_MILLIS);
     } catch (error) {
+      // Dauert es zu lange, gilt das wie „keine Verbindung“; kommt die Antwort später doch noch, meldet supabase-js an.
+      if (error instanceof TimeoutError) throw new RoundException("OFFLINE", "Anmeldung", error);
       throw new RoundException("SIGNED_OUT", "Anmeldung", error);
     }
     const { data, error } = result;

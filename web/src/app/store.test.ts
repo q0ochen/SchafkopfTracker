@@ -324,7 +324,7 @@ describe("IndexedDbRepository", () => {
     expect(again.evenings.map((it) => it.id).sort()).toEqual(["abend-1", "zwei"]);
     expect(again.players?.map((it) => it.id)).toEqual(["gast"]);
     const reloaded = await AppStore.load(repository, clock());
-    expect(reloaded.getState().unreadableEvenings).toBe(1);
+    expect(reloaded.getState().unreadableEvenings).toEqual(["kaputt"]);
     db.close();
   });
 });

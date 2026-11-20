@@ -3,7 +3,7 @@
  * screenshots --project handy`. Ohne SCREENSHOT_DIR werden die Tests übersprungen.
  */
 import { mkdir } from "node:fs/promises";
-import { expect, test, type Page } from "@playwright/test";
+import { devices, expect, test, type Page } from "@playwright/test";
 import type { Evening, Player } from "../src/core/model";
 import { RuleSets } from "../src/core/rules/RuleSet";
 import { writeBackup } from "../src/data/format";
@@ -123,6 +123,17 @@ test.describe("mit Server", () => {
     await shot(page, "26-runde-einladen", true);
     await page.getByRole("region", { name: "Einladung weitergeben" }).getByRole("button", { name: "Fertig" }).click();
 
+    // Die Einladungsseite in Safari auf einem iPhone (der Link kam über WhatsApp) und auf dem verbundenen Handy selbst.
+    const { defaultBrowserType: _engine, ...iphone } = devices["iPhone 13"];
+    const safari = await anotherDevice(browser, fake, iphone);
+    await safari.goto(link);
+    await expect(safari.getByText(/^Benutzt du den Schafkopf Tracker vom Home-Bildschirm\?/)).toBeVisible();
+    await shot(safari, "27b-einladungsseite-iphone-safari", true);
+    await safari.context().close();
+    await page.goto(link);
+    await expect(page.getByText("Dieses Gerät ist schon mit der Runde Stammtisch verbunden.")).toBeVisible();
+    await shot(page, "27c-einladungsseite-verbunden", true);
+
     // Handy zwei: Einladungsseite, anmelden, Einladung, Rückfrage (es hat einen eigenen Abend), beitreten.
     const two = await anotherDevice(browser, fake);
     await startEvening(two);
@@ -206,6 +217,12 @@ test.describe("mit Server", () => {
     await three.getByRole("form", { name: "Einladung einlösen" }).getByRole("button", { name: "Beitreten" }).click();
     await expect(three.getByRole("alert")).toBeVisible();
     await shot(three, "42-runde-deine-runden-und-fehler", true);
+    // Eine Runde des Kontos verlassen, die nicht mit diesem Gerät verbunden ist.
+    await three.getByRole("alert").getByRole("button", { name: "OK" }).click();
+    await three.getByRole("button", { name: "Stammtisch verlassen" }).click();
+    await expect(three.getByRole("dialog", { name: "Stammtisch verlassen?" })).toBeVisible();
+    await shot(three, "42b-runde-verlassen-nicht-verbunden");
+    await three.getByRole("dialog").getByRole("button", { name: "Abbrechen" }).click();
     await two.context().close();
     await three.context().close();
   });

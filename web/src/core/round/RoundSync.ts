@@ -170,6 +170,13 @@ function sameLink(a: RoundLink, b: RoundLink): boolean {
   );
 }
 
+/**
+ * Läuft um jeden Abgleich und jeden Auftrag von {@link RoundSync.exclusive}, innerhalb der eigenen Sperre. Die
+ * Web-App sperrt damit über alle Fenster hinweg und liest vorher den Gerätezustand frisch (docs/ARCHITEKTUR.md,
+ * Abschnitt 8.8); in Kotlin gibt es das nicht, ohne Angabe läuft der Auftrag einfach.
+ */
+export type SyncGuard = <T>(block: () => Promise<T>) => Promise<T>;
+
 /** Lässt immer nur einen Auftrag gleichzeitig laufen (wie Kotlins `Mutex.withLock`), in der Reihenfolge der Aufrufe. */
 class Mutex {
   private tail: Promise<void> = Promise.resolve();
@@ -203,6 +210,7 @@ export class RoundSync {
   private readonly mutex = new Mutex();
   private readonly memory: SessionMemory = { roundId: null, rejected: new Map(), refusedEvenings: new Map(), refusedRules: null };
 
+  /** @param guard Läuft um jeden Abgleich und jeden Auftrag von {@link exclusive} (siehe {@link SyncGuard}). */
   constructor(
     private readonly api: RoundApi,
     private readonly store: RoundStore,
@@ -210,6 +218,7 @@ export class RoundSync {
     private readonly evenings: EveningRepository,
     private readonly settings: SettingsRepository,
     private readonly editor: EveningEditor,
+    private readonly guard: SyncGuard = (block) => block(),
   ) {}
 
   /**
@@ -219,7 +228,7 @@ export class RoundSync {
    *   `Unchanged` aufhören. Für das regelmäßige Nachfragen, solange hier nichts geändert wurde.
    */
   sync(quick = false): Promise<SyncOutcome> {
-    return this.mutex.withLock(async () => {
+    return this.locked(async () => {
       const link = await this.store.link();
       if (link === null) return SyncOutcome.NotLinked;
       // Eine andere Runde (zum Beispiel nach „Runde verlassen“ und „Neue Runde anlegen“): von vorn versuchen. Was
@@ -273,7 +282,11 @@ export class RoundSync {
 
   /** Führt `block` aus, während kein Abgleich läuft (für das Verbinden und Trennen, siehe `RoundConnection`). */
   exclusive<T>(block: () => Promise<T>): Promise<T> {
-    return this.mutex.withLock(block);
+    return this.locked(block);
+  }
+
+  private locked<T>(block: () => Promise<T>): Promise<T> {
+    return this.mutex.withLock(() => this.guard(block));
   }
 }
 

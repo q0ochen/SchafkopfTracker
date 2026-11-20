@@ -262,6 +262,40 @@ describe("Anmelden", () => {
     expect(one.state.account).toEqual(account(1));
   });
 
+  it("hängt das Einlösen der Anmeldung, gilt es nach 20 Sekunden als „keine Verbindung“; die Knöpfe sind wieder frei", async () => {
+    const one = await phone("eins");
+    let answer = (): void => undefined;
+    one.auth.exchange = new Promise((resolve) => {
+      answer = resolve;
+    });
+    one.auth.nextAccount = account(1);
+
+    one.controller.start(true, { kind: "code", code: "gut" });
+    await pass(19_999);
+    expect(one.state.signingIn).toBe(true);
+    await pass(1);
+
+    expect(one.state.signingIn).toBe(false);
+    expect(one.state.loaded).toBe(true);
+    expect(one.state.account).toBeNull();
+    expect(one.state.message).toBe("SIGN_IN_FAILED");
+
+    // Kommt die Antwort doch noch, ist die Anmeldung geglückt, und die Meldung erledigt sich.
+    answer();
+    await pass();
+    expect(one.state.account).toEqual(account(1));
+    expect(one.state.message).toBeNull();
+  });
+
+  it("eine Meldung zur Anmeldung bleibt stehen, solange sich niemand neu anmeldet", async () => {
+    const one = await phone("eins", 1);
+    one.controller.start(true, { kind: "failure", error: "access_denied" });
+    await pass(10_000);
+    // Angemeldet war das Konto schon vorher: Die Meldung über den Abbruch bleibt.
+    expect(one.state.account).toEqual(account(1));
+    expect(one.state.message).toBe("SIGN_IN_CANCELLED");
+  });
+
   it("kommt dieselbe Rückkehr ein zweites Mal, gibt es keine Fehlermeldung", async () => {
     const one = await phone("eins");
     one.auth.nextAccount = account(1);
@@ -654,10 +688,12 @@ describe("Abgleich im Betrieb", () => {
     const entry = await one.addGame("abend-1");
     await pass(500);
 
-    // Der Speicher des zweiten Handys ist voll: Was vom Server kommt, lässt sich nicht ablegen.
+    // Der Speicher des zweiten Handys ist voll: Was vom Server kommt, lässt sich nicht ablegen. Das sagt die
+    // Statuszeile so (und nicht „Server nicht erreichbar“).
     two.repository.failWrites = true;
     await pass(4000);
-    expect(two.state.problem).toBe("SERVER");
+    expect(two.state.problem).toBe("STORAGE");
+    expect(status(two)).toBe("Speichern auf diesem Gerät gescheitert – bitte die App neu laden");
     expect((await two.roundStore.eveningBases()).get("abend-1")?.evening.entries).toHaveLength(1);
     expect((await two.roundStore.link())?.cursor).toBeLessThan(server.rev(id));
 
@@ -670,6 +706,146 @@ describe("Abgleich im Betrieb", () => {
     expect(reloaded.evenings).toEqual(server.evenings(id));
     expect(await two.controller.pendingCount()).toBe(0);
     expect(server.evenings(id)[0].entries).toHaveLength(2);
+  });
+
+  it("speichert der Browser eine Eingabe nicht, sagt es die Statuszeile; hochgeladen wird erst, was auf dem Gerät liegt", async () => {
+    const one = await founder();
+    const id = one.state.link?.roundId ?? "";
+    one.repository.failWrites = true;
+    await one.addGame("abend-1");
+    await pass(500);
+
+    expect(status(one)).toBe("Speichern auf diesem Gerät gescheitert – bitte die App neu laden");
+    expect(server.evenings(id)[0].entries).toHaveLength(1);
+    // Ohne Netz sagt die Statuszeile das (der Abgleich kommt dann gar nicht bis zum Speicher).
+    one.mine.offline = true;
+    one.controller.syncNow();
+    await pass();
+    expect(status(one)).toMatch(/^Kein Netz/);
+
+    one.mine.offline = false;
+    one.repository.failWrites = false;
+    one.controller.syncNow();
+    await pass();
+    expect(status(one)).toBe("Abgeglichen");
+    expect(server.evenings(id)[0].entries).toHaveLength(2);
+  });
+});
+
+describe("Unlesbare Daten auf dem Gerät", () => {
+  it("ist die Spielerliste unlesbar, ruht der Abgleich: kein Aufruf beim Server, nichts gelöscht, Statuszeile „Speichern …“", async () => {
+    const one = await founder();
+    const two = await guest(one);
+    const id = one.state.link?.roundId ?? "";
+    await one.session("konto-1").savePlayer(id, { id: "gast", name: "Gast", colorIndex: 4, archived: false });
+    await pass(4000);
+    expect(two.store.playerName("gast")).toBe("Gast");
+    const players = two.repository.players;
+    two.repository.players = "{kaputt";
+
+    await two.restart();
+    two.mine.calls.length = 0;
+    two.controller.start(true);
+    await pass(60_000);
+
+    expect(two.state.problem).toBe("STORAGE");
+    expect(status(two)).toBe("Speichern auf diesem Gerät gescheitert – bitte die App neu laden");
+    expect(two.mine.calls).toEqual([]);
+    expect(server.players(id).filter((it) => it.deleted)).toEqual([]);
+    expect(two.repository.players).toBe("{kaputt");
+    // Verlassen und Abmelden gehen trotzdem; die Rückfrage nennt den zuletzt bekannten Stand.
+    expect(await two.controller.pendingCount()).toBe(0);
+    // Verbinden mit anderen Daten geht nicht.
+    await expect(two.controller.hasOwnData()).rejects.toMatchObject({ name: "UnreadableDataError" });
+
+    // Mit lesbarer Spielerliste (zum Beispiel nach einem Update) geht es weiter, und nichts ist verloren.
+    two.repository.players = players;
+    await two.restart();
+    two.controller.start(true);
+    await pass();
+    expect(status(two)).toBe("Abgeglichen");
+    expect(two.store.playerName("gast")).toBe("Gast");
+    expect(server.players(id).filter((it) => it.deleted)).toEqual([]);
+  });
+
+  it("sind die Einstellungen unlesbar, ruht der Abgleich, und das Regelwerk der Runde bleibt", async () => {
+    const one = await founder();
+    const id = one.state.link?.roundId ?? "";
+    const rules = (await one.session("konto-1").head(id))?.rules;
+    one.repository.settings = "{kaputt";
+
+    await one.restart();
+    one.mine.calls.length = 0;
+    one.controller.start(true);
+    await pass(10_000);
+
+    expect(status(one)).toBe("Speichern auf diesem Gerät gescheitert – bitte die App neu laden");
+    expect(one.mine.calls).toEqual([]);
+    expect((await one.session("konto-1").head(id))?.rules).toEqual(rules);
+  });
+
+  it("ein unlesbarer Abend bleibt in der Runde", async () => {
+    const one = await founder();
+    const id = one.state.link?.roundId ?? "";
+    const text = one.repository.evenings.get("abend-1") ?? "";
+    one.repository.evenings.set("abend-1", text.replace(/"schemaVersion":\s*\d+/, '"schemaVersion":99'));
+
+    await one.restart();
+    one.controller.start(true);
+    await pass(10_000);
+
+    expect(server.eveningRow(id, "abend-1")?.deleted).toBe(false);
+    expect(one.state.pending).toBe(0);
+    expect(status(one)).toBe("Abgeglichen");
+  });
+});
+
+describe("Einladen", () => {
+  it("dieselbe Einladung wird wiederverwendet, solange sie jünger als 13 Tage ist", async () => {
+    const one = await founder();
+    const id = one.state.link?.roundId ?? "";
+    one.mine.calls.length = 0;
+
+    const first = await one.controller.inviteLink();
+    const second = await one.controller.inviteLink();
+    expect(second).toBe(first);
+    expect(one.mine.calls.filter((it) => it === "createInvite")).toHaveLength(1);
+    expect(one.issued).toMatchObject({ roundId: id, token: InviteLinks.tokenFrom(first) });
+
+    // Auch nach dem Neuladen der Seite.
+    await one.reload();
+    expect(await one.controller.inviteLink()).toBe(first);
+
+    // Kurz vor 13 Tagen gilt sie noch, danach gibt es eine neue (gültig ist sie 14 Tage).
+    vi.setSystemTime(Date.now() + 13 * 24 * 3600 * 1000 - 1000);
+    expect(await one.controller.inviteLink()).toBe(first);
+    vi.setSystemTime(Date.now() + 2000);
+    const third = await one.controller.inviteLink();
+    expect(third).not.toBe(first);
+    expect(one.mine.calls.filter((it) => it === "createInvite")).toHaveLength(2);
+  });
+
+  it("wiederholtes Einladen stößt nicht an die Grenze von 20 gültigen Einladungen", async () => {
+    const one = await founder();
+    for (let index = 0; index < InMemoryRoundServer.MAX_INVITES + 5; index++) await one.controller.inviteLink();
+    expect(one.mine.calls.filter((it) => it === "createInvite")).toHaveLength(1);
+  });
+
+  it("nach dem Verlassen oder Abmelden ist die gemerkte Einladung vergessen; eine andere Runde bekommt ihre eigene", async () => {
+    const one = await founder();
+    await one.controller.inviteLink();
+    expect(one.issued).not.toBeNull();
+    await one.controller.signOut();
+    expect(one.issued).toBeNull();
+
+    const two = await founder();
+    const before = await two.controller.inviteLink();
+    // Eine Einladung zu einer anderen Runde (zum Beispiel aus einem früheren Stand) gilt hier nicht.
+    two.issued = { roundId: "andere-runde", token: InviteLinks.tokenFrom(before) ?? "", createdAt: Date.now() };
+    const fresh = await two.controller.inviteLink();
+    expect(fresh).not.toBe(before);
+    await two.controller.leave();
+    expect(two.issued).toBeNull();
   });
 });
 
@@ -720,6 +896,28 @@ describe("Verlassen und Abmelden", () => {
     one.mine.offline = true;
     await one.addGame("abend-1");
     expect(await one.controller.pendingCount()).toBe(1);
+  });
+
+  it("eine Runde des Kontos, die nicht verbunden ist, lässt sich verlassen; auf dem Gerät ändert sich nichts", async () => {
+    const one = await founder();
+    const two = await guest(one);
+    const id = one.state.link?.roundId ?? "";
+    await two.controller.signOut();
+    two.auth.set(account(2));
+    await pass();
+    const evenings = two.store.getState().evenings;
+
+    await two.controller.leaveRound(id);
+
+    expect((await one.session("konto-1").members(id)).map((it) => it.userId)).toEqual(["konto-1"]);
+    expect(await two.controller.myRounds()).toEqual([]);
+    expect(two.store.getState().evenings).toBe(evenings);
+    // Das letzte Mitglied löscht die Runde.
+    await one.controller.signOut();
+    one.auth.set(account(1));
+    await pass();
+    await one.controller.leaveRound(id);
+    expect(await one.session("konto-1").head(id)).toBeNull();
   });
 });
 

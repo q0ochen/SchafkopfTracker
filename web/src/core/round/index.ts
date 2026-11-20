@@ -40,4 +40,4 @@ export type {
   SettingsRepository,
 } from "./RoundPorts";
 export { RoundSync, SyncOutcome } from "./RoundSync";
-export type { Synced, SyncNotice } from "./RoundSync";
+export type { Synced, SyncGuard, SyncNotice } from "./RoundSync";

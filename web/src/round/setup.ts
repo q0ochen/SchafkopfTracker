@@ -1,21 +1,21 @@
 /*
- * Steckt die gemeinsame Runde für den Browser zusammen: Anbindung an den Zustand der App, gemerkte Einladung,
- * Rückkehr aus der Anmeldung, Sichtbarkeit der Seite und Netz, mehrere Fenster. Wird nur aufgerufen, wenn die App
- * mit einem Server gebaut wurde; die Bibliothek für den Server lädt erst hier, bei Bedarf.
+ * Steckt die gemeinsame Runde für den Browser zusammen: Anbindung an den Zustand der App, gemerkte Einladungen,
+ * Rückkehr aus der Anmeldung, Sichtbarkeit der Seite und Netz, mehrere Fenster (`windows.ts`). Wird nur aufgerufen,
+ * wenn die App mit einem Server gebaut wurde; die Bibliothek für den Server lädt erst hier, bei Bedarf.
  */
 import { defaultPlayers } from "../app/players";
 import type { AppStore } from "../app/store";
 import type { Evening, EveningId, Player } from "../core/model";
 import type { RoundLink } from "../core/round/RoundModels";
+import type { SyncGuard } from "../core/round/RoundSync";
 import type { AppRepository } from "../data/repository";
 import type { RoundConfig } from "./config";
 import { RoundController } from "./controller";
 import type { IndexedDbRoundStore } from "./indexedDbRoundStore";
-import { storedInviteMemory } from "./inviteMemory";
+import { storedInviteMemory, storedIssuedInvites } from "./inviteMemory";
 import { parseSignInReturn, type SignInReturn } from "./signInReturn";
 import { StoreAdapters } from "./storeAdapters";
-
-type BrowserStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+import { windowGuard, windowLock, type BrowserStorage, type LockHost, type TabChannel } from "./windows";
 
 /**
  * Der Speicher des Browsers (`localStorage`), der nie scheitert: Ist er gesperrt (zum Beispiel im privaten Modus
@@ -52,40 +52,10 @@ export function safeLocalStorage(win: Window): BrowserStorage {
 
 // --- Mehrere Fenster ---
 
-/** Unter diesem Schlüssel steht, welches Fenster zuletzt Daten gespeichert hat. */
-export const TAB_STAMP_KEY = "schafkopf-tracker-stand";
-
 /**
- * Sagt den anderen Fenstern der App, dass dieses Fenster Daten gespeichert hat, und erfährt es von ihnen. Ohne das
- * arbeitete ein zweites Fenster mit einem veralteten Stand weiter – und in der gemeinsamen Runde sähe das, was dort
- * fehlt, wie gelöscht aus.
+ * Der Speicher der App, der nach jedem gelungenen Schreiben Bescheid gibt (die anderen Fenster lesen dann neu). Ohne
+ * das arbeitete ein zweites Fenster mit einem veralteten Stand weiter.
  */
-export interface TabSignal {
-  /** Dieses Fenster hat gespeichert. */
-  announce(): void;
-
-  /** Ob ein anderes Fenster gespeichert hat, seit dieses zuletzt gelesen oder gespeichert hat; merkt sich den neuen Stand. */
-  changedElsewhere(): boolean;
-}
-
-export function createTabSignal(storage: BrowserStorage, tabId: string): TabSignal {
-  let counter = 0;
-  let seen = storage.getItem(TAB_STAMP_KEY);
-  return {
-    announce() {
-      seen = `${tabId}:${++counter}`;
-      storage.setItem(TAB_STAMP_KEY, seen);
-    },
-    changedElsewhere() {
-      const current = storage.getItem(TAB_STAMP_KEY);
-      if (current === seen) return false;
-      seen = current;
-      return true;
-    },
-  };
-}
-
-/** Der Speicher der App, der nach jedem gelungenen Schreiben Bescheid gibt. */
 export function announcingRepository(inner: AppRepository, announce: () => void): AppRepository {
   const after = async (write: Promise<void>): Promise<void> => {
     await write;
@@ -93,12 +63,51 @@ export function announcingRepository(inner: AppRepository, announce: () => void)
   };
   return {
     load: () => inner.load(),
+    isCurrent: () => inner.isCurrent(),
     saveEvening: (evening: Evening) => after(inner.saveEvening(evening)),
     deleteEvening: (id: EveningId) => after(inner.deleteEvening(id)),
     savePlayers: (players: readonly Player[]) => after(inner.savePlayers(players)),
     saveSettings: (settings) => after(inner.saveSettings(settings)),
     saveImport: (players: readonly Player[], evenings: readonly Evening[]) => after(inner.saveImport(players, evenings)),
   };
+}
+
+/**
+ * Läuft um jeden Abgleich und jedes Verbinden oder Trennen: höchstens einer über alle Fenster, und vorher liest er den
+ * Gerätezustand frisch – das Gemerkte der Runde immer, die Daten der App, sobald ein anderes Fenster gespeichert hat.
+ */
+export function syncGuard(host: LockHost, roundStore: Pick<IndexedDbRoundStore, "invalidate">, store: Pick<AppStore, "catchUp">): SyncGuard {
+  return windowGuard(windowLock(host), async () => {
+    roundStore.invalidate(false);
+    await store.catchUp();
+  });
+}
+
+/**
+ * Hält dieses Fenster auf dem Stand der anderen: Hat ein anderes Fenster Daten gespeichert, liest es neu (unter der
+ * Sperre des Abgleichs, damit nichts dazwischenkommt); mehrere Meldungen kurz hintereinander ergeben ein Neulesen.
+ */
+function catchingUp(controller: RoundController, store: AppStore): () => void {
+  let running = false;
+  let again = false;
+  const run = (): void => {
+    if (running) {
+      again = true;
+      return;
+    }
+    running = true;
+    again = false;
+    controller
+      .changedElsewhere(async () => {
+        await store.catchUp();
+      })
+      .catch((error: unknown) => console.warn("Schafkopf Tracker: Stand des anderen Fensters nicht gelesen", error))
+      .finally(() => {
+        running = false;
+        if (again) run();
+      });
+  };
+  return run;
 }
 
 // --- Rückkehr aus der Anmeldung ---
@@ -118,10 +127,12 @@ export function takeSignInReturn(win: Window): SignInReturn | null {
 export interface RoundSetup {
   readonly config: RoundConfig;
   readonly store: AppStore;
+  /** Was sich das Gerät zur Runde merkt; meldet jedes Schreiben über {@link channel} (siehe `main.tsx`). */
   readonly roundStore: IndexedDbRoundStore;
   /** Die verbundene Runde, wie sie beim Start im Speicher stand. */
   readonly initialLink: RoundLink | null;
-  readonly tabs: TabSignal;
+  /** Meldungen von und zu den anderen Fenstern der App. */
+  readonly channel: TabChannel;
   readonly storage: BrowserStorage;
   /** Schreibt einen Abend ins Dateiformat des Speichers (zum Prüfen vor dem Übernehmen). */
   readonly encodeEvening: (evening: Evening) => string;
@@ -132,39 +143,33 @@ export interface RoundSetup {
 
 /** Baut die Steuerung der gemeinsamen Runde und lässt sie arbeiten. */
 export function startRound(setup: RoundSetup): RoundController {
-  const { config, store, roundStore, storage, tabs, win } = setup;
+  const { config, store, roundStore, storage, channel, win } = setup;
   const signInReturn = takeSignInReturn(win);
+  const data = new StoreAdapters(store, setup.encodeEvening);
   const controller = new RoundController({
     loadBackend: async () => {
       const { createSupabaseBackend } = await import("./supabase/index");
       return createSupabaseBackend(config, { redirectTo: setup.webAppUrl, openUrl: (url) => win.location.assign(url), storage });
     },
-    store: roundStore,
-    data: new StoreAdapters(store, setup.encodeEvening),
+    store: data.shield(roundStore),
+    data,
     invites: storedInviteMemory(storage),
+    issuedInvites: storedIssuedInvites(storage),
     placeholders: defaultPlayers(),
     webAppUrl: setup.webAppUrl,
     ids: { newId: () => store.clock.newId() },
     initialLink: setup.initialLink,
+    guard: syncGuard(win.navigator as LockHost, roundStore, store),
   });
 
   const doc = win.document;
   const visible = (): boolean => doc.visibilityState === "visible";
+  const catchUp = catchingUp(controller, store);
 
-  /** Hat ein anderes Fenster gespeichert, liest dieses alles neu – erst das Gemerkte der Runde, dann die Daten. */
-  const catchUp = (): void => {
-    if (!tabs.changedElsewhere()) return;
-    void controller
-      .changedElsewhere(async () => {
-        roundStore.invalidate();
-        await roundStore.link();
-        await store.reload();
-      })
-      .catch((error: unknown) => console.warn("Schafkopf Tracker: Stand des anderen Fensters nicht gelesen", error));
-  };
-
-  win.addEventListener("storage", (event) => {
-    if (event.key === TAB_STAMP_KEY || event.key === null) catchUp();
+  channel.subscribe((change) => {
+    // Das Gemerkte der Runde gleich frisch lesen (für die Oberfläche); die Daten der App unter der Sperre.
+    if (change === "round") roundStore.invalidate();
+    else catchUp();
   });
   doc.addEventListener("visibilitychange", () => {
     if (visible()) catchUp();

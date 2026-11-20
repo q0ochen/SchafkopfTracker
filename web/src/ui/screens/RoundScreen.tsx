@@ -9,7 +9,10 @@ import type { RoundLink, RoundSummary } from "../../core/round/RoundModels";
 import { needsSignIn, type RoundController, type RoundState } from "../../round/controller";
 import { RoundScreenModel, type Farewell, type RoundUi, type RoundUiError } from "../../round/screenModel";
 import {
+  farewellText,
   inviteMessage,
+  LAST_MEMBER_TEXT,
+  LEAVE_ROUND_TEXT,
   memberCountText,
   messageText,
   NO_CODE_ERROR,
@@ -17,6 +20,7 @@ import {
   pendingWarning,
   replaceText,
   roundErrorText,
+  STORAGE_FAILED_TEXT,
 } from "../../round/texts";
 import { ChoiceTile, Dialog, Hint, PlayerName, SectionHeading, TopBar } from "../components";
 import { useAppState, useRoundState, useServices } from "../context";
@@ -27,7 +31,19 @@ import { RoundDisabledScreen } from "./RoundDisabledScreen";
 const PLACEHOLDER_NAME = /^Spieler \d+$/;
 
 function errorText(error: RoundUiError): string {
-  return error.kind === "NoCode" ? NO_CODE_ERROR : roundErrorText(error.error, error.roundName);
+  switch (error.kind) {
+    case "NoCode":
+      return NO_CODE_ERROR;
+    case "Storage":
+      return STORAGE_FAILED_TEXT;
+    case "Server":
+      return roundErrorText(error.error, error.roundName);
+  }
+}
+
+/** Ob das Konto das einzige Mitglied der verbundenen Runde ist (soweit bekannt): Dann löscht „Runde verlassen“ sie. */
+function onlyMember(link: RoundLink | null): boolean {
+  return link !== null && link.members.length > 0 && link.members.every((member) => member.userId === link.userId);
 }
 
 /** Eine Meldung, die stehen bleibt, bis man sie mit „OK“ wegtippt; Screenreader lesen sie von selbst vor. */
@@ -156,6 +172,15 @@ function SignedIn({ state, ui, model }: { state: RoundState; ui: RoundUi; model:
                   onClick={() => void model.use(round)}
                 >
                   Auf diesem Gerät verwenden
+                </button>
+                <button
+                  type="button"
+                  class="text-button danger-text full-width"
+                  disabled={ui.busy}
+                  aria-label={`${round.name} verlassen`}
+                  onClick={() => model.askLeave(round)}
+                >
+                  Verlassen
                 </button>
               </li>
             ))}
@@ -466,7 +491,17 @@ function ReplaceDialog({ eveningCount, model, onBackup }: { eveningCount: number
   );
 }
 
-function FarewellDialog({ kind, pending, model }: { kind: Farewell; pending: number; model: RoundScreenModel }) {
+function FarewellDialog({
+  kind,
+  pending,
+  link,
+  model,
+}: {
+  kind: Farewell;
+  pending: number;
+  link: RoundLink | null;
+  model: RoundScreenModel;
+}) {
   const leaving = kind === "LEAVE";
   return (
     <Dialog
@@ -483,12 +518,31 @@ function FarewellDialog({ kind, pending, model }: { kind: Farewell; pending: num
         </>
       }
     >
-      <p>
-        {leaving
-          ? "Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt in der Runde."
-          : "Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier."}
-      </p>
-      {pending > 0 ? <p class="error-text">{pendingWarning(pending)}</p> : null}
+      <p>{farewellText(kind, link !== null, onlyMember(link))}</p>
+      {link !== null && pending > 0 ? <p class="error-text">{pendingWarning(pending)}</p> : null}
+    </Dialog>
+  );
+}
+
+/** Rückfrage vor dem Verlassen einer Runde des Kontos, die nicht mit diesem Gerät verbunden ist. */
+function LeaveRoundDialog({ round, model }: { round: RoundSummary; model: RoundScreenModel }) {
+  return (
+    <Dialog
+      title={`${round.name} verlassen?`}
+      onClose={() => model.cancelLeave()}
+      actions={
+        <>
+          <button type="button" class="text-button" onClick={() => model.cancelLeave()}>
+            Abbrechen
+          </button>
+          <button type="button" class="button danger" onClick={() => void model.confirmLeave()}>
+            Verlassen
+          </button>
+        </>
+      }
+    >
+      <p>{LEAVE_ROUND_TEXT}</p>
+      {round.memberCount === 1 ? <p class="error-text">{LAST_MEMBER_TEXT}</p> : null}
     </Dialog>
   );
 }
@@ -553,7 +607,8 @@ function Configured({ controller }: { controller: RoundController }) {
           }}
         />
       ) : null}
-      {ui.farewell !== null ? <FarewellDialog kind={ui.farewell} pending={ui.farewellPending} model={model} /> : null}
+      {ui.farewell !== null ? <FarewellDialog kind={ui.farewell} pending={ui.farewellPending} link={link} model={model} /> : null}
+      {ui.leaving !== null ? <LeaveRoundDialog round={ui.leaving} model={model} /> : null}
     </>
   );
 }

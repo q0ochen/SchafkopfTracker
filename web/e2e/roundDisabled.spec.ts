@@ -44,10 +44,8 @@ test("ohne Server zeigt „Gemeinsame Runde“ nur den Hinweis, und die App spri
 test("ohne Server führt auch ein Einladungslink nur zum Hinweis", async ({ page }) => {
   await page.goto("./#/einladung/0123456789abcdef0123456789abcdef");
   await expect(page.getByRole("heading", { level: 2, name: "Einladung in eine Schafkopfrunde" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "In der Android-App öffnen" })).toHaveAttribute(
-    "href",
-    "schafkopftracker://einladung/0123456789abcdef0123456789abcdef",
-  );
+  await expect(page.getByText("0123456789abcdef0123456789abcdef", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Code kopieren" })).toBeVisible();
   await page.getByRole("button", { name: "Hier beitreten" }).click();
   await expect(page.getByText("Der Server ist noch nicht eingerichtet.")).toBeVisible();
 });

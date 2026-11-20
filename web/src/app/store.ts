@@ -18,8 +18,14 @@ export interface AppState {
   readonly settings: AppSettings;
   /** Letzter Speicherfehler; `null`, solange alles gespeichert ist. */
   readonly saveError: string | null;
-  /** Wie viele gespeicherte Abende sich beim Start nicht lesen ließen. */
-  readonly unreadableEvenings: number;
+  /** Die Kennungen der gespeicherten Abende, die sich beim Laden nicht lesen ließen. Sie bleiben unangetastet liegen. */
+  readonly unreadableEvenings: readonly EveningId[];
+  /**
+   * Spielerliste („players“) oder Einstellungen („settings“) ließen sich beim Laden nicht lesen. Dann gelten keine
+   * Spieler bzw. die Standardwerte – das ist nicht der echte Stand. Der Abgleich der gemeinsamen Runde ruht deshalb,
+   * bis die App neu geladen ist und beides wieder lesen kann.
+   */
+  readonly unreadableDocuments: readonly string[];
 }
 
 /** Was beim Laden anders sein darf als beim allerersten Start. */
@@ -32,11 +38,31 @@ export interface LoadOptions {
   readonly seedPlayers?: boolean;
 }
 
+/**
+ * Der Speicher des Browsers lässt sich gerade nicht verlässlich benutzen: Speichern ist gescheitert, oder Spielerliste
+ * bzw. Einstellungen ließen sich nicht lesen. Die gemeinsame Runde gleicht dann nicht ab (Statuszeile „Speichern auf
+ * diesem Gerät gescheitert – bitte die App neu laden“).
+ */
+export class DeviceStorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DeviceStorageError";
+  }
+}
+
 /** Eine Änderung ließ sich nicht im Speicher des Browsers ablegen (zum Beispiel, weil er voll ist). */
-export class StorageFailedError extends Error {
+export class StorageFailedError extends DeviceStorageError {
   constructor() {
     super("Speichern auf dem Gerät fehlgeschlagen");
     this.name = "StorageFailedError";
+  }
+}
+
+/** Spielerliste oder Einstellungen ließen sich beim Laden nicht lesen; was im Arbeitsspeicher steht, ist nicht der echte Stand. */
+export class UnreadableDataError extends DeviceStorageError {
+  constructor() {
+    super("Spielerliste oder Einstellungen auf dem Gerät nicht lesbar");
+    this.name = "UnreadableDataError";
   }
 }
 
@@ -105,7 +131,8 @@ export class AppStore {
       evenings: sortEvenings(data.evenings),
       settings: data.settings ?? defaultSettings(),
       saveError: null,
-      unreadableEvenings: data.unreadableEvenings.length,
+      unreadableEvenings: data.unreadableEvenings,
+      unreadableDocuments: data.unreadableDocuments,
     });
     if (seed) await store.persist(() => repository.savePlayers(store.state.players), { players: true });
     return store;
@@ -188,6 +215,11 @@ export class AppStore {
     return this.queue;
   }
 
+  /** Ob alles, was im Arbeitsspeicher steht, auch im Speicher des Browsers liegt (nichts wartet, nichts ist gescheitert). */
+  private isSaved(): boolean {
+    return this.pendingWrites === 0 && this.unsavedEvenings.size === 0 && !this.unsavedPlayers && !this.unsavedSettings;
+  }
+
   /**
    * Wartet auf alle Speicheraufträge und holt nach, was sich zuletzt nicht speichern ließ. Scheitert mit
    * {@link StorageFailedError}, wenn es wieder nicht geht. Der Abgleich der gemeinsamen Runde ruft das, bevor er
@@ -211,6 +243,35 @@ export class AppStore {
       },
       { evenings, players, settings },
     );
+  }
+
+  /**
+   * Wartet, bis alle Änderungen im Speicher des Browsers liegen – auch die, die währenddessen dazukommen –, und führt
+   * `block` dann sofort aus, ohne dass etwas dazwischenkommt: Was `block` im Zustand liest, steht genau so auf dem
+   * Gerät. Scheitert mit {@link StorageFailedError}, wenn sich etwas nicht speichern lässt. Der Abgleich der
+   * gemeinsamen Runde liest und ersetzt so: Er darf sich nie etwas als „vom Server bekannt“ merken, das nicht wirklich
+   * auf dem Gerät liegt (docs/ARCHITEKTUR.md, Abschnitt 8.8).
+   */
+  async whenSaved<T>(block: () => T | Promise<T>): Promise<T> {
+    for (;;) {
+      await this.settle();
+      if (this.isSaved()) return block();
+    }
+  }
+
+  /**
+   * Holt den Stand vom Gerät, wenn ein anderes Fenster der App inzwischen gespeichert hat. Eigene Änderungen werden
+   * vorher gespeichert, damit das Neulesen sie nicht verwirft; lässt sich das nicht, scheitert es mit
+   * {@link StorageFailedError}. Hat kein anderes Fenster gespeichert, bleibt alles, wie es ist.
+   *
+   * @returns ob neu gelesen wurde.
+   */
+  async catchUp(): Promise<boolean> {
+    await this.flush();
+    if (await this.repository.isCurrent()) return false;
+    await this.settle();
+    await this.reload();
+    return true;
   }
 
   // ---------------------------------------------------------------- Abende
@@ -364,7 +425,8 @@ export class AppStore {
       players: data.players ?? [],
       evenings: sortEvenings(data.evenings),
       settings: data.settings ?? this.state.settings,
-      unreadableEvenings: data.unreadableEvenings.length,
+      unreadableEvenings: data.unreadableEvenings,
+      unreadableDocuments: data.unreadableDocuments,
     });
   }
 

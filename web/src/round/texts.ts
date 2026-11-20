@@ -5,8 +5,14 @@
 import type { RoundError } from "../core/round/RoundModels";
 import type { SyncNotice } from "../core/round/RoundSync";
 
-/** Warum der letzte Abgleich nicht geklappt hat. */
-export type RoundProblem = "OFFLINE" | "SERVER" | "SIGNED_OUT";
+/**
+ * Warum der letzte Abgleich nicht geklappt hat. `STORAGE` gibt es nur in der Web-App: Der Browser speichert nicht
+ * (IndexedDB), oder Spielerliste bzw. Einstellungen ließen sich auf dem Gerät nicht lesen; dann ruht der Abgleich.
+ */
+export type RoundProblem = "OFFLINE" | "SERVER" | "SIGNED_OUT" | "STORAGE";
+
+/** Statuszeile und Fehlertext, wenn der Browser nicht speichert oder Daten auf dem Gerät nicht lesen kann. */
+export const STORAGE_FAILED_TEXT = "Speichern auf diesem Gerät gescheitert – bitte die App neu laden";
 
 /** Was die Statuszeile wissen muss. */
 export interface RoundStatusInput {
@@ -48,6 +54,7 @@ export function roundStatus(state: RoundStatusInput): RoundStatus {
   if (state.problem === "OFFLINE") {
     return { kind: "PROBLEM", text: state.pending > 0 ? `Kein Netz – ${changes(state.pending)}` : "Kein Netz" };
   }
+  if (state.problem === "STORAGE") return { kind: "PROBLEM", text: STORAGE_FAILED_TEXT };
   if (state.problem === "SERVER") {
     return { kind: "PROBLEM", text: state.pending > 0 ? `Server nicht erreichbar – ${changes(state.pending)}` : "Server nicht erreichbar" };
   }
@@ -150,6 +157,28 @@ export function replaceText(eveningCount: number): string {
     ? "Auf diesem Gerät liegt 1 Abend. Er wird durch die Daten der Runde ersetzt. Sichere ihn vorher, wenn du ihn behalten willst."
     : `Auf diesem Gerät liegen ${eveningCount} Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten willst.`;
 }
+
+/** Ist das Konto das einzige Mitglied, wird die Runde beim Verlassen auf dem Server gelöscht. */
+export const LAST_MEMBER_TEXT = "Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht.";
+
+/**
+ * Der Text der Rückfrage „Runde verlassen?“ (verbundene Runde) bzw. „Abmelden?“.
+ *
+ * @param linked Das Gerät ist mit einer Runde verbunden.
+ * @param lastMember Das Konto ist das einzige Mitglied der Runde.
+ */
+export function farewellText(kind: "LEAVE" | "SIGN_OUT", linked: boolean, lastMember: boolean): string {
+  if (kind === "SIGN_OUT") return linked ? "Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier." : "Dieses Gerät wird abgemeldet.";
+  return lastMember
+    ? `${LAST_MEMBER_TEXT} Auf diesem Gerät bleiben sie als Kopie.`
+    : "Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt in der Runde.";
+}
+
+/**
+ * Der Text der Rückfrage „‹Name› verlassen?“ für eine Runde des Kontos, die nicht mit diesem Gerät verbunden ist. Ist
+ * das Konto ihr einziges Mitglied, steht darunter zusätzlich {@link LAST_MEMBER_TEXT}.
+ */
+export const LEAVE_ROUND_TEXT = "Du gehörst danach nicht mehr zu dieser Runde. Auf diesem Gerät ändert sich nichts.";
 
 /** Der Zusatz in den Rückfragen vor dem Verlassen und Abmelden, wenn noch etwas wartet. */
 export function pendingWarning(pending: number): string {

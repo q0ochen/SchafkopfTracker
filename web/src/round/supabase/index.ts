@@ -30,6 +30,8 @@ export interface SupabaseBackendOptions {
   readonly timeoutMillis?: number;
   /** Für Tests: So lange wird beim Start und beim Abmelden höchstens auf die Anmeldung gewartet (Millisekunden). */
   readonly waitMillis?: number;
+  /** Für Tests: So lange darf das Einlösen der Anmeldung dauern (Millisekunden). */
+  readonly exchangeMillis?: number;
 }
 
 /**
@@ -88,6 +90,7 @@ export function connectSupabase(config: RoundConfig, options: SupabaseBackendOpt
       storage,
       storageKey: AUTH_STORAGE_KEY,
       waitMillis: options.waitMillis,
+      exchangeMillis: options.exchangeMillis,
     }),
   };
   return { backend, client };

@@ -30,7 +30,7 @@ import {
 } from "../../core/round/RoundModels";
 import type { RoundApi } from "../../core/round/RoundPorts";
 import { decodeEvening, decodeRulesOrNull, encodeEvening, encodeRules } from "../../data/format";
-import { TimeoutError, within } from "./within";
+import { TimeoutError, within } from "../within";
 
 /** So viele Abende kommen höchstens je Anfrage. */
 const PAGE_SIZE = 100;

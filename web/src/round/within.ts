@@ -1,5 +1,11 @@
 /* Begrenztes Warten: Nichts, was mit dem Netz zu tun hat, soll die App lange aufhalten. */
 
+/**
+ * So lange darf das Einlösen der Anmeldung nach der Rückkehr aus dem Browser dauern (docs/ARCHITEKTUR.md, Abschnitt
+ * 8.8); danach gilt es als „keine Verbindung“, und die Knöpfe sind wieder frei.
+ */
+export const SIGN_IN_EXCHANGE_MILLIS = 20_000;
+
 /** Das Warten hat länger gedauert als erlaubt. */
 export class TimeoutError extends Error {
   constructor() {

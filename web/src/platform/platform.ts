@@ -1,11 +1,43 @@
 /*
  * Gerätefunktionen hinter einer kleinen Schnittstelle (für Tests austauschbar): Bildschirm anlassen, Dateien und
- * Texte teilen, dauerhaften Speicher erbitten.
+ * Texte teilen, dauerhaften Speicher erbitten, Art des Geräts erkennen.
  */
 
 export type ShareOutcome = "shared" | "copied" | "downloaded" | "cancelled" | "failed";
 
+/** Das Betriebssystem des Geräts, soweit es für Hinweise auf dem Bildschirm zählt. */
+export type DeviceOs = "ios" | "android" | "other";
+
+/**
+ * Erkennt das Betriebssystem an der Kennung des Browsers. Das dient nur Hinweisen auf dem Bildschirm, nie der
+ * Sicherheit. iPads melden sich seit iPadOS 13 wie ein Mac, haben aber einen Touchscreen.
+ */
+export function deviceOs(nav: { readonly userAgent: string; readonly maxTouchPoints?: number }): DeviceOs {
+  const agent = nav.userAgent;
+  if (/\b(iPhone|iPad|iPod)\b/.test(agent)) return "ios";
+  if (/\bMacintosh\b/.test(agent) && (nav.maxTouchPoints ?? 0) > 1) return "ios";
+  if (/\bAndroid\b/i.test(agent)) return "android";
+  return "other";
+}
+
+/**
+ * Ob die Seite als App vom Home-Bildschirm läuft (eigenes Fenster ohne Browserleiste): am iPhone `navigator.standalone`,
+ * sonst die Anzeigeart aus dem Manifest. Links aus Nachrichten öffnen sich dagegen im Browser.
+ */
+export function runsStandalone(win: { readonly navigator: object; matchMedia?(query: string): { readonly matches: boolean } }): boolean {
+  if ((win.navigator as { standalone?: unknown }).standalone === true) return true;
+  try {
+    return win.matchMedia?.("(display-mode: standalone)").matches === true;
+  } catch {
+    return false;
+  }
+}
+
 export interface Platform {
+  /** Das Betriebssystem des Geräts (für Hinweise: iPhone, Android oder anderes). */
+  os(): DeviceOs;
+  /** Ob die App vom Home-Bildschirm aus läuft und nicht in einem Browserfenster. */
+  standalone(): boolean;
   /** Lässt den Bildschirm an, soweit der Browser das erlaubt. Gibt eine Funktion zum Freigeben zurück. */
   keepScreenOn(): () => void;
   /** Datei weitergeben: am iPhone über „Teilen“ (zum Beispiel „In Dateien sichern“), sonst als Download. */
@@ -55,6 +87,14 @@ export function browserPlatform(win: Window = window): Platform {
   }
 
   return {
+    os() {
+      return deviceOs(nav);
+    },
+
+    standalone() {
+      return runsStandalone(win);
+    },
+
     keepScreenOn() {
       let sentinel: WakeLockSentinel | null = null;
       let released = false;
