@@ -171,8 +171,10 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-`main` enthält alles bis Pull Request #24 (16.11.2026, 20:33). Der Zweig `claude/gracious-keller-48tcn0` ist seit dem
-19.11.2026 weiter (gemeinsame Runde, noch nicht in `main`); `entwicklung` ist noch auf dem älteren Stand.
+`main` enthält alles bis Pull Request #24 (16.11.2026, 20:33). Die gemeinsame Runde (Zweig
+`claude/gracious-keller-48tcn0`, seit dem 19.11.2026) ist am 20.11.2026 auf Wunsch des Nutzers („Ja pull request
+anlegen“) als Pull Request nach `main` angelegt; ob er schon zusammengeführt ist, zeigt GitHub. `entwicklung` ist noch
+auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -374,8 +376,9 @@ Umgesetzt am 19.11.2026 auf dem Zweig `claude/gracious-keller-48tcn0`:
 `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY`) bleibt die Funktion abgeschaltet („Der Server ist noch nicht
 eingerichtet.“). Sobald der Nutzer „Supabase ist eingerichtet“ meldet:
 
-1. Der Stand muss in `main` liegen (Pull Request nur auf seine Bitte). „Supabase Deploy“ hat nur `workflow_dispatch`
-   und lässt sich deshalb erst starten, wenn die Datei in `main` liegt.
+1. Der Stand muss in `main` liegen (der Pull Request dafür ist seit dem 20.11.2026 angelegt; nachsehen, ob er
+   zusammengeführt ist). „Supabase Deploy“ hat nur `workflow_dispatch` und lässt sich deshalb erst starten, wenn die
+   Datei in `main` liegt.
 2. „Supabase Deploy“ starten (wendet die Migrationen an; braucht die Secrets `SUPABASE_ACCESS_TOKEN` und
    `SUPABASE_DB_PASSWORD` und die Variable `SUPABASE_PROJECT_REF`), danach „Android“ und „Web-App“ neu laufen lassen.
 3. Mit dem Nutzer den Test zu zweit aus der Anleitung durchgehen.
