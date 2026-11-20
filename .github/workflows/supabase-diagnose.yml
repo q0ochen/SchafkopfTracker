@@ -1,11 +1,14 @@
 # Prüft die Anmeldung der gemeinsamen Runde im echten Supabase-Projekt, ohne etwas zu ändern: ob die Einstellungen der
-# Anmeldung stimmen und welche Fehler die Anmeldung in den letzten Stunden gemeldet hat.
+# Anmeldung stimmen, welche Fehler die Anmeldung in den letzten Stunden gemeldet hat und wie weit die Anmeldeversuche
+# laut Datenbank gekommen sind.
 #
 # Das Repository ist öffentlich und damit auch diese Ausgabe. Deshalb gibt der Workflow keine geheimen Werte aus (vom
-# Client-Secret nur, ob es die richtige Form hat) und entfernt aus Fehlermeldungen E-Mail-Adressen, IP-Adressen,
-# Kennungen und lange Codes. Erfolgreiche Anmeldungen werden nur gezählt.
+# Client-Secret nur, ob es die richtige Form hat), entfernt aus Fehlermeldungen E-Mail-Adressen, IP-Adressen, Kennungen
+# und lange Codes und nennt aus der Datenbank nur Zahlen und Uhrzeiten.
 #
-# Braucht dasselbe wie „Supabase Deploy“: Secret SUPABASE_ACCESS_TOKEN und Variable SUPABASE_PROJECT_REF.
+# Braucht dasselbe wie „Supabase Deploy“: Secrets SUPABASE_ACCESS_TOKEN und SUPABASE_DB_PASSWORD, Variable
+# SUPABASE_PROJECT_REF. Einstellungen und Protokoll lassen sich nur mit einem Access Token lesen, das die Rechte
+# „auth_config_read“ und „analytics_logs_read“ hat; fehlen sie, gibt es dazu nur eine Warnung.
 name: Supabase-Diagnose
 
 on:
@@ -72,9 +75,9 @@ jobs:
             --data-urlencode "iso_timestamp_start=$start" --data-urlencode "iso_timestamp_end=$end" \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/analytics/endpoints/logs.all")
           if [ "$code" != "200" ]; then
-            echo "::error::Protokoll nicht lesbar (HTTP $code): $(jq -r '.message // .error // .' logs.json 2>/dev/null | head -c 300)"
+            echo "::warning::Protokoll nicht lesbar (HTTP $code): $(jq -r '.message // .error // .' logs.json 2>/dev/null | head -c 300)"
             rm -f logs.json
-            exit 1
+            exit 0
           fi
           jq -r '
             def redact:
@@ -105,3 +108,42 @@ jobs:
             end
           ' logs.json
           rm -f logs.json
+
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.1
+
+      # Jeder Anmeldeversuch legt in auth.flow_state eine Zeile an. Kommt Google zu Supabase zurück und klappt dort alles,
+      # trägt Supabase das Konto ein (user_id); erst die App löst den Code danach ein und beendet den Versuch.
+      # Versuche ohne Konto sind also bei Supabase gescheitert (zum Beispiel am Client-Secret), Versuche mit Konto in der App.
+      - name: Anmeldeversuche laut Datenbank (nur Zahlen)
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" > /dev/null
+          if [ ! -f supabase/.temp/pooler-url ]; then
+            echo "::error::Keine Adresse für die Verbindung zur Datenbank gefunden."
+            ls supabase/.temp || true
+            exit 1
+          fi
+          export PGPASSWORD="$SUPABASE_DB_PASSWORD"
+          psql "$(cat supabase/.temp/pooler-url)" -X -q -t -A -F ': ' -v ON_ERROR_STOP=1 <<'SQL'
+          select 'Anmeldeversuche der letzten 24 Stunden', count(*)::text
+            from auth.flow_state where created_at > now() - interval '24 hours'
+          union all
+          select '  davon bei Supabase geglückt (Konto eingetragen)', count(*)::text
+            from auth.flow_state where created_at > now() - interval '24 hours' and user_id is not null
+          union all
+          select '  Uhrzeiten (UTC) der Versuche', coalesce(string_agg(to_char(created_at at time zone 'UTC', 'HH24:MI') ||
+              case when user_id is null then ' ohne Konto' else ' mit Konto' end, ', ' order by created_at), '-')
+            from auth.flow_state where created_at > now() - interval '24 hours'
+          union all
+          select 'Konten insgesamt', count(*)::text from auth.users
+          union all
+          select 'Konten mit Google', count(*)::text from auth.identities where provider = 'google'
+          union all
+          select 'Sitzungen insgesamt', count(*)::text from auth.sessions;
+          SQL
