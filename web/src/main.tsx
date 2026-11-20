@@ -4,11 +4,15 @@
  */
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { backupPort, storageCodec } from "./app/formatAdapters";
+import { backupPort, roundStoreCodec, storageCodec } from "./app/formatAdapters";
 import { Router } from "./app/router";
-import { AppStore } from "./app/store";
-import { IndexedDbRepository, openDatabase } from "./data/repository";
+import { AppStore, systemClock } from "./app/store";
+import { DATABASE_NAME, IndexedDbRepository, openDatabase, type AppRepository } from "./data/repository";
 import { browserPlatform } from "./platform/platform";
+import { readRoundConfig } from "./round/config";
+import type { RoundController } from "./round/controller";
+import { IndexedDbRoundStore } from "./round/indexedDbRoundStore";
+import { announcingRepository, createTabSignal, safeLocalStorage, startRound } from "./round/setup";
 import { App } from "./ui/App";
 import type { Services } from "./ui/context";
 import "./ui/styles.css";
@@ -81,17 +85,84 @@ function registerServiceWorker(updates: UpdateNotifier): void {
     .catch((error: unknown) => console.warn("Schafkopf Tracker: Service Worker nicht angemeldet", error));
 }
 
+/** Zeigt statt der App einen Hinweis (wenn sie in diesem Fenster gerade nicht arbeiten kann). */
+function showNotice(root: HTMLElement, message: string, reload: boolean): void {
+  const main = document.createElement("main");
+  main.className = "content";
+  const title = document.createElement("h1");
+  title.textContent = "Schafkopf Tracker";
+  const text = document.createElement("p");
+  text.textContent = message;
+  main.append(title, text);
+  if (reload) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button primary main";
+    button.textContent = "Neu laden";
+    button.addEventListener("click", () => window.location.reload());
+    main.append(button);
+  }
+  root.replaceChildren(main);
+}
+
 async function start(): Promise<void> {
   const root = document.getElementById("app");
   if (!root) return;
-  const db = await openDatabase();
-  const store = await AppStore.load(new IndexedDbRepository(db, storageCodec));
+  let round: RoundController | null = null;
+  const db = await openDatabase(DATABASE_NAME, {
+    blocked: () => {
+      // Die App ist noch in einem anderen Fenster mit der vorigen Version geöffnet; solange wartet die Datenbank.
+      // Sobald sie offen ist, ersetzt die Oberfläche den Hinweis.
+      showNotice(
+        root,
+        "Die App ist noch in einem anderen Fenster oder Tab geöffnet. Bitte dort schließen oder neu laden; danach geht es hier von selbst weiter.",
+        false,
+      );
+    },
+    outdated: () => {
+      // Eine neuere Version der App (in einem anderen Fenster) hat die Datenbank übernommen: Hier geht nichts mehr.
+      round?.stop();
+      showNotice(root, "Die App wurde in einem anderen Fenster aktualisiert. Bitte diese Seite neu laden.", true);
+    },
+  });
+
+  // Gemeinsame Runde: nur, wenn die App mit einem Server gebaut wurde. Sonst bleibt alles wie ohne sie – der Build
+  // lässt dann auch den ganzen Zweig weg.
+  const roundConfig = import.meta.env.VITE_ROUND_ENABLED
+    ? readRoundConfig(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
+    : null;
+  let repository: AppRepository = new IndexedDbRepository(db, storageCodec);
+  let store: AppStore;
+  if (import.meta.env.VITE_ROUND_ENABLED && roundConfig !== null) {
+    const storage = safeLocalStorage(window);
+    const tabs = createTabSignal(storage, systemClock.newId());
+    repository = announcingRepository(repository, () => tabs.announce());
+    const roundStore = new IndexedDbRoundStore(db, roundStoreCodec);
+    const link = await roundStore.link();
+    // Mit verbundener Runde kommen die Spieler vom Server; Platzhalter gingen sonst als neue Spieler hoch.
+    store = await AppStore.load(repository, systemClock, { seedPlayers: link === null });
+    round = startRound({
+      config: roundConfig,
+      store,
+      roundStore,
+      initialLink: link,
+      tabs,
+      storage,
+      encodeEvening: storageCodec.encodeEvening,
+      webAppUrl: new URL(import.meta.env.BASE_URL, window.location.origin).href,
+      win: window,
+    });
+  } else {
+    store = await AppStore.load(repository);
+  }
   const platform = browserPlatform();
   const services: Services = {
     store,
+    // Erst jetzt: Die Rückkehr aus der Anmeldung hat die Adresse schon auf „Gemeinsame Runde“ gestellt.
     router: new Router(),
     platform,
     backup: backupPort,
+    round,
     version: import.meta.env.VITE_APP_VERSION ?? "",
   };
   // Solange noch gespeichert wird, steht das an der Seite (für Tests, die vor dem Neuladen darauf warten).
@@ -102,7 +173,7 @@ async function start(): Promise<void> {
   const updates = new UpdateNotifier();
   root.textContent = "";
   render(<Root services={services} updates={updates} />, root);
-  // Die Daten liegen nur hier: den Browser bitten, sie nicht bei Platzmangel zu räumen.
+  // Den Browser bitten, die Daten nicht bei Platzmangel zu räumen (ohne gemeinsame Runde liegen sie nur hier).
   void platform.requestPersistentStorage();
   registerServiceWorker(updates);
 }
@@ -111,14 +182,10 @@ start().catch((error: unknown) => {
   console.error(error);
   const root = document.getElementById("app");
   if (root) {
-    const main = document.createElement("main");
-    main.className = "content";
-    const title = document.createElement("h1");
-    title.textContent = "Schafkopf Tracker";
-    const text = document.createElement("p");
-    text.textContent =
-      "Die App konnte nicht starten. Bitte den Website-Speicher erlauben (zum Beispiel nicht im privaten Modus) und die Seite neu laden.";
-    main.append(title, text);
-    root.replaceChildren(main);
+    showNotice(
+      root,
+      "Die App konnte nicht starten. Bitte den Website-Speicher erlauben (zum Beispiel nicht im privaten Modus) und die Seite neu laden.",
+      false,
+    );
   }
 });

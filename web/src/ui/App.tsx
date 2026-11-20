@@ -6,8 +6,11 @@ import { ServicesContext, useAppState, useServices, type Services } from "./cont
 import { BoardScreen } from "./screens/BoardScreen";
 import { ClosingScreen } from "./screens/ClosingScreen";
 import { GameFormScreen } from "./screens/GameFormScreen";
+import { InviteScreen } from "./screens/InviteScreen";
 import { NewEveningScreen } from "./screens/NewEveningScreen";
 import { PlayersScreen } from "./screens/PlayersScreen";
+import { RoundDisabledScreen } from "./screens/RoundDisabledScreen";
+import { RoundScreen } from "./screens/RoundScreen";
 import { RulesScreen } from "./screens/RulesScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StartScreen } from "./screens/StartScreen";
@@ -33,6 +36,11 @@ function Screen({ route }: { route: Route }) {
       return <PlayersScreen />;
     case "settings":
       return <SettingsScreen />;
+    case "round":
+      // Ohne Server lässt der Build den Bildschirm samt seiner Logik weg; übrig bleibt der Hinweis.
+      return import.meta.env.VITE_ROUND_ENABLED ? <RoundScreen /> : <RoundDisabledScreen />;
+    case "invite":
+      return <InviteScreen token={route.token} />;
   }
 }
 

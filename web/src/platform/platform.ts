@@ -12,6 +12,10 @@ export interface Platform {
   saveFile(file: File): Promise<ShareOutcome>;
   /** Text teilen oder, wenn das nicht geht, in die Zwischenablage kopieren. */
   shareText(title: string, text: string): Promise<ShareOutcome>;
+  /** Ob der Browser ein „Teilen“ für Text anbietet (am Handy ja, am Desktop oft nicht). */
+  canShareText(): boolean;
+  /** Text in die Zwischenablage kopieren; `false`, wenn der Browser das nicht zulässt. */
+  copyText(text: string): Promise<boolean>;
   /** Bittet den Browser, die Daten nicht bei Platzmangel zu löschen. Wirft nie. */
   requestPersistentStorage(): Promise<boolean>;
 }
@@ -112,6 +116,19 @@ export function browserPlatform(win: Window = window): Platform {
         return "copied";
       } catch {
         return "failed";
+      }
+    },
+
+    canShareText() {
+      return typeof (nav as ShareNavigator).share === "function";
+    },
+
+    async copyText(text) {
+      try {
+        await nav.clipboard.writeText(text);
+        return true;
+      } catch {
+        return false;
       }
     },
 

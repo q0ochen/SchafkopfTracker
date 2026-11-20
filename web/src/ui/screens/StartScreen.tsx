@@ -6,6 +6,7 @@ import type { Evening } from "../../core/model";
 import { Amount, TopBar } from "../components";
 import { useAppState, useNames, useServices } from "../context";
 import { formatDate, plural } from "../format";
+import { RoundRow } from "../round";
 
 interface Standing {
   readonly id: string;
@@ -109,6 +110,7 @@ export function StartScreen() {
             Einstellungen
           </button>
         </nav>
+        <RoundRow />
 
         <h2 class="section-heading">Abende</h2>
         {unreadableEvenings > 0 ? (

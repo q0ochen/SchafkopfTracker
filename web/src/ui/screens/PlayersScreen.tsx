@@ -3,16 +3,23 @@ import { useState } from "preact/hooks";
 import { eveningCount, MAX_NAME_LENGTH } from "../../app/players";
 import type { Player } from "../../core/model";
 import { Dialog, Icon, PlayerName, SwitchRow, TopBar } from "../components";
-import { useAppState, useServices } from "../context";
+import { useAppState, useRoundState, useServices } from "../context";
 
 function EditPlayerDialog({ player, onClose }: { player: Player; onClose: () => void }) {
   const { store } = useServices();
   const { evenings } = useAppState();
+  const round = useRoundState();
   const [name, setName] = useState(player.name);
   const [archived, setArchived] = useState(player.archived);
   const [error, setError] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const usedIn = eveningCount(evenings, player.id);
+  // Was der Server über den Spieler weiß; ohne gemeinsame Runde nichts.
+  const remote = round.link !== null ? round.players.get(player.id) : undefined;
+  // In der gemeinsamen Runde hat sein Besitzer den Namen selbst festgelegt; ändern darf ihn nur der Ersteller der Runde.
+  const nameLocked = remote?.nameLocked === true && round.link?.isCreator !== true;
+  // In der gemeinsamen Runde gehört der Spieler einem Mitglied und lässt sich deshalb nicht löschen.
+  const owned = (remote?.owner ?? null) !== null;
   const save = () => {
     if (store.updatePlayer(player.id, name, archived)) onClose();
     else setError(true);
@@ -76,14 +83,20 @@ function EditPlayerDialog({ player, onClose }: { player: Player; onClose: () => 
           autoCapitalize="words"
           maxLength={MAX_NAME_LENGTH + 10}
           value={name}
+          // Einen selbst festgelegten Namen kann hier niemand mehr ändern.
+          disabled={nameLocked}
           aria-invalid={error}
-          aria-describedby={error ? "edit-player-error" : undefined}
+          aria-describedby={nameLocked ? "edit-player-locked" : error ? "edit-player-error" : undefined}
           onInput={(event) => {
             setName((event.currentTarget as HTMLInputElement).value);
             setError(false);
           }}
         />
-        {error ? (
+        {nameLocked ? (
+          <p id="edit-player-locked" class="hint">
+            Name selbst festgelegt
+          </p>
+        ) : error ? (
           <p id="edit-player-error" class="hint error-text" role="alert">
             Bitte einen Namen mit höchstens 24 Zeichen eingeben.
           </p>
@@ -95,10 +108,12 @@ function EditPlayerDialog({ player, onClose }: { player: Player; onClose: () => 
         checked={archived}
         onChange={setArchived}
       />
-      {usedIn === 0 ? (
+      {usedIn === 0 && !owned ? (
         <button type="button" class="text-button danger-text full-width" onClick={() => setConfirmDelete(true)}>
           Spieler löschen
         </button>
+      ) : owned ? (
+        <p class="hint">Dieser Spieler gehört zu einem Mitglied der Runde und lässt sich nicht löschen.</p>
       ) : (
         <p class="hint">
           {usedIn === 1

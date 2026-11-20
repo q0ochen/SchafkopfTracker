@@ -3,7 +3,8 @@
  * Abend, die Spielerliste und die Einstellungen als JSON-Text im Dateiformat der Android-App. So bleibt alles
  * lesbar, auch wenn sich die Web-App ändert, und eine Sicherung ist nur das Zusammenfassen dieser Texte.
  *
- * Daten verlassen das Gerät nie: Es gibt keinen Server.
+ * Ohne gemeinsame Runde verlassen die Daten das Gerät nie. Mit ihr merkt sich dieselbe Datenbank zusätzlich, mit
+ * welcher Runde das Gerät verbunden ist und was es zuletzt vom Server kannte (`round/indexedDbRoundStore.ts`).
  */
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { AppSettings, Evening, EveningId, Player } from "../core/model";
@@ -46,24 +47,59 @@ interface SchafkopfSchema extends DBSchema {
   evenings: { key: string; value: string };
   /** Weitere Dokumente als JSON-Text: „players“ und „settings“. */
   documents: { key: string; value: string };
+  /** Gemeinsame Runde (seit Version 2): die verbundene Runde als JSON-Text unter dem Schlüssel „link“. */
+  round: { key: string; value: string };
+  /** Gemeinsame Runde: je Abend die zuletzt bekannte Fassung des Servers als JSON-Text, Schlüssel ist die Kennung des Abends. */
+  eveningBases: { key: string; value: string };
+  /** Gemeinsame Runde: je Spieler der zuletzt bekannte Stand des Servers als JSON-Text, Schlüssel ist die Kennung des Spielers. */
+  playerBases: { key: string; value: string };
 }
 
 export const DATABASE_NAME = "schafkopf-tracker";
-const DATABASE_VERSION = 1;
+
+/**
+ * Version der Datenbank. 1: Abende und Dokumente. 2: dazu die drei Ablagen der gemeinsamen Runde; vorhandene Daten
+ * bleiben beim Übergang unberührt.
+ */
+export const DATABASE_VERSION = 2;
 const PLAYERS_KEY = "players";
 const SETTINGS_KEY = "settings";
 
 export type Database = IDBPDatabase<SchafkopfSchema>;
 
-export function openDatabase(name: string = DATABASE_NAME): Promise<Database> {
-  return openDB<SchafkopfSchema>(name, DATABASE_VERSION, {
+/** Was beim Öffnen der Datenbank außer der Reihe passieren kann. */
+export interface DatabaseHooks {
+  /**
+   * Die Datenbank lässt sich gerade nicht auf die neue Version heben, weil die App noch in einem anderen Fenster mit
+   * einer älteren Version geöffnet ist. Das Öffnen wartet, bis dieses Fenster geschlossen oder neu geladen ist.
+   */
+  blocked?(): void;
+  /** Eine neuere Version der App (in einem anderen Fenster) will die Datenbank heben; diese Verbindung ist dann schon geschlossen. */
+  outdated?(): void;
+}
+
+export function openDatabase(name: string = DATABASE_NAME, hooks: DatabaseHooks = {}): Promise<Database> {
+  const opened: Promise<Database> = openDB<SchafkopfSchema>(name, DATABASE_VERSION, {
     upgrade(db, oldVersion) {
       if (oldVersion < 1) {
         db.createObjectStore("evenings");
         db.createObjectStore("documents");
       }
+      if (oldVersion < 2) {
+        db.createObjectStore("round");
+        db.createObjectStore("eveningBases");
+        db.createObjectStore("playerBases");
+      }
+    },
+    blocked() {
+      hooks.blocked?.();
+    },
+    blocking() {
+      // Nicht im Weg stehen: Sonst hinge das andere Fenster beim Start fest.
+      void opened.then((db) => db.close()).then(() => hooks.outdated?.());
     },
   });
+  return opened;
 }
 
 /** Speicher in IndexedDB. */

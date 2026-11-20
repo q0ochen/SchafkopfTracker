@@ -185,6 +185,7 @@ pausiert.
 | Anmelden klappt, läuft aber nach einer Woche ab | Der Zustimmungsbildschirm steht noch auf „Testen“ | Schritt 2, Punkt 4 |
 | „Server nicht erreichbar“, obwohl Internet da ist | Das Supabase-Projekt ist pausiert | Schritt 7 |
 | „Die Einladung ist abgelaufen oder ungültig.“ | Der Link ist älter als 14 Tage oder unvollständig kopiert | Neu einladen |
+| „Diese Runde gehört zu einem anderen Google-Konto.“ | Beim Anmelden wurde ein anderes Google-Konto gewählt als beim Beitreten | Noch einmal anmelden und das richtige Konto wählen; es geht nichts verloren |
 | „Supabase Deploy“ bricht ab | Ein Secret oder eine Variable fehlt | Die Meldung im Lauf nennt den fehlenden Wert |
 
 ## Was auf dem Server liegt

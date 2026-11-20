@@ -179,6 +179,11 @@ textarea {
   padding-bottom: 200px;
 }
 
+/* In der gemeinsamen Runde steht über den Knöpfen noch, wer gibt. */
+.content.with-bottom-bar.with-dealer-hint {
+  padding-bottom: 236px;
+}
+
 .top-bar {
   position: sticky;
   top: 0;
@@ -1374,6 +1379,139 @@ button.card {
   padding: calc(6px + env(safe-area-inset-top)) 12px 6px;
   background: var(--secondary-container);
   color: var(--on-secondary-container);
+}
+
+/* ---------------------------------------------------------------- Gemeinsame Runde */
+
+.round-heading {
+  margin: 12px 0 8px;
+  font-size: 22px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.round-lead {
+  margin: 16px 0 8px;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.round-invited {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Die Statuszeile: Symbol und Text; bei einer Störung zusätzlich in der Fehlerfarbe (der Text sagt es auch). */
+.round-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.round-status.problem,
+.icon-button.round-problem {
+  color: var(--error);
+}
+
+.card.highlight .round-status.problem {
+  color: inherit;
+}
+
+.round-status-row {
+  margin: 4px 0;
+}
+
+.round-row {
+  min-height: 56px;
+}
+
+.round-row .hint {
+  margin: 0;
+}
+
+.card.accent {
+  border-color: var(--primary);
+}
+
+.card .text-field:last-child,
+.card form .button:last-child {
+  margin-bottom: 0;
+}
+
+/* Eine Meldung, die stehen bleibt, bis man sie wegtippt. */
+.message-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 4px 4px 4px 16px;
+  border-radius: var(--radius);
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.message-card > span {
+  flex: 1;
+  padding: 8px 0;
+}
+
+.message-card .text-button {
+  color: inherit;
+}
+
+.message-card.error {
+  background: var(--error);
+  color: var(--bg);
+}
+
+.member {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.member .hint {
+  margin: 0;
+}
+
+.notices li {
+  padding: 6px 0;
+}
+
+.invite-text {
+  margin: 4px 0 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.divider {
+  margin: 20px 0 4px;
+  border: 0;
+  border-top: 1px solid var(--outline-variant);
+}
+
+a.button {
+  color: inherit;
+}
+
+.dealer-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 15px;
+  color: var(--on-surface-variant);
+}
+
+.dealer-hint.mine {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.entry-duplicate {
+  font-weight: 700;
+}
+
+.text-field input:disabled {
+  opacity: 0.6;
 }
 
 @media (prefers-reduced-motion: reduce) {

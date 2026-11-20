@@ -3,8 +3,9 @@ import { useRef, useState } from "preact/hooks";
 import { backupFileName, hasAnythingToImport, importPlan, importSummary, type ImportPreview } from "../../app/backup";
 import type { ThemeMode } from "../../core/model";
 import { ChoiceRow, Dialog, Hint, SectionHeading, SwitchRow, TopBar } from "../components";
-import { useAppState, useServices } from "../context";
+import { useAppState, useRoundState, useServices } from "../context";
 import { formatDateTime, THEME_LABELS } from "../format";
+import { RoundRow } from "../round";
 
 const THEMES: readonly ThemeMode[] = ["DARK", "LIGHT", "SYSTEM"];
 /** Größere Dateien sind sicher keine Sicherung dieser App (schützt vor dem Einfrieren der Seite). */
@@ -83,6 +84,8 @@ function ImportDialog({ preview, onClose }: { preview: ImportPreview; onClose: (
 export function SettingsScreen() {
   const { store, router, platform, backup, version } = useServices();
   const { settings, players, evenings } = useAppState();
+  // Mit verbundener Runde liegen die Daten nicht mehr nur auf diesem Gerät; die Hinweise sagen es dann.
+  const linked = useRoundState().link !== null;
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -135,12 +138,21 @@ export function SettingsScreen() {
         <button type="button" class="button full-width spaced-top" onClick={() => router.open({ name: "rules", eveningId: null })}>
           Regeln für neue Abende
         </button>
+        <RoundRow />
 
         <SectionHeading>Sicherung</SectionHeading>
-        <Hint>
-          Alle Daten liegen nur in diesem Browser auf diesem Gerät. Bitte ab und zu eine Sicherung speichern, zum Beispiel
-          in „Dateien“ oder per Mail an dich selbst. Die Datei passt auch zur Android-App.
-        </Hint>
+        {linked ? (
+          <Hint>
+            Die Daten liegen in diesem Browser auf diesem Gerät und, solange die gemeinsame Runde verbunden ist, auch auf
+            ihrem Server. Eine Sicherung als Datei schadet trotzdem nicht, zum Beispiel in „Dateien“ oder per Mail an dich
+            selbst. Die Datei passt auch zur Android-App.
+          </Hint>
+        ) : (
+          <Hint>
+            Alle Daten liegen nur in diesem Browser auf diesem Gerät. Bitte ab und zu eine Sicherung speichern, zum Beispiel
+            in „Dateien“ oder per Mail an dich selbst. Die Datei passt auch zur Android-App.
+          </Hint>
+        )}
         <div class="row">
           <button type="button" class="button main" onClick={() => void saveBackup()}>
             Sicherung speichern
@@ -171,7 +183,14 @@ export function SettingsScreen() {
 
         <SectionHeading>Über die App</SectionHeading>
         <Hint>Schafkopf Tracker {version} · Web-App für iPhone und Browser · freie Software (CC0 1.0)</Hint>
-        <Hint>Es gibt keinen Server: Nichts verlässt dieses Gerät, außer du gibst eine Sicherung selbst weiter.</Hint>
+        {linked ? (
+          <Hint>
+            Mit der gemeinsamen Runde liegen Namen, Abende und Beträge auf einem Server in Frankfurt (Supabase). Sonst verlässt
+            nichts dieses Gerät, außer du gibst eine Sicherung selbst weiter.
+          </Hint>
+        ) : (
+          <Hint>Es gibt keinen Server: Nichts verlässt dieses Gerät, außer du gibst eine Sicherung selbst weiter.</Hint>
+        )}
       </main>
       {preview ? (
         <ImportDialog

@@ -58,7 +58,14 @@ jobs:
       - name: Unit-Tests (Rechenkern und Dateiformat inkl. Golden-Tests gegen den Kotlin-Code, Speicher, Oberflächenlogik)
         run: npm test
 
+      # Gemeinsame Runde: Adresse und öffentlicher Schlüssel des Servers (Supabase) kommen aus den Variablen des
+      # Repositorys (Settings → Secrets and variables → Actions → Variables; beides ist kein Geheimnis). Fehlen sie,
+      # entsteht die App ohne gemeinsame Runde („Der Server ist noch nicht eingerichtet.“). Die Tests hängen nicht
+      # davon ab: Sie bauen sich die App selbst, einmal ohne und einmal mit einem nachgestellten Server.
       - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
 
       - name: Oberflächen-Tests (Playwright gegen vite preview, iPhone-Größe und Desktop)

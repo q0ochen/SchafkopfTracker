@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountTone, formatAmount, formatDate, formatPercent, MINUS, plural } from "./format";
+import { amountTone, formatAmount, formatDate, formatPercent, formatShortDate, MINUS, plural } from "./format";
 
 const NBSP = " ";
 
@@ -52,5 +52,8 @@ describe("weitere Formate", () => {
   it("schreibt das Datum eines Abends auf Deutsch", () => {
     // Mittags in UTC, damit das Datum in jeder Zeitzone der Testrechner gleich bleibt.
     expect(formatDate("2026-11-14T12:00:00Z")).toBe("Sa., 14. Nov. 2026");
+    // Die Kurzform für die Kopfzeile eines Abends, wenn dort auch das Symbol der gemeinsamen Runde steht.
+    expect(formatShortDate("2026-11-14T12:00:00Z")).toBe("14.11.26");
+    expect(formatShortDate("2026-03-05T12:00:00Z")).toBe("05.03.26");
   });
 });

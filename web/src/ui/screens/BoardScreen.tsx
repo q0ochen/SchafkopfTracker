@@ -6,11 +6,14 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { isRunning } from "../../core/evening/Evening";
 import { EveningCalculator, type EntryResult, type EveningState } from "../../core/evening/EveningCalculator";
 import type { PlayerId } from "../../core/model";
+import { DuplicateCheck } from "../../core/round/DuplicateCheck";
+import { dealerHint } from "../../round/texts";
 import { addBockTrigger, addThrownIn, removeLast, restore, type RemovedEntry } from "../board";
 import { Amount, Dialog, MoreMenu, PlayerName, Snackbar, TopBar } from "../components";
-import { useAppState, useColors, useNames, useServices } from "../context";
+import { useAppState, useColors, useNames, useRoundState, useServices } from "../context";
 import { entryText } from "../entryText";
-import { formatAmount, formatDate, plural } from "../format";
+import { formatAmount, formatDate, formatShortDate, plural } from "../format";
+import { RoundStatusButton } from "../round";
 
 /** So lange bleibt „Wiederherstellen“ sichtbar (wie die lange Meldung der Android-App). */
 const UNDO_SECONDS = 10;
@@ -70,12 +73,15 @@ function EntryRow({
   seating,
   names,
   asMoney,
+  duplicate,
   onOpen,
 }: {
   result: EntryResult;
   seating: readonly PlayerId[];
   names: ReadonlyMap<string, string>;
   asMoney: boolean;
+  /** Dasselbe Spiel steht direkt davor schon einmal: vermutlich haben zwei gleichzeitig eingetragen. */
+  duplicate: boolean;
   onOpen: (() => void) | null;
 }) {
   const text = entryText(result, names, asMoney);
@@ -84,6 +90,7 @@ function EntryRow({
     <>
       <span class="card-line entry-title">{text.title}</span>
       {text.detail !== "" ? <span class="card-line entry-detail">{text.detail}</span> : null}
+      {duplicate ? <span class="card-line entry-issue entry-duplicate">Doppelt eingetragen?</span> : null}
       {result.issues.length > 0 ? <span class="card-line entry-issue">Bitte prüfen: Dieser Eintrag passt nicht zu den Regeln.</span> : null}
       {showAmounts ? (
         <span class="entry-amounts">
@@ -164,8 +171,12 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
   const { evenings, settings } = useAppState();
   const names = useNames();
   const colors = useColors();
+  const round = useRoundState();
+  const linked = round.link !== null;
   const evening = evenings.find((it) => it.id === eveningId);
   const computed = useMemo(() => (evening ? EveningCalculator.compute(evening) : null), [evening]);
+  // Nur in der gemeinsamen Runde tragen mehrere ein; nur dort lohnt der Hinweis auf Dubletten.
+  const duplicates = useMemo(() => (linked && evening ? DuplicateCheck.suspects(evening) : new Set<string>()), [linked, evening]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [bockDialog, setBockDialog] = useState(false);
   // Zurückgenommene Einträge, der zuletzt zurückgenommene am Ende. Jeder lässt sich wiederherstellen.
@@ -205,11 +216,18 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
   const asMoney = evening.rules.displayAsMoney;
   const update = (transform: Parameters<typeof store.updateEvening>[1]) => void store.updateEvening(eveningId, transform);
 
+  // Über den aktuellen Stand im Zustand, nicht über den zuletzt gezeichneten: Dazwischen kann der Abgleich der
+  // gemeinsamen Runde etwas eingefügt haben.
   const undo = () => {
-    const result = removeLast(evening);
-    if (!result) return;
-    void store.saveEvening(result.evening);
-    setRemoved((before) => [...before, result.removed]);
+    let taken: RemovedEntry | null = null;
+    void store.updateEvening(eveningId, (current) => {
+      const result = removeLast(current);
+      if (!result) return null;
+      taken = result.removed;
+      return result.evening;
+    });
+    const removedNow: RemovedEntry | null = taken;
+    if (removedNow !== null) setRemoved((before) => [...before, removedNow]);
   };
 
   // Der zuletzt zurückgenommene Eintrag kommt zuerst wieder an seine Stelle; so stimmt die Reihenfolge.
@@ -238,9 +256,19 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
 
   return (
     <div class="screen">
-      <TopBar title={`Abend vom ${formatDate(evening.startedAt)}`} onBack={() => router.back()} actions={<MoreMenu items={menuItems} />} />
+      <TopBar
+        // Mit dem Wolken-Symbol der gemeinsamen Runde ist neben dem Titel weniger Platz: dann das Datum in Kurzform.
+        title={`Abend vom ${linked ? formatShortDate(evening.startedAt) : formatDate(evening.startedAt)}`}
+        onBack={() => router.back()}
+        actions={
+          <>
+            <RoundStatusButton />
+            <MoreMenu items={menuItems} />
+          </>
+        }
+      />
       <PlayerHeader computed={computed} names={names} colors={colors} />
-      <main class={running ? "content with-bottom-bar" : "content"}>
+      <main class={running ? (linked ? "content with-bottom-bar with-dealer-hint" : "content with-bottom-bar") : "content"}>
         {computed.results.length === 0 ? (
           <p class="empty">Noch nichts eingetragen.</p>
         ) : (
@@ -252,6 +280,7 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
                 seating={evening.seating}
                 names={names}
                 asMoney={asMoney}
+                duplicate={duplicates.has(result.entry.id)}
                 onOpen={
                   result.entry.kind === "game"
                     ? () => router.open({ name: "gameForm", eveningId, entryId: result.entry.id })
@@ -266,6 +295,12 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
       {running ? (
         <div class="bottom-bar">
           <div class="bottom-bar-inner">
+            {linked ? (
+              // In der gemeinsamen Runde: wer gibt und deshalb in der Regel einträgt. Nur ein Hinweis; eintragen kann jeder.
+              <p class={round.link?.playerId === computed.nextDealer ? "dealer-hint mine" : "dealer-hint"}>
+                {dealerHint(round.link?.playerId === computed.nextDealer, names.get(computed.nextDealer) ?? "?")}
+              </p>
+            ) : null}
             <div class="row">
               <button type="button" class="button" onClick={() => update((it) => addThrownIn(it, store.clock))}>
                 Zusammengeworfen

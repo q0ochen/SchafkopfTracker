@@ -7,15 +7,18 @@ import { ScoreCalculator } from "../core/rules/ScoreCalculator";
 import {
   decodeEvening,
   decodePlayers,
+  decodeRules,
   decodeSettings,
   encodeEvening,
   encodePlayers,
+  encodeRules,
   encodeSettings,
   readBackup,
   writeBackup,
   type EveningChecker,
 } from "../data/format";
 import type { StorageCodec } from "../data/repository";
+import type { RoundStoreCodec } from "../round/indexedDbRoundStore";
 import type { BackupPort } from "./backup";
 
 /** Speichern im Dateiformat der Android-App. */
@@ -26,6 +29,20 @@ export const storageCodec: StorageCodec = {
   decodePlayers,
   encodeSettings,
   decodeSettings,
+};
+
+/** Was sich das Gerät zur gemeinsamen Runde merkt, im selben Dateiformat. */
+export const roundStoreCodec: RoundStoreCodec = {
+  encodeEvening,
+  decodeEvening,
+  encodeRules,
+  decodeRulesOrNull: (text) => {
+    try {
+      return decodeRules(text);
+    } catch {
+      return null;
+    }
+  },
 };
 
 /** Was die Prüfung eines Abends beim Einlesen vom Rechenkern braucht (Kotlin: `EveningCheck`). */

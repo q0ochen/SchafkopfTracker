@@ -15,6 +15,9 @@ describe("Router", () => {
     { name: "closing", eveningId: "abc" },
     { name: "players" },
     { name: "settings" },
+    { name: "round" },
+    { name: "invite", token: "0123456789abcdef0123456789abcdef" },
+    { name: "invite", token: "" },
   ];
 
   it("liest jede Adresse so, wie sie geschrieben wurde", () => {
@@ -38,6 +41,19 @@ describe("Router", () => {
   it("verträgt Schrägstriche am Ende und fehlende Anfangs-Schrägstriche", () => {
     expect(parseRoute("#/spieler/")).toEqual({ name: "players" });
     expect(parseRoute("#einstellungen")).toEqual({ name: "settings" });
+  });
+
+  it("kennt die Seiten der gemeinsamen Runde", () => {
+    expect(parseRoute("#/runde")).toEqual({ name: "round" });
+    expect(pathOf({ name: "round" })).toBe("/runde");
+    // Der Einladungslink, wie ihn `InviteLinks.webLink` baut.
+    expect(parseRoute("#/einladung/0123456789abcdef0123456789abcdef")).toEqual({ name: "invite", token: "0123456789abcdef0123456789abcdef" });
+    expect(parseRoute("#/einladung/")).toEqual({ name: "invite", token: "" });
+    // Was im Link steht, prüft erst die Seite.
+    expect(parseRoute("#/einladung/kein-code")).toEqual({ name: "invite", token: "kein-code" });
+    expect(parseRoute("#/einladung/a/b")).toEqual({ name: "start" });
+    expect(parentOf({ name: "round" })).toEqual({ name: "start" });
+    expect(parentOf({ name: "invite", token: "x" })).toEqual({ name: "start" });
   });
 
   it("kennt den übergeordneten Bildschirm", () => {

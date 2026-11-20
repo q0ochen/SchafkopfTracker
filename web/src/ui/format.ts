@@ -43,12 +43,18 @@ export function amountTone(cents: number): "gain" | "loss" | "neutral" {
 }
 
 const DATE_FORMAT = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" });
 const TIME_FORMAT = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
 const DATE_TIME_FORMAT = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 
 /** Datum eines Abends, zum Beispiel „Sa., 14. Nov. 2026“ (in der Zeitzone des Geräts). */
 export function formatDate(instant: InstantText): string {
   return DATE_FORMAT.format(new Date(instantToEpochMillis(instant)));
+}
+
+/** Kurzes Datum, zum Beispiel „14.11.26“ (wo neben dem Titel wenig Platz ist). */
+export function formatShortDate(instant: InstantText): string {
+  return SHORT_DATE_FORMAT.format(new Date(instantToEpochMillis(instant)));
 }
 
 /** Uhrzeit, zum Beispiel „19:05“. */

@@ -5,7 +5,11 @@ public/favicon.png
 # Build- und Testausgaben
 dist/
 dist-e2e/
+dist-e2e-runde/
 test-results/
 playwright-report/
 .vite/
 node_modules/
+# Eigene Angaben fürs Bauen (zum Beispiel Adresse und Schlüssel des Servers der gemeinsamen Runde in .env.local)
+.env
+.env.*

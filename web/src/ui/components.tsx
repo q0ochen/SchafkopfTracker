@@ -9,7 +9,23 @@ import { amountTone, formatAmount } from "./format";
 
 // ---------------------------------------------------------------- Symbole
 
-export type IconName = "back" | "more" | "delete" | "check" | "matchbox" | "up" | "down" | "add" | "edit" | "share";
+export type IconName =
+  | "back"
+  | "more"
+  | "delete"
+  | "check"
+  | "matchbox"
+  | "up"
+  | "down"
+  | "add"
+  | "edit"
+  | "share"
+  | "cloud-done"
+  | "cloud-upload"
+  | "cloud-off";
+
+/** Der Umriss der Wolke, in den die Zeichen für „abgeglichen“ und „wartet“ gestanzt werden. */
+const CLOUD = "M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z";
 
 const ICON_PATHS: Record<Exclude<IconName, "matchbox">, string> = {
   back: "M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z",
@@ -22,6 +38,11 @@ const ICON_PATHS: Record<Exclude<IconName, "matchbox">, string> = {
   edit: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
   share:
     "M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11A2.99 2.99 0 0 0 21 5a3 3 0 1 0-5.91.7L8.04 9.81A3 3 0 1 0 6 15c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65A2.92 2.92 0 1 0 18 16.08z",
+  // Gemeinsame Runde: Wolke mit Haken (abgeglichen), mit Pfeil nach oben (es wartet etwas), durchgestrichen (Störung).
+  "cloud-done": `${CLOUD}M10 17l-3.5-3.5 1.41-1.41L10 14.17 15.18 9l1.41 1.41L10 17z`,
+  "cloud-upload": `${CLOUD}M14 13v4h-4v-4H7l5-5 5 5h-3z`,
+  "cloud-off":
+    "M19.35 10.04C18.67 6.59 15.64 4 12 4c-1.48 0-2.85.43-4.01 1.17l1.46 1.46C10.21 6.23 11.08 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3 0 1.13-.64 2.11-1.56 2.62l1.45 1.45C23.16 18.16 24 16.68 24 15c0-2.64-2.05-4.78-4.65-4.96zM3 5.27l2.75 2.74C2.56 8.15 0 10.77 0 14c0 3.31 2.69 6 6 6h11.73l2 2L21 20.73 4.27 4 3 5.27zM7.73 10l8 8H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h1.73z",
 };
 
 /** Symbol in der Textfarbe. Ohne `label` ist es Schmuck und für Screenreader unsichtbar. */

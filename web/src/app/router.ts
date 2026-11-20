@@ -13,7 +13,10 @@ export type Route =
   | { readonly name: "statistics"; readonly eveningId: EveningId | null }
   | { readonly name: "closing"; readonly eveningId: EveningId }
   | { readonly name: "players" }
-  | { readonly name: "settings" };
+  | { readonly name: "settings" }
+  | { readonly name: "round" }
+  /** Die Einladungsseite; `token` ist, was im Link steht (geprüft wird es erst auf der Seite). */
+  | { readonly name: "invite"; readonly token: string };
 
 const SEGMENT = "([^/]+)";
 
@@ -36,6 +39,9 @@ export function parseRoute(hash: string): Route {
   if (path === "/neu") return { name: "newEvening" };
   if (path === "/spieler") return { name: "players" };
   if (path === "/einstellungen") return { name: "settings" };
+  if (path === "/runde") return { name: "round" };
+  if (path === "/einladung") return { name: "invite", token: "" };
+  if ((m = match(`/einladung/${SEGMENT}`))) return { name: "invite", token: m[0] };
   if (path === "/regeln") return { name: "rules", eveningId: null };
   if (path === "/statistik") return { name: "statistics", eveningId: null };
   if ((m = match(`/abend/${SEGMENT}`))) return { name: "board", eveningId: m[0] };
@@ -71,6 +77,10 @@ export function pathOf(route: Route): string {
       return "/spieler";
     case "settings":
       return "/einstellungen";
+    case "round":
+      return "/runde";
+    case "invite":
+      return route.token === "" ? "/einladung" : `/einladung/${e(route.token)}`;
   }
 }
 

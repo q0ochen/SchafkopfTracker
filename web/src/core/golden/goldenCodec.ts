@@ -108,6 +108,22 @@ export function toJson(value: unknown): Json {
   throw new Error(`Kein JSON-Wert im Ergebnis: ${String(value)}`);
 }
 
+/** Ein Regelwerk wie in der Datei: die Tabellen je Spielart als Paarlisten in ihrer Reihenfolge. */
+export function encodeRuleSet(rules: RuleSet): Json {
+  return toJson({
+    ...rules,
+    prices: Object.entries(rules.prices),
+    laufendeMin: Object.entries(rules.laufendeMin),
+    laufendeMax: Object.entries(rules.laufendeMax),
+  });
+}
+
+/** Ein Abend wie in der Datei (die Umkehrung von `decodeEvening`), zum Beispiel das Ergebnis des Zusammenführens. */
+export function encodeEvening(evening: Evening): Json {
+  const { rules, ...rest } = evening;
+  return { ...(toJson(rest) as JsonObject), rules: encodeRuleSet(rules) };
+}
+
 /** Ein Ergebnis von `EveningCalculator.compute` wie in der Datei: statt des Eintrags seine Kennung. */
 export function encodeEntryResult(result: EntryResult, violations: readonly RuleViolation[] | null): Json {
   const { entry, ...rest } = result;

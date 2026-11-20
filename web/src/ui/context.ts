@@ -5,12 +5,15 @@ import type { BackupPort } from "../app/backup";
 import type { Router } from "../app/router";
 import type { AppState, AppStore } from "../app/store";
 import type { Platform } from "../platform/platform";
+import { NOT_CONFIGURED, type RoundController, type RoundState } from "../round/controller";
 
 export interface Services {
   readonly store: AppStore;
   readonly router: Router;
   readonly platform: Platform;
   readonly backup: BackupPort;
+  /** Die gemeinsame Runde; `null`, wenn die App ohne Server gebaut wurde. */
+  readonly round: RoundController | null;
   /** Version der Web-App (aus package.json, im Build mit Commit). */
   readonly version: string;
 }
@@ -44,4 +47,16 @@ export function useNames(): ReadonlyMap<string, string> {
 export function useColors(): ReadonlyMap<string, number> {
   const { players } = useAppState();
   return useMemo(() => new Map(players.map((it) => [it.id, it.colorIndex])), [players]);
+}
+
+/** Der Stand der gemeinsamen Runde; die Komponente wird bei jeder Änderung neu gezeichnet. */
+export function useRoundState(): RoundState {
+  const { round } = useServices();
+  const [state, setState] = useState(round?.getState() ?? NOT_CONFIGURED);
+  useEffect(() => {
+    if (round === null) return;
+    setState(round.getState());
+    return round.subscribe(() => setState(round.getState()));
+  }, [round]);
+  return state;
 }
