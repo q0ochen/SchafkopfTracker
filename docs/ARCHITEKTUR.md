@@ -565,10 +565,14 @@ Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disc
   - Was sich auf dem Gerät nicht lesen lässt (ein Abend, die Spielerliste, die Einstellungen), gilt nie als gelöscht
     oder leer: Basen unlesbarer Abende bleiben unberührt; ist die Spielerliste oder sind die Einstellungen unlesbar,
     ruht der Abgleich (Statuszeile wie bei „der Browser speichert nicht“).
-  - Höchstens ein Abgleich gleichzeitig über alle Fenster (`navigator.locks`, wo es fehlt: wie bisher je Fenster);
+  - Höchstens ein Abgleich gleichzeitig über alle Fenster (`navigator.locks`, wo es fehlt: wie bisher je Fenster;
+    auf die Sperre wartet ein Fenster höchstens 15 Sekunden, dann fällt dieser Versuch aus);
     vor jedem Abgleich liest er den Gerätezustand frisch aus IndexedDB; Änderungen meldet ein Fenster den anderen als
     Ereignis (`BroadcastChannel`), damit keines mit einem veralteten Stand schreibt.
   - Einlösen der Anmeldung mit Zeitlimit (20 Sekunden); danach gilt es als „keine Verbindung“.
+  - Scheitert eine Aktion (Anlegen, Beitreten …) am Speicher des Browsers, zeigt sie den Text der Statuszeile
+    „Speichern auf diesem Gerät gescheitert – bitte die App neu laden“. Bekannte Grenze: Bearbeitet man denselben
+    Abend gleichzeitig in zwei Fenstern desselben Geräts, kann dort eine Eingabe verloren gehen.
 
 ### 8.9 Oberfläche (Android-App und Web-App gleich, Texte wörtlich)
 
@@ -675,7 +679,9 @@ nur der Ersteller der Runde darf ihn korrigieren. Löschen lassen sich nur Spiel
 „Dieser Spieler gehört zu einem Mitglied der Runde und lässt sich nicht löschen.“
 
 **Einladungsseite der Web-App** (`#/einladung/‹Code›`): „Einladung in eine Schafkopfrunde“, darunter der Code und
-der Knopf „Code kopieren“ (danach „Code kopiert“). Auf einem iPhone, das die Seite nicht als App vom Home-Bildschirm
+der Knopf „Code kopieren“ (danach „Code kopiert“; klappt das Kopieren nicht: „Das Kopieren hat nicht geklappt. Bitte
+den Code von Hand kopieren.“). Hervorgehoben ist auf dem iPhone im Browser „Code kopieren“, auf Android „In der
+Android-App öffnen“. Auf einem iPhone, das die Seite nicht als App vom Home-Bildschirm
 zeigt (Links aus Nachrichten öffnen sich in Safari, und die App vom Home-Bildschirm hat einen eigenen Speicher):
 „Benutzt du den Schafkopf Tracker vom Home-Bildschirm? Dann kopiere den Code, öffne die App über ihr Symbol und füge
 ihn unter „Gemeinsame Runde“ → „Einladung einlösen“ ein.“ Der Knopf „In der Android-App öffnen“ nur auf Android;

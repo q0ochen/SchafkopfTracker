@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 684, `data` 278, `database` 24, `app` 192, Web 510 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 34 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 684, `data` 278, `database` 24, `app` 192, Web 560 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 39 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -358,6 +358,14 @@ Umgesetzt am 19.11.2026 auf dem Zweig `claude/gracious-keller-48tcn0`:
   eine verlorene Antwort beim Anlegen ergab eine zweite Runde; dazu Hinweise in „Abend löschen?“, beim Einlesen einer
   Sicherung und vor dem Ersetzen (automatische Sicherung), „Deine Runden ließen sich nicht laden.“, „Anmeldung läuft“
   und kleinere Anzeigefehler.
+- **Unabhängige Durchsicht der Web-App (20.11.2026):** neun Funde, alle behoben (Vertrag 8.1, 8.4, 8.8, 8.9): Basis nie
+  neuer als das Gerät (`AppStore.whenSaved`), Unlesbares auf dem Gerät gilt nie als gelöscht, ein Abgleich über alle
+  Fenster (`navigator.locks`, `BroadcastChannel`), eigene Statuszeile für Speicherfehler, Einladungsseite fürs iPhone
+  („Code kopieren“, Hinweis auf die App vom Home-Bildschirm), Kontoauswahl bei Google (auch Android), Zeitlimit beim
+  Einlösen der Anmeldung, Einladung wiederverwenden und nicht verbundene Runden verlassen (auch Android).
+  **Größtes offenes Risiko fürs iPhone:** Ob die Google-Anmeldung *in der App vom Home-Bildschirm* klappt, ist nur auf
+  einem echten iPhone zu prüfen (Drink With Me hat dieselbe offene Frage). Ausweg, falls nicht: die Web-App in Safari
+  selbst benutzen; die Anleitung beschreibt das.
 - **Anleitung für den Nutzer:** `docs/EINRICHTUNG-RUNDE.md` (eigenes Supabase-Projekt in Frankfurt, Google-Client vom
   Typ „Webanwendung“, zwei Secrets und drei Variablen bei GitHub, Test zu zweit, „vor jedem Spielabend“).
 
