@@ -3,29 +3,39 @@ import { useRef, useState } from "preact/hooks";
 import { backupFileName, hasAnythingToImport, importPlan, importSummary, type ImportPreview } from "../../app/backup";
 import type { ThemeMode } from "../../core/model";
 import { ChoiceRow, Dialog, Hint, SectionHeading, SwitchRow, TopBar } from "../components";
-import { useAppState, useServices } from "../context";
+import { useAppState, useRoundState, useServices } from "../context";
 import { formatDateTime, THEME_LABELS } from "../format";
+import { RoundRow } from "../round";
 
 const THEMES: readonly ThemeMode[] = ["DARK", "LIGHT", "SYSTEM"];
 /** Größere Dateien sind sicher keine Sicherung dieser App (schützt vor dem Einfrieren der Seite). */
 const MAX_BACKUP_BYTES = 50 * 1024 * 1024;
 
-function ImportDialog({ preview, onClose }: { preview: ImportPreview; onClose: (message: string | null) => void }) {
+/**
+ * Die Rückfrage vor dem Einlesen einer Sicherung.
+ *
+ * @param linked Das Gerät gehört zu einer gemeinsamen Runde: Was eingelesen wird, erscheint bei allen, und die Namen
+ *   der Spieler kommen aus der Runde (ein Umbenennen aus der Sicherung träfe alle).
+ */
+function ImportDialog({ preview, linked, onClose }: { preview: ImportPreview; linked: boolean; onClose: (message: string | null) => void }) {
   const { store } = useServices();
   const { players, settings } = useAppState();
   const [takeNames, setTakeNames] = useState(true);
   const [takeRules, setTakeRules] = useState(false);
   const [busy, setBusy] = useState(false);
   const readable = preview.error === null;
-  const nameChanges = preview.differingPlayers.map((player) => {
-    const before = players.find((it) => it.id === player.id)?.name ?? "?";
-    return before === player.name ? player.name : `${before} → ${player.name}`;
-  });
+  const nameChanges = linked
+    ? []
+    : preview.differingPlayers.map((player) => {
+        const before = players.find((it) => it.id === player.id)?.name ?? "?";
+        return before === player.name ? player.name : `${before} → ${player.name}`;
+      });
   const rulesDiffer = preview.defaultRules !== null && JSON.stringify(preview.defaultRules) !== JSON.stringify(settings.defaultRules);
+  const canImport = hasAnythingToImport(preview, { renames: !linked });
 
   const apply = async () => {
     setBusy(true);
-    const plan = importPlan(preview, { takeNames, takeRules: takeRules && rulesDiffer });
+    const plan = importPlan(preview, { takeNames: takeNames && !linked, takeRules: takeRules && rulesDiffer });
     await store.importData(plan.players, plan.evenings);
     const rules = plan.defaultRules;
     if (rules !== null) await store.updateSettings((it) => ({ ...it, defaultRules: rules }));
@@ -38,7 +48,7 @@ function ImportDialog({ preview, onClose }: { preview: ImportPreview; onClose: (
       title={readable ? "Sicherung einlesen?" : "Sicherung nicht lesbar"}
       onClose={() => onClose(null)}
       actions={
-        readable && hasAnythingToImport(preview) ? (
+        canImport ? (
           <>
             <button type="button" class="text-button" onClick={() => onClose(null)}>
               Abbrechen
@@ -60,6 +70,9 @@ function ImportDialog({ preview, onClose }: { preview: ImportPreview; onClose: (
           {preview.appVersion !== "" ? ` (Version ${preview.appVersion})` : ""}
         </p>
       ) : null}
+      {readable && linked ? (
+        <p class="error-text">Dieses Gerät gehört zu einer gemeinsamen Runde. Was du einliest, erscheint bei allen.</p>
+      ) : null}
       {importSummary(preview).map((line, index) => (
         <p key={index}>{line}</p>
       ))}
@@ -75,7 +88,7 @@ function ImportDialog({ preview, onClose }: { preview: ImportPreview; onClose: (
           <span>Regeln für neue Abende aus der Sicherung übernehmen („{preview.defaultRules?.name}“)</span>
         </label>
       ) : null}
-      {readable && !hasAnythingToImport(preview) ? <p>Alles aus dieser Sicherung ist schon da.</p> : null}
+      {readable && !canImport ? <p>Alles aus dieser Sicherung ist schon da.</p> : null}
     </Dialog>
   );
 }
@@ -83,6 +96,8 @@ function ImportDialog({ preview, onClose }: { preview: ImportPreview; onClose: (
 export function SettingsScreen() {
   const { store, router, platform, backup, version } = useServices();
   const { settings, players, evenings } = useAppState();
+  // Mit verbundener Runde liegen die Daten nicht mehr nur auf diesem Gerät; die Hinweise sagen es dann.
+  const linked = useRoundState().link !== null;
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -135,12 +150,21 @@ export function SettingsScreen() {
         <button type="button" class="button full-width spaced-top" onClick={() => router.open({ name: "rules", eveningId: null })}>
           Regeln für neue Abende
         </button>
+        <RoundRow />
 
         <SectionHeading>Sicherung</SectionHeading>
-        <Hint>
-          Alle Daten liegen nur in diesem Browser auf diesem Gerät. Bitte ab und zu eine Sicherung speichern, zum Beispiel
-          in „Dateien“ oder per Mail an dich selbst. Die Datei passt auch zur Android-App.
-        </Hint>
+        {linked ? (
+          <Hint>
+            Die Daten liegen in diesem Browser auf diesem Gerät und, solange die gemeinsame Runde verbunden ist, auch auf
+            ihrem Server. Eine Sicherung als Datei schadet trotzdem nicht, zum Beispiel in „Dateien“ oder per Mail an dich
+            selbst. Die Datei passt auch zur Android-App.
+          </Hint>
+        ) : (
+          <Hint>
+            Alle Daten liegen nur in diesem Browser auf diesem Gerät. Bitte ab und zu eine Sicherung speichern, zum Beispiel
+            in „Dateien“ oder per Mail an dich selbst. Die Datei passt auch zur Android-App.
+          </Hint>
+        )}
         <div class="row">
           <button type="button" class="button main" onClick={() => void saveBackup()}>
             Sicherung speichern
@@ -171,11 +195,19 @@ export function SettingsScreen() {
 
         <SectionHeading>Über die App</SectionHeading>
         <Hint>Schafkopf Tracker {version} · Web-App für iPhone und Browser · freie Software (CC0 1.0)</Hint>
-        <Hint>Es gibt keinen Server: Nichts verlässt dieses Gerät, außer du gibst eine Sicherung selbst weiter.</Hint>
+        {linked ? (
+          <Hint>
+            Mit der gemeinsamen Runde liegen Namen, Abende und Beträge auf einem Server in Frankfurt (Supabase). Sonst verlässt
+            nichts dieses Gerät, außer du gibst eine Sicherung selbst weiter.
+          </Hint>
+        ) : (
+          <Hint>Es gibt keinen Server: Nichts verlässt dieses Gerät, außer du gibst eine Sicherung selbst weiter.</Hint>
+        )}
       </main>
       {preview ? (
         <ImportDialog
           preview={preview}
+          linked={linked}
           onClose={(result) => {
             setPreview(null);
             if (result !== null) setMessage(result);

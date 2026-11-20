@@ -25,7 +25,10 @@ import io.github.q0ochen.schafkopf.app.ui.common.LinkRow
 import io.github.q0ochen.schafkopf.app.ui.common.SectionHeading
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
 import io.github.q0ochen.schafkopf.app.ui.common.SwitchRow
+import io.github.q0ochen.schafkopf.app.round.RoundCoordinator
+import io.github.q0ochen.schafkopf.app.ui.round.roundStatus
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
 import io.github.q0ochen.schafkopf.app.ui.navigation.Screen
 import io.github.q0ochen.schafkopf.domain.model.AppSettings
@@ -49,6 +52,7 @@ class SettingsViewModel(private val settings: SettingsRepository) : ViewModel() 
 fun SettingsScreen(navigator: Navigator) {
     val viewModel: SettingsViewModel = koinViewModel()
     val settings by viewModel.state.collectAsStateWithLifecycle()
+    val round by koinInject<RoundCoordinator>().state.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = { SubScreenTopBar(title = stringResource(R.string.settings_title), onBack = { navigator.back() }) },
@@ -84,6 +88,22 @@ fun SettingsScreen(navigator: Navigator) {
             )
 
             HorizontalDivider(modifier = Modifier.padding(top = 16.dp))
+            // Mit verbundener Runde stehen hier wie auf der Start-Seite ihr Name und der Stand des Abgleichs.
+            val linkedRound = round.link
+            LinkRow(
+                title = if (linkedRound == null) {
+                    stringResource(R.string.round_title)
+                } else {
+                    stringResource(R.string.round_entry_linked, linkedRound.roundName)
+                },
+                subtitle = if (linkedRound == null) {
+                    stringResource(R.string.round_entry_hint)
+                } else {
+                    roundStatus(round, LocalContext.current.resources).text
+                },
+                onClick = { navigator.open(Screen.Round) },
+            )
+            HorizontalDivider()
             LinkRow(stringResource(R.string.settings_rules), onClick = { navigator.open(Screen.Rules(null)) })
             HorizontalDivider()
             LinkRow(

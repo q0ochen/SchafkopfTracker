@@ -71,3 +71,30 @@ export function insertAt(evening: Evening, index: number, entry: EveningEntry): 
     entries: [...evening.entries.slice(0, position), entry, ...evening.entries.slice(position)],
   };
 }
+
+/**
+ * Ob der Spieler in diesem Abend vorkommt: am Tisch, als Geber oder in irgendeinem Eintrag, auch in beschädigten
+ * Daten, in denen ein Eintrag jemanden nennt, der nicht am Tisch sitzt (Kotlin: `Evening.involves`). Solche Spieler
+ * dürfen nicht gelöscht werden, sonst verlöre der Abend seine Namen und ließe sich nicht mehr sichern und einlesen.
+ */
+export function involves(evening: Evening, player: PlayerId): boolean {
+  if (evening.seating.includes(player) || evening.firstDealer === player) return true;
+  return evening.entries.some((entry) => {
+    switch (entry.kind) {
+      case "game":
+        return (
+          entry.declarer === player ||
+          entry.partner === player ||
+          entry.klopfer.includes(player) ||
+          entry.kontraBy === player ||
+          entry.retourBy === player
+        );
+      case "bock":
+        return entry.player === player;
+      case "manual":
+        return entry.amounts.has(player);
+      case "thrown_in":
+        return false;
+    }
+  });
+}

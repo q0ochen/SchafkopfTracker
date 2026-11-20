@@ -1,0 +1,212 @@
+# Prüft das Supabase-Backend der gemeinsamen Runde bei jeder Änderung:
+# - „Datenbank“: alle Migrationen auf einer frischen lokalen Datenbank und die pgTAP-Tests (Schema und Rechte, Row
+#   Level Security, jede Funktion mit jedem Fehlercode und jeder Obergrenze, die Zählung über rev, Konto löschen).
+# - „Anbindung“: die Anbindung der Android-App (data/…/round) und der Web-App (web/src/round/supabase) gegen das echte
+#   lokale Supabase – Anmeldung erneuern und beenden, jede Funktion über die Datenschnittstelle, seitenweises Lesen,
+#   der ganze Abgleich mit zwei Geräten.
+# Es wird nichts bereitgestellt – dafür gibt es den manuellen Workflow „Supabase Deploy“.
+name: Supabase
+
+on:
+  push:
+    paths:
+      - "supabase/**"
+      - "data/**"
+      - "domain/**"
+      - "web/src/core/**"
+      - "web/src/round/**"
+      - "web/package.json"
+      - "web/package-lock.json"
+      - "gradle/**"
+      - "tools/jvm-build.sh"
+      - ".github/workflows/supabase.yml"
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "data/**"
+      - "domain/**"
+      - "web/src/core/**"
+      - "web/src/round/**"
+      - "web/package.json"
+      - "web/package-lock.json"
+      - "gradle/**"
+      - "tools/jvm-build.sh"
+      - ".github/workflows/supabase.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  datenbank:
+    name: Datenbank (Migrationen und pgTAP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Feste CLI-Version (dieselbe wie im Schwesterprojekt DrinkWithMe: Release v2.122.1, Kanal „v2.stable“).
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.1
+
+      # Docker ist auf den GitHub-Runnern vorhanden. Für die Tests werden nur Datenbank, Auth (legt das
+      # Schema auth an), PostgREST und Kong gebraucht; alles andere bleibt aus, damit der Start schneller geht.
+      # Die Google-Zugangsdaten aus config.toml sind hier nicht gesetzt; die CLI warnt nur.
+      - name: Lokales Supabase starten
+        run: >-
+          supabase start
+          -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      - name: Datenbank neu aufsetzen (alle Migrationen auf leerer Datenbank)
+        run: supabase db reset
+
+      # Läuft über das ganze Verzeichnis supabase/tests. Die Datei lokal/supabase-attrappe.sql (nur für die
+      # Prüfung ohne Docker) meldet sich dabei selbst als übersprungen und ändert nichts.
+      - name: pgTAP-Tests (supabase test db)
+        run: |
+          set -o pipefail
+          supabase test db 2>&1 | tee pgtap.log
+
+      # „Alles grün“ genügt nicht: Es zählt auch, dass wirklich alle Tests gelaufen sind.
+      - name: Zahl der Tests prüfen
+        run: |
+          zeile="$(grep -E '^Files=[0-9]+, Tests=[0-9]+' pgtap.log | tail -n 1)"
+          tests="$(printf '%s' "$zeile" | sed -E 's/^Files=[0-9]+, Tests=([0-9]+).*/\1/')"
+          mindestens=556
+          echo "pgTAP: ${tests:-0} Tests (mindestens $mindestens erwartet)"
+          if [ -z "$tests" ] || [ "$tests" -lt "$mindestens" ]; then
+            echo "::error title=Zu wenige pgTAP-Tests::Gelaufen sind ${tests:-0} Tests, erwartet werden mindestens $mindestens. Wurde eine Testdatei übersprungen oder gelöscht?"
+            exit 1
+          fi
+
+      - name: Datenbank-Protokoll anzeigen (nur bei Fehlern)
+        if: failure()
+        run: docker logs supabase_db_schafkopftracker 2>&1 | tail -n 200
+
+      - name: Lokales Supabase stoppen
+        if: always()
+        run: supabase stop --no-backup
+
+  anbindung:
+    name: Anbindung der Apps gegen ein echtes Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Erfundene Zugangsdaten für Google, damit der Anmelde-Server die Adresse der Anmeldung annimmt und zu Google
+      # weiterleitet. Angemeldet wird damit niemand.
+      SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: probe.apps.googleusercontent.com
+      SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET: nur-eine-probe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.1
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Abhängigkeiten der Web-App
+        working-directory: web
+        run: npm ci
+
+      # Nur in dieser Probe und nur auf diesem Rechner: Testkonten melden sich mit E-Mail und Passwort an, weil sich
+      # die Anmeldung mit Google nicht automatisch durchspielen lässt. Im echten Projekt bleibt E-Mail ausgeschaltet.
+      - name: Anmeldung mit Passwort für Testkonten einschalten (nur in dieser Probe)
+        run: |
+          sed -i '/^\[auth\.email\]/,/^\[auth\.sms\]/ s/^enable_signup = false/enable_signup = true/' supabase/config.toml
+          sed -n '/^\[auth\.email\]/,/^\[auth\.sms\]/p' supabase/config.toml | grep -q '^enable_signup = true$'
+
+      - name: Lokales Supabase starten
+        run: >-
+          supabase start
+          -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      # Die Schlüssel des lokalen Stacks sind die bekannten Vorgaben der Supabase CLI und gelten nur auf diesem
+      # Rechner. Ausgegeben werden trotzdem nur ihre Namen.
+      - name: Adresse und Schlüssel des lokalen Stacks merken
+        run: |
+          supabase status -o env 2>/dev/null | grep -E '^[A-Z0-9_]+=' > "$RUNNER_TEMP/status.env"
+          echo "Angaben des lokalen Stacks: $(cut -d= -f1 "$RUNNER_TEMP/status.env" | tr '\n' ' ')"
+          set -a
+          . "$RUNNER_TEMP/status.env"
+          set +a
+          adresse="${API_URL:-}"
+          schluessel="${PUBLISHABLE_KEY:-${ANON_KEY:-}}"
+          verwaltung="${SERVICE_ROLE_KEY:-${SECRET_KEY:-}}"
+          if [ -z "$adresse" ] || [ -z "$schluessel" ] || [ -z "$verwaltung" ]; then
+            echo "::error title=Lokales Supabase::Adresse oder Schlüssel des lokalen Stacks fehlen in „supabase status“."
+            exit 1
+          fi
+          echo "::add-mask::$verwaltung"
+          {
+            echo "SKT_LIVE_URL=$adresse"
+            echo "SKT_LIVE_KEY=$schluessel"
+            echo "SKT_LIVE_ADMIN_KEY=$verwaltung"
+          } >> "$GITHUB_ENV"
+
+      # Nur die beiden reinen Kotlin-Module, ohne Android-SDK (tools/jvm-build.sh).
+      - name: Anbindung der Android-App prüfen (SupabaseLiveTest)
+        run: tools/jvm-build.sh :data:test --tests '*SupabaseLiveTest' --console=plain
+
+      # Läuft auch, wenn die Android-Probe scheitert: Beide Ergebnisse sind nützlich.
+      - name: Anbindung der Web-App prüfen (supabaseLive.test.ts)
+        if: always()
+        working-directory: web
+        run: npm run test:live -- --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/web-live.xml"
+
+      # „Alles grün“ genügt nicht: Ohne die Adresse des Stacks ließe Gradle die Probe stillschweigend aus.
+      - name: Zahl der Tests prüfen und Fehler anzeigen
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, os, sys, xml.etree.ElementTree as ET
+          # Je Probe: Berichtsdateien (JUnit-XML) und wie viele Tests mindestens gelaufen sein müssen.
+          probes = {
+              "Android-App": (glob.glob("data/build/test-results/test/TEST-*SupabaseLiveTest.xml"), 9),
+              "Web-App": (glob.glob(os.path.join(os.environ["RUNNER_TEMP"], "web-live.xml")), 9),
+          }
+          ok = True
+          for label, (files, least) in probes.items():
+              ran = failed = 0
+              for file in files:
+                  for case in ET.parse(file).getroot().iter("testcase"):
+                      problems = list(case.findall("failure")) + list(case.findall("error"))
+                      if case.find("skipped") is not None:
+                          continue
+                      ran += 1
+                      if problems:
+                          failed += 1
+                          print(f"--- {label}: {case.get('name')}")
+                          for problem in problems:
+                              print("\n".join((problem.text or problem.get("message") or "").splitlines()[:25]))
+              print(f"{label}: {ran} Tests gelaufen, {failed} fehlgeschlagen (mindestens {least} erwartet)")
+              ok = ok and ran >= least and failed == 0
+          sys.exit(0 if ok else "::error::Die Probe gegen das echte Supabase ist nicht vollständig gelaufen oder fehlgeschlagen.")
+          PY
+
+      - name: Protokolle der Dienste anzeigen (nur bei Fehlern)
+        if: failure()
+        run: |
+          for dienst in auth rest kong; do
+            echo "=== $dienst"
+            docker logs "supabase_${dienst}_schafkopftracker" 2>&1 | tail -n 80 || true
+          done
+
+      - name: Lokales Supabase stoppen
+        if: always()
+        run: supabase stop --no-backup

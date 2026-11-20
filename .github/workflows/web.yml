@@ -30,6 +30,9 @@ jobs:
   build:
     name: Prüfen, testen und bauen
     runs-on: ubuntu-latest
+    # Ein ganzer Lauf dauert sonst 3 bis 4 Minuten. Am 20.11.2026 brauchte das Herunterladen von WebKit mehr als eine
+    # halbe Stunde; ohne Grenze liefe so ein Lauf bis zu sechs Stunden.
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: web
@@ -58,14 +61,24 @@ jobs:
       - name: Unit-Tests (Rechenkern und Dateiformat inkl. Golden-Tests gegen den Kotlin-Code, Speicher, Oberflächenlogik)
         run: npm test
 
+      # Gemeinsame Runde: Adresse und öffentlicher Schlüssel des Servers (Supabase) kommen aus den Variablen des
+      # Repositorys (Settings → Secrets and variables → Actions → Variables; beides ist kein Geheimnis). Fehlen sie,
+      # entsteht die App ohne gemeinsame Runde („Der Server ist noch nicht eingerichtet.“). Die Tests hängen nicht
+      # davon ab: Sie bauen sich die App selbst, einmal ohne und einmal mit einem nachgestellten Server.
       - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
 
       - name: Oberflächen-Tests (Playwright gegen vite preview, iPhone-Größe und Desktop)
         run: npm run test:e2e
 
       # Zusätzlich mit der Safari-Engine, so nah am iPhone wie ohne Gerät möglich.
+      # Lädt rund 180 Pakete über apt. Nicht mittendrin abbrechen und neu versuchen: apt liefe im Hintergrund weiter und
+      # hielte die Sperre fest (so geschehen am 20.11.2026). Stattdessen eine großzügige Grenze für den ganzen Schritt.
       - name: WebKit für Playwright
+        timeout-minutes: 20
         run: npx playwright install --with-deps webkit
 
       - name: Oberflächen-Tests mit WebKit (Safari-Engine, iPhone-Größe)

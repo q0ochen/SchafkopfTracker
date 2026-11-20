@@ -7,9 +7,11 @@ import io.github.q0ochen.schafkopf.app.backup.AutoBackupError
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupScheduler
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
 import io.github.q0ochen.schafkopf.app.di.appModule
+import io.github.q0ochen.schafkopf.app.round.RoundCoordinator
 import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
+import io.github.q0ochen.schafkopf.domain.round.RoundStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,8 +35,9 @@ class SchafkopfApp : Application() {
         }
         // Die Platzhalter der festen Runde nur, wenn die alten Daten drin sind: Sonst belegten sie die Kennungen
         // spieler-1 bis spieler-4, und die echten Namen kämen beim nächsten Versuch nicht mehr an.
-        if (importLegacyFiles()) applicationScope.launch { ensureDefaultPlayers(get()) }
+        if (importLegacyFiles()) applicationScope.launch { ensureDefaultPlayers(get(), get()) }
         startAutoBackup()
+        get<RoundCoordinator>().start()
     }
 
     /**
@@ -76,8 +79,13 @@ class SchafkopfApp : Application() {
             Player(PlayerId("spieler-${index + 1}"), "Spieler ${index + 1}", colorIndex = index)
         }
 
-        /** Legt die feste Runde an, solange es noch keinen einzigen Spieler gibt. */
-        suspend fun ensureDefaultPlayers(players: PlayerRepository) {
+        /**
+         * Legt die feste Runde an, solange es noch keinen einzigen Spieler gibt. Nicht, wenn das Gerät mit einer
+         * gemeinsamen Runde verbunden ist: Deren Spieler kommen vom Server, und Platzhalter gingen sonst als neue
+         * Spieler in die Runde hoch.
+         */
+        suspend fun ensureDefaultPlayers(players: PlayerRepository, round: RoundStore) {
+            if (round.link.first() != null) return
             if (players.players.first().isEmpty()) DEFAULT_PLAYERS.forEach { players.save(it) }
         }
     }

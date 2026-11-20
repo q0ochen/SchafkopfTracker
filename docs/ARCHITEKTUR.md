@@ -305,3 +305,386 @@ Home-Bildschirm“), braucht keinen Server und wird von `main` aus auf GitHub Pa
 | Oberfläche | Logik der Bildschirme als reine Funktionen nach dem Vorbild der ViewModels (`web/src/ui/gameForm.ts`, `newEvening.ts`, `board.ts`), Oberflächen-Tests mit Playwright in iPhone-Größe und Prüfung mit axe. Spielerfarben aus einer auf Farbfehlsichtigkeit geprüften Palette, als Punkt neben dem Namen. |
 | Leitplanken | Dieselben wie oben, sinngemäß: nur freie Bibliotheken (`preact`, `idb`), keine Analyse, Content-Security-Policy ohne fremde Quellen, Start ohne Netz über den Service Worker. Die KI-Zusammenfassung gibt es in der Web-App nicht. |
 
+
+## 8. Gemeinsame Runde (Abgleich über Supabase)
+
+Verbindlicher Vertrag für Server (`supabase/`), Kotlin (`:domain`, `:data`, `:database`, `:app`) und Web-App.
+**Namen, Tabellen, Spalten, Funktionen und Fehlercodes sind genau so zu verwenden.** Vorbild für Server und
+Anmeldung ist das Schwesterprojekt DrinkWithMe (dort `docs/ARCHITEKTUR.md`, Abschnitt 2 bis 4).
+
+### 8.1 Grundsätze
+
+| Regel | Folge |
+|---|---|
+| Lokal zuerst | Jedes Gerät hält alle Abende und Spieler selbst und funktioniert ohne Netz und ohne Server. Abgeglichen wird im Hintergrund. Ein pausiertes oder unerreichbares Supabase-Projekt hält einen Abend nie auf. |
+| Server ist die gemeinsame Fassung | Je Abend liegt auf dem Server **ein** JSON-Dokument mit Versionsnummer. Geschrieben wird nur mit „erwartete Version“ (Vergleichen und Ersetzen). Wer zu spät kommt, führt zusammen (8.5) und versucht es erneut. Alle Geräte übernehmen am Ende die Fassung des Servers. |
+| Nur Tatsachen | Hochgeladen werden Abende im Dateiformat der Sicherung (`StorageCodec.encodeEvening`), Spieler und das Regelwerk für neue Abende. Stand, Geber, Bock-Zähler und Statistik rechnet jedes Gerät selbst. |
+| Anmeldung | Nur Google über Supabase Auth (PKCE im Browser, nie WebView). Zustimmungsbildschirm bei Google „In Produktion“, Bereiche nur `openid email profile`. Google fragt bei jeder Anmeldung, welches Konto (`prompt=select_account`), damit sich ein falsch gewähltes Konto korrigieren lässt. |
+| Eine Runde je Gerät | Ein Gerät hängt an höchstens einer Runde. Wer eine Runde anlegt, bringt die Daten seines Geräts mit; wer beitritt, übernimmt die Daten der Runde (die eigenen werden nach Rückfrage ersetzt). |
+| Eigener Name | Jedes Mitglied legt seinen Namen selbst fest („Das bin ich“). Danach ist er fest; andere können ihn nicht ändern. Spieler ohne Konto (Gäste) kann jedes Mitglied anlegen und umbenennen. |
+| Jeder darf eintragen | Es gibt keine Sperre. Die App zeigt nur, wer gibt („Du gibst – trag dieses Spiel ein“), und weist auf vermutlich doppelt eingetragene Spiele hin. |
+| Kein Realtime | Im Vordergrund fragt die App alle 4 Sekunden die Versionsnummer der Runde ab (eine kleine Anfrage). |
+| Freie Bausteine | Android: OkHttp und `androidx.browser`, keine Supabase-Bibliothek. Web: `@supabase/supabase-js`. |
+
+Öffentliche Konfiguration (kein Geheimnis): Projekt-URL und Publishable Key. Android: `app/supabase.properties`
+(`supabaseUrl`, `supabasePublishableKey`) → `BuildConfig.SUPABASE_URL`, `BuildConfig.SUPABASE_PUBLISHABLE_KEY`. Web:
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (im Workflow aus den GitHub-Variablen `SUPABASE_URL` und
+`SUPABASE_PUBLISHABLE_KEY`). Fehlt die Konfiguration, zeigt „Gemeinsame Runde“ nur „Der Server ist noch nicht
+eingerichtet“; alles andere funktioniert.
+
+Adressen: Rückkehr aus der Anmeldung Android `schafkopftracker://auth-callback`, Web die Start-Adresse der Web-App
+(`https://q0ochen.github.io/SchafkopfTracker/`). Einladung: `<Web-App>#/einladung/<token>`; die Seite bietet „In der
+Android-App öffnen“ (`schafkopftracker://einladung/<token>`) und „Hier beitreten“. In beiden Apps lässt sich der Link
+oder der bloße Code auch einfügen (`InviteLinks.tokenFrom(text)`: die erste Folge aus genau 32 Zeichen `0-9a-f`
+im Text, also beide Link-Formen und der bloße Code, auch mitten in einer Nachricht; sonst `null`).
+
+### 8.2 Tabellen (Schema `public`, RLS auf jeder Tabelle, Schreiben nur über die Funktionen aus 8.3)
+
+```sql
+rounds(id uuid PK default gen_random_uuid(), name text 1..40, created_by uuid null → auth.users ON DELETE SET NULL,
+       created_at timestamptz default now(), rev bigint not null default 0, rules jsonb null)
+  -- rev: zählt jede Änderung der Runde (Abende, Spieler, Regeln, Mitglieder). rules: Regelwerk für neue Abende
+  -- im Format von RuleSetJson.encode.
+round_players(round_id uuid → rounds ON DELETE CASCADE, id text 1..64, name text 1..24, color_index int 0..31,
+       archived boolean, position int, owner uuid null → auth.users ON DELETE SET NULL, name_locked boolean,
+       deleted boolean, rev bigint, PK (round_id, id))
+  -- owner: das Mitglied, dem der Spieler gehört (null = Gast). Namen sind je Runde eindeutig, ohne Groß/Klein
+  -- (eindeutiger Index auf (round_id, lower(name)) für nicht gelöschte Zeilen). position: Reihenfolge des Anlegens.
+round_members(round_id uuid → rounds ON DELETE CASCADE, user_id uuid → auth.users ON DELETE CASCADE,
+       player_id text null, joined_at timestamptz default now(), PK (round_id, user_id),
+       UNIQUE (round_id, player_id), FK (round_id, player_id) → round_players)
+round_evenings(round_id uuid → rounds ON DELETE CASCADE, id text 1..64, doc jsonb, version int, deleted boolean,
+       rev bigint, updated_at timestamptz, updated_by uuid null → auth.users ON DELETE SET NULL, PK (round_id, id))
+round_invites(token_hash text PK, round_id uuid → rounds ON DELETE CASCADE, created_by uuid → auth.users ON DELETE
+       CASCADE, created_at timestamptz default now(), expires_at timestamptz)
+  -- token_hash = hex(sha256(token)); der Token selbst wird nie gespeichert. Keine Zugriffsregel: nur über Funktionen.
+```
+
+Lesen (RLS `SELECT` für `authenticated`): nur Mitglieder der jeweiligen Runde (`is_round_member(round_id)`,
+`SECURITY DEFINER`). `anon` darf nichts. Direkte `INSERT`/`UPDATE`/`DELETE` gibt es für niemanden.
+
+Jede schreibende Funktion erhöht zuerst `rounds.rev` (`UPDATE rounds SET rev = rev + 1 … RETURNING rev`; die
+Zeilensperre reiht alle Schreiber einer Runde hintereinander) und stempelt die geänderten Zeilen mit diesem Wert.
+Dadurch gilt: Wer Zeilen mit `rev > n` liest, hat danach alles bis zum größten gelesenen `rev` vollständig.
+
+Grenzen: höchstens 5 Runden je Konto, 12 Mitglieder, 40 nicht gelöschte Spieler und 3000 Abende je Runde, ein
+Abend-Dokument höchstens 300 000 Bytes, höchstens 20 gültige Einladungen je Runde.
+
+### 8.3 Funktionen (`SECURITY DEFINER`, `search_path = ''`, nur für `authenticated`)
+
+Fehler: `RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = '<code>'` (PostgREST antwortet mit 400 und
+`{"code":"P0001","message":"<code>"}`). Codes: `not_member`, `invalid_name`, `name_taken`, `name_locked`,
+`already_claimed`, `player_taken`, `player_owned`, `invalid_invite`, `limit_reached`, `too_large`, `invalid_doc`.
+Wer kein Mitglied der genannten Runde ist, bekommt immer `not_member`.
+
+| Funktion | Verhalten |
+|---|---|
+| `create_round(p_name text) → uuid` | Legt die Runde an (Name beschnitten, 1 bis 40 Zeichen, sonst `invalid_name`) und macht den Aufrufer zum Mitglied. Die neue Runde hat `rev = 1`. |
+| `my_rounds() → table(id uuid, name text, rev bigint, member_count int, my_player_id text, is_creator boolean)` | Alle Runden des Aufrufers, älteste Mitgliedschaft zuerst. |
+| `create_invite(p_round uuid) → text` | Neuer Token (32 Zeichen `0-9a-f`), gültig 14 Tage; abgelaufene Einladungen der Runde werden dabei gelöscht. |
+| `invite_info(p_token text) → table(round_id uuid, round_name text, member_count int, already_member boolean)` | Unbekannt oder abgelaufen → `invalid_invite`. |
+| `join_round(p_token text) → uuid` | Macht den Aufrufer zum Mitglied (schon Mitglied: nichts weiter). Gehört ihm in der Runde bereits ein Spieler (`owner`), wird er wieder verknüpft. |
+| `leave_round(p_round uuid) → void` | Entfernt die Mitgliedschaft; der eigene Spieler bleibt mit `owner`. Verlässt das letzte Mitglied die Runde, wird sie gelöscht. |
+| `claim_player(p_round uuid, p_player text, p_name text, p_color_index int) → void` | „Das bin ich“: Hat der Aufrufer schon einen anderen Spieler → `already_claimed` (derselbe Spieler noch einmal ist kein Fehler). Gibt es `p_player` (nicht gelöscht): gehört er einem anderen → `player_taken`, sonst wird er übernommen. Gibt es ihn nicht (oder nur gelöscht), wird er angelegt. Gesetzt werden `owner`, `name = p_name` (1 bis 24 Zeichen nach Beschneiden, sonst `invalid_name`; vergeben → `name_taken`), `name_locked = true`, die Farbe (`p_color_index mod 32`) und `round_members.player_id`. Gehörte der Spieler dem Aufrufer schon, bleibt der Name. |
+| `save_player(p_round uuid, p_id text, p_name text, p_color_index int, p_archived boolean, p_deleted boolean) → bigint` | Gäste anlegen und ändern (eine gelöschte Zeile lebt als Gast wieder auf); für alle Spieler Farbe (`mod 32`) und „archiviert“. Namensänderung bei `name_locked` → `name_locked` (Ausnahme: der Ersteller der Runde darf korrigieren). `p_deleted`: nur Gäste (`owner` null), sonst `player_owned`; die Zeile bleibt mit `deleted = true`; gibt es den Spieler nicht (mehr), passiert nichts und `rev` bleibt. Kennung 1 bis 64 Zeichen, sonst `invalid_doc`. Liefert das (neue) `rev`. |
+| `save_rules(p_round uuid, p_rules jsonb) → bigint` | Setzt `rounds.rules` (muss ein JSON-Objekt sein, sonst `invalid_doc`). |
+| `save_evening(p_round uuid, p_id text, p_doc jsonb, p_expected_version int, p_deleted boolean) → table(version int, rev bigint)` | Gibt es den Abend noch nicht: `p_expected_version` muss 0 sein, die neue Version ist 1. Sonst muss `version = p_expected_version` gelten; dann `doc`, `deleted`, `version + 1`. Passt die Version nicht, kommt **kein Fehler**, sondern eine leere Ergebnismenge (der Aufrufer liest den Abend neu), und `rev` bleibt. `p_doc` muss ein JSON-Objekt mit `"id" = p_id` sein (`invalid_doc`); zu groß → `too_large`, mehr als 3000 Abende → `limit_reached`. |
+
+Lesen über PostgREST (`apikey` = Publishable Key, `Authorization: Bearer <Access-Token>`):
+
+- `rounds?id=eq.<runde>&select=id,name,rev,rules,created_by` (leer: Runde gelöscht oder kein Mitglied mehr)
+- `round_members?round_id=eq.<runde>&select=user_id,player_id,joined_at&order=joined_at.asc`
+- `round_players?round_id=eq.<runde>&rev=gt.<n>&select=id,name,color_index,archived,position,owner,name_locked,deleted,rev&order=rev.asc`
+- `round_evenings?round_id=eq.<runde>&rev=gt.<n>&select=id,doc,version,deleted,rev&order=rev.asc&limit=100`
+  (seitenweise: solange 100 Zeilen kommen, mit dem größten gelesenen `rev` weiter) und einzeln mit `&id=eq.<abend>`.
+
+### 8.4 Gerätezustand (`RoundStore`: Room bzw. IndexedDB)
+
+- `RoundLink(roundId, roundName, userId, playerId?, isCreator, cursor, rulesBase?, members, unreadable)`: die
+  verbundene Runde; `cursor` ist das größte verarbeitete `rev`, `rulesBase` das zuletzt abgeglichene Regelwerk
+  (JSON-Text), `members` die Mitglieder (`userId`, `playerId?`), `unreadable` die Kennungen der Abende des Servers,
+  die dieses Gerät nicht lesen oder nicht speichern konnte (fehlt die Angabe in einem gespeicherten Stand: keine).
+- `EveningBase(eveningId, version, evening)`: je Abend die zuletzt gesehene Fassung des Servers.
+- Je Spieler der letzte Stand des Servers (`RemotePlayer`: `id`, `name`, `colorIndex`, `archived`, `position`,
+  `owner?`, `nameLocked`, `rev`).
+
+Ein Abend ist „geändert“, wenn er von seiner Basis abweicht oder keine hat; „gelöscht“, wenn es die Basis noch gibt,
+den Abend aber nicht mehr. Für Spieler gilt dasselbe. Die Sitzung (Refresh-Token) liegt getrennt: in Android
+verschlüsselt (Android Keystore), in der Web-App im `localStorage`. Bekannte Grenze der Web-App: Alle Seiten unter
+`https://q0ochen.github.io/` (auch die Web-App von Drink With Me) sind für den Browser dieselbe Herkunft und könnten
+Sitzung und Daten der anderen lesen; abhilft nur eine eigene Adresse (eigene Domain oder eigenes Konto für GitHub
+Pages). Auf dem iPhone hat jede App vom Home-Bildschirm ohnehin ihren eigenen Speicher.
+
+Zuletzt erzeugte Einladung je Runde (Kennung der Runde, Code, Zeitpunkt): Sie wird wiederverwendet, solange sie
+jünger als 13 Tage ist (gültig sind 14), damit wiederholtes „Einladen“ nicht an die Grenze von 20 gültigen
+Einladungen je Runde stößt.
+
+### 8.5 Zusammenführen (`EveningMerge.merge3(base, local, remote)`, reine Funktion, Port in `web/src/core/round`)
+
+Kopf (`startedAt`, `finishedAt`, `location`, `seating`, `firstDealer`, `rules`), je Feld: ohne Basis das Feld des
+Servers; ist das lokale Feld gleich der Basis, das des Servers; sonst das lokale (eine lokale Änderung gewinnt).
+
+Einträge, mit `B`, `L`, `R` als Einträge von Basis, lokal und Server nach Kennung; „gleich“ heißt: alle Felder gleich.
+
+1. Für jeden Eintrag `r` des Servers in dessen Reihenfolge, `l = L[r.id]`, `b = B[r.id]`:
+   - `l` vorhanden: `l == r` → `l`; `b` vorhanden und `l == b` → `r`; sonst `l`.
+   - `l` fehlt: `b` vorhanden und `r == b` → entfällt (lokal gelöscht); sonst `r` (neu vom Server, oder die Änderung
+     des Servers gewinnt gegen das lokale Löschen).
+2. Danach jeder lokale Eintrag `l` in lokaler Reihenfolge, den der Server nicht hat, `b = B[l.id]`:
+   - `b` vorhanden und `l == b` → entfällt (auf dem Server gelöscht).
+   - sonst einfügen (lokal neu, oder die lokale Änderung gewinnt gegen das Löschen): hinter den letzten Eintrag des
+     Ergebnisses, der in der lokalen Liste vor `l` steht (sonst an den Anfang); von dort weiter nach hinten über alle
+     direkt folgenden Einträge, die neu vom Server sind (Kennung weder in `L` noch in `B`) und nach
+     `(recordedAt, id)` vor `l` liegen.
+
+Bei doppelten Kennungen in einer Liste (beschädigte Daten) zählt jeweils der erste Eintrag; das Ergebnis enthält
+jede Kennung höchstens einmal. Ohne Basis bleibt damit alles von beiden Seiten, bei gleicher Kennung der Eintrag von
+hier.
+
+Es gilt unter anderem: `merge3(b, l, l) == l`, `merge3(b, b, r) == r`, `merge3(b, l, b) == l` (solange die
+gemeinsamen Einträge in derselben Reihenfolge stehen; sonst gilt für sie die des Servers); nichts, was auf einer
+Seite neu ist, geht verloren; das Ergebnis erneut mit dem Server zusammengeführt ändert sich nicht
+(`merge3(b, m, r) == m` und `merge3(r, m, r) == m` für `m = merge3(b, l, r)`); ohne Konflikt ist es gleich, welches
+Gerät zuerst abgleicht, wenn jedes seine neuen Einträge mit fortlaufender Zeit aufschreibt.
+
+`DuplicateCheck.suspects(evening): Set<EntryId>`: Zwei in der Liste direkt aufeinander folgende Spiele, die bis auf
+`id`, `recordedAt` und `note` gleich sind und deren `recordedAt` höchstens 120 Sekunden auseinanderliegen; gemeldet
+wird das hintere.
+
+### 8.6 Ein Abgleich (`RoundSync.sync(quick)`, höchstens einer gleichzeitig)
+
+Ein Abgleich besteht aus höchstens zwei Durchgängen. Ein Durchgang:
+
+1. Ohne `RoundLink` → `NotLinked`. Kopf der Runde lesen. Gibt es ihn nicht, `my_rounds()` gegenprüfen: Fehlt die
+   Runde auch dort → `Detached` (Verbindung und Basen löschen, die Daten bleiben auf dem Gerät); steht sie dort →
+   `Failed`. Mit `quick` und `rev == cursor` endet der Abgleich hier mit `Unchanged` (eine Anfrage; ob auf dem
+   Gerät etwas wartet, wird dann nicht geprüft).
+2. Ist `rev` größer als `cursor`: Mitglieder, geänderte Spieler und geänderte Abende lesen (`rev > cursor`).
+   Ist `rev` kleiner als `cursor` (Server neu aufgesetzt), vorher `cursor = 0`.
+3. **Spieler vom Server:** Zeilen in der Reihenfolge `position`. Weicht eine Zeile inhaltlich (Name, Farbe,
+   „archiviert“) von der Basis ab oder gibt es keine Basis, gilt der Server (auch gegen eine Änderung von hier);
+   stimmt sie mit der Basis überein, bleibt eine Änderung von hier bestehen. Die Basis ist danach die Zeile.
+   Gelöschte Zeilen werden vorgemerkt (Schritt 7).
+4. **Spieler von hier:** Was von der Basis abweicht oder keine hat, hochladen (`save_player`). Vorher lokal in die
+   Form des Servers bringen: Name ohne Leerraum außen, Leerraum innen einfach, höchstens 24 Zeichen; Farbnummer
+   `colorIndex mod 32`. Lehnt der Server ab (`name_locked`, `name_taken`, `invalid_name`, `player_owned`,
+   `limit_reached`, `invalid_doc`): mit Basis zurück auf die Basis; ohne Basis und in keinem Abend
+   gebraucht → Spieler entfernen; ohne Basis, gebraucht und `name_taken` → umbenennen („Name 2“, „Name 3“ …,
+   auf 24 Zeichen gekürzt) und im nächsten Durchgang hochladen; sonst bleibt er und wird in dieser Sitzung nicht
+   erneut versucht. Jede Ablehnung ergibt einen Hinweis (`SyncNotice`).
+5. **Regelwerk für neue Abende:** Kann die App das Regelwerk des Servers nicht lesen, passiert nichts. Hat der
+   Server keines → das lokale hochladen. Hat er ein anderes als `rulesBase` → übernehmen (Server gewinnt). Sonst
+   ein lokal geändertes hochladen (`save_rules`). Lehnt der Server es ab (`too_large`, `invalid_doc`), wird
+   dasselbe Regelwerk in dieser Sitzung nicht erneut versucht.
+6. **Abende**, für jeden vom Server geänderten, lokal geänderten oder lokal gelöschten Abend (höchstens 3 Versuche;
+   kommt ein Abend beim Lesen mehrfach, zählt die höchste Version):
+   - Nicht mitgelesen (der Server hat noch die Basis oder kennt den Abend nicht): lokal vorhanden und geändert →
+     `save_evening` mit der Version der Basis (ohne Basis 0); lokal gelöscht → als gelöscht hochladen.
+   - Mitgelesen, nicht gelöscht: unter der Sperre des `EveningEditor` lokal durch `merge3(basis, lokal, server)`
+     ersetzen, **danach** die Basis auf die Fassung des Servers setzen, dann – weicht das Ergebnis vom Server ab –
+     hochladen mit der Version des Servers. Lokal gelöscht (Basis da, Abend weg): hat der Server noch die Version
+     der Basis → als gelöscht hochladen; sonst die Fassung des Servers wieder anlegen. Lokal unbekannt → anlegen.
+     Ist die Version des Servers kleiner als die der Basis, wird ohne Basis zusammengeführt.
+   - Mitgelesen, gelöscht: lokal unverändert oder schon weg → lokal löschen; lokal geändert → wieder hochladen
+     (`deleted = false`, Version des Servers).
+   - Leere Antwort von `save_evening` (Version passt nicht): den Abend einzeln neu lesen und wiederholen; kennt
+     der Server ihn gar nicht, die Basis löschen. Danach folgt in jedem Fall ein zweiter Durchgang.
+   - Nach jedem Erfolg ist die Basis die hochgeladene Fassung. Ein Dokument, das sich nicht lesen lässt, wird
+     übersprungen; es wird nie überschrieben. Seine Kennung merkt sich das Gerät im `RoundLink` (`unreadable`),
+     denn der Abend liegt danach hinter dem `cursor` und käme sonst nie wieder: Gemerkte Abende werden in jedem
+     Durchgang einzeln neu gelesen (`evening`), bis sie sich lesen lassen (zum Beispiel nach einem Update der App)
+     oder es sie nicht mehr gibt. Dasselbe gilt für einen Abend, den das Gerät nicht speichern kann.
+   - Lehnt der Server einen Abend ab (`too_large`, `invalid_doc`, `limit_reached`), bleibt er auf dem Gerät und wird
+     in dieser Sitzung erst wieder versucht, wenn er sich geändert hat. Die übrigen Abende laufen weiter.
+7. **Spieler löschen**, erst jetzt und nie, solange ein Abend auf dem Gerät den Spieler nennt: Vom Server als
+   gelöscht gemeldet → lokal löschen; wird er gebraucht, bleibt er, verliert die Basis und geht im nächsten
+   Durchgang als neu wieder hoch. Lokal gelöscht (Basis da, Spieler weg) → `save_player(…, p_deleted = true)`;
+   wird er inzwischen gebraucht oder lehnt der Server ab, kommt er aus der Basis zurück.
+8. `cursor`: der beim Lesen des Kopfes gesehene `rev`, erhöht um die eigenen Änderungen, solange deren `rev`
+   lückenlos anschließt (dann hat niemand dazwischen geschrieben). Schließt ein `rev` nicht an, wurde ein
+   Hochladen abgelehnt oder ist in Schritt 4 oder 7 etwas für den nächsten Durchgang entstanden, folgt der zweite
+   Durchgang. Ein eingetragenes Spiel kostet so zwei Anfragen (Kopf und `save_evening`).
+
+Ergebnis: `Synced(pulled, pushed, pending, unreadable, refused, notices)`, `Unchanged`, `NotLinked`, `Detached`, `SignedOut`
+(Sitzung ungültig), `Offline` (keine Verbindung), `Failed` (Server antwortet mit Fehler, zum Beispiel pausiert).
+`pendingCount()` zählt geänderte und gelöschte Abende und Spieler sowie ein geändertes Regelwerk. `unreadable` ist
+die Zahl der gemerkten unlesbaren Abende, `refused` die Zahl der Abende, die der Server in dieser Sitzung abgelehnt
+hat und die seitdem unverändert auf dem Gerät liegen (beide gelten also auch dann, wenn dieser Abgleich sie nicht
+angefasst hat). Was der Server abgelehnt hat (Spieler, Abende, Regelwerk), gilt nur für die Runde, die es abgelehnt
+hat: Nach dem Wechsel der Runde wird alles neu versucht.
+
+Bricht ein Abgleich mittendrin ab, ist nichts verloren: `cursor` steht dann noch auf dem alten Wert, das Gelesene
+kommt noch einmal und ändert nichts. Bekannte Grenze: Geht die Antwort auf ein Hochladen verloren und löscht ein
+anderes Gerät vor dem nächsten Abgleich einen dabei neu angelegten Eintrag, taucht dieser Eintrag einmal wieder auf
+(das Gerät kann nicht wissen, dass er schon auf dem Server war; im Zweifel bleibt ein Spiel lieber erhalten).
+
+Ausgelöst wird: beim Öffnen der App, 0,5 Sekunden nach jeder lokalen Änderung, alle 4 Sekunden im Vordergrund
+(`quick`, solange auf dem Gerät nichts wartet), bei Fehlern mit wachsendem Abstand (4, 8, 16, 32, 60 Sekunden).
+Android zusätzlich über WorkManager (mit Netz), damit Wartendes auch nach dem Schließen ankommt; Web bei `online`
+und wenn die App wieder sichtbar wird.
+
+### 8.7 Verbinden und Trennen
+
+Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disconnect`, `hasOwnData`).
+
+- **Runde anlegen:** Vorbelegte Spieler (`spieler-1` bis `spieler-4`), die noch „Spieler N“ heißen und in keinem
+  Abend vorkommen, werden lokal entfernt. `create_round`, `RoundLink` mit `cursor = 0` ohne Basen, dann Abgleich:
+  Alles Lokale geht als neu hoch. Hat das Konto schon eine eigene, noch leere Runde dieses Namens (`my_rounds`:
+  selbst angelegt, ein Mitglied, `rev = 1`), wird sie verwendet statt eine zweite anzulegen: Sie stammt von einem
+  Versuch, dessen Antwort verloren ging.
+- **Einer Runde beitreten / eine Runde des Kontos auf diesem Gerät verwenden:** Hat das Gerät Abende oder
+  umbenannte Spieler, wird nachgefragt („… werden durch die Daten der Runde ersetzt“). Dann zuerst den Kopf der
+  Runde lesen: Antwortet der Server nicht, bleibt das Gerät, wie es ist (Fehler `offline` oder `server`); gibt es
+  die Runde für dieses Konto nicht, `not_member`. Erst danach Verbindung und Basen löschen, lokale Abende und
+  Spieler löschen, `RoundLink` mit `cursor = 0`, Abgleich. (Ohne diese Reihenfolge bliebe ohne Netz ein leeres,
+  verbundenes Gerät zurück; und mit Basen sähe das Leeren aus wie Löschen.)
+- **Das bin ich:** Solange `playerId` fehlt, fragt die App nach: einen Spieler ohne Besitzer wählen oder „Ich bin
+  neu“, dann den eigenen Namen eingeben und bestätigen („lässt sich danach nicht mehr ändern“) → `claim_player`.
+- **Abmelden / Runde verlassen:** `RoundLink` und Basen löschen, die Daten bleiben als örtliche Kopie auf dem Gerät.
+  Wartende Änderungen gehen dabei verloren (Rückfrage, wenn `pendingCount() > 0`).
+- Mit verbundener Runde legt die App keine vorbelegten Spieler mehr an.
+
+### 8.8 Kotlin und Web
+
+- `:domain`, Paket `domain.round`: Modelle, `RoundApi` und `RoundStore` (Ports), `EveningMerge`, `DuplicateCheck`,
+  `InviteLinks`, `RoundSync`, `RoundConnection`, dazu `InMemoryRoundStore` und `InMemoryRoundServer` (ein Server im
+  Speicher nach 8.2 und 8.3). Tests mit mehreren nachgestellten Geräten, Funklöchern, verlorenen Antworten und
+  Zufallsläufen (`RoundSimulationTest`).
+- `:data`, Paket `data.round`: `SupabaseAuthApi` (wie DrinkWithMe `AuthApi`: `authorize`, `token?grant_type=pkce`,
+  `token?grant_type=refresh_token`, `logout?scope=local`), `SupabaseRoundApi` (PostgREST und Funktionen aus 8.3).
+- `:database`: Room-Version 2 mit `round_link`, `evening_bases`, `player_bases` (`RoomRoundStore`), Migration 1 → 2.
+- `:app`: `app.round` (Sitzung verschlüsselt über `EncryptedValues`, Rückkehr aus dem Browser in `MainActivity`
+  mit `launchMode="singleTask"`, Abgleich im Vordergrund und per WorkManager), Bildschirm „Gemeinsame Runde“
+  (`Screen.Round`), Hinweise auf Start-Bildschirm und Abend.
+- Web: `web/src/core/round` (Port von `EveningMerge`, `DuplicateCheck`, `InviteLinks`, `RoundSync` mit Golden-Tests
+  aus `WebGoldenTest`), `web/src/round` (Supabase-Zugriff, `RoundStore` in IndexedDB), Seiten `#/runde` und
+  `#/einladung/<token>`; Anmeldung mit `signInWithOAuth` (PKCE), Rückkehr auf die Start-Adresse. Weil der Browser
+  anders speichert als Room, gilt dort zusätzlich:
+  - Der Abgleich arbeitet nur mit Gespeichertem: Bevor er einen Abend liest oder ersetzt oder eine Basis setzt, ist
+    alles in IndexedDB angekommen; scheitert das Speichern, bricht er ab. Eine Basis ist so nie neuer als das Gerät.
+  - Was sich auf dem Gerät nicht lesen lässt (ein Abend, die Spielerliste, die Einstellungen), gilt nie als gelöscht
+    oder leer: Basen unlesbarer Abende bleiben unberührt; ist die Spielerliste oder sind die Einstellungen unlesbar,
+    ruht der Abgleich (Statuszeile wie bei „der Browser speichert nicht“).
+  - Höchstens ein Abgleich gleichzeitig über alle Fenster (`navigator.locks`, wo es fehlt: wie bisher je Fenster;
+    auf die Sperre wartet ein Fenster höchstens 15 Sekunden, dann fällt dieser Versuch aus);
+    vor jedem Abgleich liest er den Gerätezustand frisch aus IndexedDB; Änderungen meldet ein Fenster den anderen als
+    Ereignis (`BroadcastChannel`), damit keines mit einem veralteten Stand schreibt.
+  - Einlösen der Anmeldung mit Zeitlimit (20 Sekunden); danach gilt es als „keine Verbindung“.
+  - Scheitert eine Aktion (Anlegen, Beitreten …) am Speicher des Browsers, zeigt sie den Text der Statuszeile
+    „Speichern auf diesem Gerät gescheitert – bitte die App neu laden“. Bekannte Grenze: Bearbeitet man denselben
+    Abend gleichzeitig in zwei Fenstern desselben Geräts, kann dort eine Eingabe verloren gehen.
+
+### 8.9 Oberfläche (Android-App und Web-App gleich, Texte wörtlich)
+
+**Einstieg:** Auf dem Start-Bildschirm und in den Einstellungen eine Zeile „Gemeinsame Runde“. Ohne Runde mit dem
+Untertitel „Alle tragen vom eigenen Handy ein“, mit Runde „Runde: ‹Name›“ und der Statuszeile.
+
+**Statuszeile** (auch als Beschreibung des Wolken-Symbols in der Kopfzeile eines Abends, dort mit „Gemeinsame
+Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutreffende Zeile:
+
+| Lage | Text |
+|---|---|
+| Anmeldung abgelaufen | „Anmeldung abgelaufen – bitte neu anmelden“ |
+| Abende, die diese Version nicht lesen kann | „‹n› Abende kann diese Version nicht lesen – bitte die App aktualisieren“ (bei 1: „1 Abend kann …“) |
+| Abende, die der Server nicht annimmt | „‹n› Abende nimmt der Server nicht an“ (bei 1: „1 Abend nimmt der Server nicht an“) |
+| keine Verbindung | „Kein Netz – ‹n› Änderungen warten“ (bei 1: „… 1 Änderung wartet“, bei 0: „Kein Netz“) |
+| nur Web: der Browser speichert nicht (IndexedDB) | „Speichern auf diesem Gerät gescheitert – bitte die App neu laden“ |
+| Server antwortet mit Fehler | „Server nicht erreichbar – ‹n› Änderungen warten“ (bei 0: „Server nicht erreichbar“) |
+| es wartet etwas | „‹n› Änderungen warten“ (bei 1: „1 Änderung wartet“) |
+| sonst | „Abgeglichen“ |
+
+**Bildschirm „Gemeinsame Runde“**, je nach Lage:
+
+- *Kein Server eingerichtet:* „Der Server ist noch nicht eingerichtet.“ – „Sobald er eingerichtet ist, können alle
+  vom eigenen Handy eintragen.“
+- *Nicht angemeldet:* Überschrift „Gemeinsam eintragen“. „Alle in der Runde tragen vom eigenen Handy ein und sehen
+  denselben Stand.“ – „Namen, Abende und Beträge der Runde liegen dafür auf einem Server in Frankfurt (Supabase).
+  Zum Anmelden brauchst du ein Google-Konto.“ Knopf „Mit Google anmelden“. Wartet eine Einladung: „Du bist
+  eingeladen. Melde dich an, um beizutreten.“
+- *Angemeldet, ohne Runde:* „Angemeldet als ‹E-Mail›“ (ohne bekannte Adresse nur „Angemeldet“). Wartet eine
+  Einladung: Karte „Einladung in die Runde ‹Name›“ (‹n› Mitglieder; solange der Name noch geladen wird, „…“), Knopf
+  „Beitreten“, darunter „Einladung verwerfen“. Hat das Konto Runden: „Deine Runden“, je Runde ‹Name› und
+  „‹n› Mitglieder“, Knöpfe „Auf diesem Gerät verwenden“ und „Verlassen“ (Rückfrage „‹Name› verlassen?“ – „Du gehörst
+  danach nicht mehr zu dieser Runde. Auf diesem Gerät ändert sich nichts.“; ist das Konto das einzige Mitglied,
+  zusätzlich „Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht.“; Knöpfe
+  „Verlassen“, „Abbrechen“). Ließen sich die Runden nicht laden: „Deine Runden ließen sich nicht laden.“ mit dem
+  Knopf „Erneut versuchen“ (sonst sähe es auf einem neuen Handy aus, als gäbe es keine). „Neue Runde anlegen“: Feld
+  „Name der Runde“ (Vorgabe „Schafkopfrunde“), Hinweis „Alle Abende und Spieler dieses Geräts kommen mit in die
+  Runde.“, Knopf „Runde anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten „Abmelden“
+  (Rückfrage „Abmelden?“ – „Dieses Gerät wird abgemeldet.“).
+- *Rückfrage vor dem Beitreten oder Verwenden*, wenn `hasOwnData`: „Daten dieses Geräts ersetzen?“ – „Auf diesem
+  Gerät liegen ‹n› Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten
+  willst.“ (bei 1: „Auf diesem Gerät liegt 1 Abend. Er wird durch die Daten der Runde ersetzt. Sichere ihn vorher,
+  wenn du ihn behalten willst.“; ohne Abende: „Die Spieler dieses Geräts werden durch die der Runde ersetzt.“)
+  Knöpfe „Ersetzen“, „Zur Sicherung“, „Abbrechen“. Android, wenn die automatische Sicherung eingeschaltet ist,
+  zusätzlich: „Die automatische Sicherung wird danach mit den Daten der Runde überschrieben.“
+- *Verbunden, „Das bin ich“ steht aus:* Karte „Wer bist du?“ mit den Spielern ohne Besitzer (nicht archiviert) und
+  „Ich bin neu“ zur Auswahl, Feld „Dein Name“ (vorbelegt mit dem Namen des gewählten Spielers, außer er heißt noch
+  „Spieler ‹N›“), Hinweis „Dein Name lässt sich danach nicht mehr ändern.“, Knopf „Das bin ich“. Rückfrage: „Als
+  ‹Name› festlegen?“ – „Der Name lässt sich danach nicht mehr ändern.“ Knöpfe „Festlegen“, „Abbrechen“.
+- *Verbunden:* ‹Name der Runde›, Statuszeile, Knopf „Jetzt abgleichen“. „Mitglieder“: je Mitglied der Name seines
+  Spielers, das eigene mit „(du)“, ohne Spieler „Noch ohne Namen“. Knopf „Einladen“: erzeugt den Link und gibt ihn
+  weiter (Android: Teilen; Web: Teilen oder Kopieren) mit dem Text „Komm in unsere Schafkopfrunde ‹Name›: ‹Link›“;
+  darunter „Der Link gilt 14 Tage.“ (Ein Link, der jünger als 13 Tage ist, wird wieder angeboten, siehe 8.4.) Unten
+  „Runde verlassen“ (Rückfrage „Runde verlassen?“ – „Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt
+  in der Runde.“; ist das Konto das einzige Mitglied, stattdessen „Du bist das letzte Mitglied: Die Runde wird mit
+  allen Abenden auf dem Server gelöscht. Auf diesem Gerät bleiben sie als Kopie.“) und „Abmelden“ (Rückfrage
+  „Abmelden?“ – „Dieses Gerät wird von der Runde getrennt. Die Daten bleiben als Kopie hier.“). Wartet noch etwas,
+  steht in beiden Rückfragen
+  zusätzlich: „‹n› Änderungen sind noch nicht hochgeladen und kommen nicht mehr in der Runde an.“ (bei 1: „1
+  Änderung ist noch nicht hochgeladen und kommt nicht mehr in der Runde an.“)
+- *Verbunden, Anmeldung abgelaufen:* statt „Jetzt abgleichen“, „Wer bist du?“, „Einladen“ und „Runde verlassen“
+  nur der Knopf „Mit Google anmelden“; Mitglieder und „Abmelden“ bleiben.
+- Solange eine Aktion läuft, sind die Knöpfe gesperrt, und unten steht „Einen Moment …“. Das gilt auch, während die
+  Anmeldung nach der Rückkehr aus dem Browser eingelöst wird.
+
+**Meldungen** (bleiben stehen, bis man sie mit „OK“ wegtippt): Anmeldung gescheitert „Die Anmeldung hat nicht
+geklappt. Bitte noch einmal versuchen.“; im Browser abgelehnt (`access_denied`) „Die Anmeldung wurde abgebrochen.“;
+mit einem anderen Konto angemeldet als dem der verbundenen Runde: Das Konto wird gleich wieder abgemeldet, die Runde
+bleibt verbunden (was noch wartet, geht nicht verloren), und es steht da „Diese Runde gehört zu einem anderen
+Google-Konto. Melde dich mit dem Konto an, mit dem du der Runde beigetreten bist.“ (wer das Gerät wirklich trennen
+will, nimmt „Abmelden“); nach `Detached` „Die Runde gibt es nicht mehr, oder du gehörst nicht mehr dazu. Die Daten
+bleiben als Kopie auf diesem Gerät.“; ein Einladungslink ohne gültigen Code „Das ist kein gültiger Einladungslink.“;
+nur Android, wenn kein Browser da ist: „Für die Anmeldung braucht es einen Browser auf dem Handy.“ Eine geglückte
+Anmeldung räumt ältere Meldungen zur Anmeldung weg.
+
+**Fehlertexte:** `invalid_invite` „Die Einladung ist abgelaufen oder ungültig.“; kein Code im eingefügten Text „Das
+ist kein gültiger Einladungslink.“; `name_taken` „Den Namen gibt es in der Runde schon.“; `invalid_name` „Bitte
+einen Namen mit 1 bis 24 Zeichen eingeben.“ (Runde: „… 1 bis 40 Zeichen …“); `player_taken` „Diesen Spieler hat
+gerade jemand anders gewählt.“; `already_claimed` „Du hast schon einen Namen in dieser Runde.“; `limit_reached`
+„Mehr geht nicht: Die Grenze für Runden, Mitglieder oder Einladungen ist erreicht.“; keine Verbindung „Keine
+Verbindung. Bitte später noch einmal versuchen.“; sonst „Das hat nicht geklappt. Bitte später noch einmal
+versuchen.“
+
+**Hinweise aus dem Abgleich** (`SyncNotice`, auf dem Bildschirm „Gemeinsame Runde“ unter der Überschrift
+„Hinweise“, mit dem Knopf „Hinweise ausblenden“):
+`name_locked` „‹nowName› hat den Namen selbst festgelegt. Er bleibt.“; `name_taken` ohne `nowName` „Den Namen
+‹name› gibt es in der Runde schon. Der neue Spieler wurde nicht angelegt.“; `name_taken` mit `nowName` „Den Namen
+‹name› gibt es in der Runde schon. Der Spieler heißt jetzt ‹nowName›.“; `player_owned` „‹name› gehört zu einem
+Mitglied und lässt sich nicht löschen.“; `limit_reached` „Die Runde hat schon 40 Spieler. ‹name› wurde nicht
+hochgeladen.“; `invalid_name` „Der Name ‹name› ist nicht erlaubt.“
+
+**Abend:** Mit Runde und laufendem Abend steht über der Eingabe, wer gibt: ist es der eigene Spieler
+(`RoundLink.playerId == EveningState.nextDealer`), „Du gibst – trag dieses Spiel ein.“, sonst „‹Geber› gibt und trägt
+ein.“ Eintragen kann trotzdem jeder. Spiele aus `DuplicateCheck.suspects` tragen in der Liste die Markierung
+„Doppelt eingetragen?“ (als Text, nicht nur als Farbe). Die Rückfrage „Abend löschen?“ sagt mit Runde zusätzlich:
+„Der Abend wird für alle in der Runde gelöscht.“
+
+**Sicherung einlesen** (mit Runde): Über der Zusammenfassung steht „Dieses Gerät gehört zu einer gemeinsamen Runde.
+Was du einliest, erscheint bei allen.“ Die Auswahl „Spieler wie in der Sicherung benennen“ entfällt dann (die Namen
+kommen aus der Runde).
+
+**Spieler:** Ein fester Name (`nameLocked`) lässt sich nicht bearbeiten, darunter steht „Name selbst festgelegt“;
+nur der Ersteller der Runde darf ihn korrigieren. Löschen lassen sich nur Spieler ohne Besitzer; sonst steht dort
+„Dieser Spieler gehört zu einem Mitglied der Runde und lässt sich nicht löschen.“
+
+**Einladungsseite der Web-App** (`#/einladung/‹Code›`): „Einladung in eine Schafkopfrunde“, darunter der Code und
+der Knopf „Code kopieren“ (danach „Code kopiert“; klappt das Kopieren nicht: „Das Kopieren hat nicht geklappt. Bitte
+den Code von Hand kopieren.“). Hervorgehoben ist auf dem iPhone im Browser „Code kopieren“, auf Android „In der
+Android-App öffnen“. Auf einem iPhone, das die Seite nicht als App vom Home-Bildschirm
+zeigt (Links aus Nachrichten öffnen sich in Safari, und die App vom Home-Bildschirm hat einen eigenen Speicher):
+„Benutzt du den Schafkopf Tracker vom Home-Bildschirm? Dann kopiere den Code, öffne die App über ihr Symbol und füge
+ihn unter „Gemeinsame Runde“ → „Einladung einlösen“ ein.“ Der Knopf „In der Android-App öffnen“ nur auf Android;
+„Hier beitreten“ (weiter nach `#/runde`, der Code wird gemerkt) immer. Ist dieses Gerät schon mit einer Runde
+verbunden, wird der Code nicht gemerkt; statt „Hier beitreten“ steht „Dieses Gerät ist schon mit der Runde ‹Name›
+verbunden.“ mit dem Knopf „Zur gemeinsamen Runde“. Ohne gültigen Code: „Das ist kein gültiger Einladungslink.“

@@ -112,6 +112,45 @@ data class SettingsEntity(
     }
 }
 
+/**
+ * Die gemeinsame Runde, mit der dieses Gerät verbunden ist, als eine einzige Zeile (Kennung 0) mit JSON-Text;
+ * keine Zeile heißt: Das Gerät arbeitet für sich allein. So braucht eine neue Angabe keine neue Spalte.
+ */
+@Entity(tableName = "round_link")
+data class RoundLinkEntity(
+    @PrimaryKey val id: Int = SINGLE_ROW,
+    val json: String,
+) {
+    companion object {
+        const val SINGLE_ROW = 0
+    }
+}
+
+/**
+ * Je Abend die Fassung, die dieses Gerät zuletzt vom Server der gemeinsamen Runde kennt (als JSON-Text im
+ * Dateiformat der Sicherung). Weicht der Abend davon ab, ist er noch hochzuladen.
+ */
+@Entity(tableName = "evening_bases")
+data class EveningBaseEntity(
+    @PrimaryKey @ColumnInfo(name = "evening_id") val eveningId: String,
+    val version: Int,
+    val json: String,
+)
+
+/** Je Spieler der Stand, den dieses Gerät zuletzt vom Server der gemeinsamen Runde kennt. */
+@Entity(tableName = "player_bases")
+data class PlayerBaseEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    @ColumnInfo(name = "color_index") val colorIndex: Int,
+    val archived: Boolean,
+    val position: Int,
+    /** Das Konto, dem der Spieler gehört; `null` bei einem Gast. */
+    val owner: String?,
+    @ColumnInfo(name = "name_locked") val nameLocked: Boolean,
+    val rev: Long,
+)
+
 /** Ein Abend mit allen seinen Einträgen, in einer Abfrage geladen. */
 data class EveningWithEntries(
     @Embedded val evening: EveningEntity,

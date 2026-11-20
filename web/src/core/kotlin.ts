@@ -9,6 +9,8 @@
  *   Die gibt es in Kotlin nicht, und eine Anzeige könnte sie als „−0,00 €“ schreiben.
  * - Texte vergleicht Kotlin (`String.compareTo`) zeichenweise nach UTF-16-Codeeinheiten; die Operatoren `<` und `>`
  *   von JavaScript tun genau dasselbe. `localeCompare` wäre falsch.
+ * - Leerraum ist in Kotlin etwas anderes als in JavaScript: `trim` entfernt dort zum Beispiel U+001C bis U+001F, hier
+ *   dagegen U+FEFF. Deshalb gibt es `kotlinTrim` und `kotlinTrimEnd`.
  */
 
 /** Größter Wert eines Kotlin-`Int`. */
@@ -134,4 +136,45 @@ export function minWithOrNull<T>(items: readonly T[], comparator: (a: T, b: T) =
     if (best === null || comparator(best, item) > 0) best = item;
   }
   return best;
+}
+
+/** Wie Javas `Math.floorMod`: der Rest beim Teilen, nie negativ (für einen positiven Teiler). */
+export function floorMod(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor;
+}
+
+/**
+ * Kotlins `Char.isWhitespace()` auf der JVM: `Character.isWhitespace` oder `Character.isSpaceChar`, also Tabulator,
+ * Zeilenumbrüche, U+001C bis U+001F und alle Leer- und Trennzeichen von Unicode (Zs, Zl, Zp) einschließlich der
+ * geschützten Leerzeichen.
+ */
+export function isKotlinWhitespace(code: number): boolean {
+  if (code <= 0x20) return code === 0x20 || (code >= 0x09 && code <= 0x0d) || (code >= 0x1c && code <= 0x1f);
+  if (code < 0x00a0) return false;
+  return (
+    code === 0x00a0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000
+  );
+}
+
+/** Kotlins `String.trim()`: Leerraum an beiden Enden entfernt. */
+export function kotlinTrim(text: string): string {
+  let start = 0;
+  let end = text.length;
+  while (start < end && isKotlinWhitespace(text.charCodeAt(start))) start++;
+  while (end > start && isKotlinWhitespace(text.charCodeAt(end - 1))) end--;
+  return text.substring(start, end);
+}
+
+/** Kotlins `String.trimEnd()`: Leerraum am Ende entfernt. */
+export function kotlinTrimEnd(text: string): string {
+  let end = text.length;
+  while (end > 0 && isKotlinWhitespace(text.charCodeAt(end - 1))) end--;
+  return text.substring(0, end);
 }

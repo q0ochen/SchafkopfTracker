@@ -38,4 +38,21 @@ class EveningEditor(
         if (changed != current) evenings.save(changed)
         changed
     }
+
+    /**
+     * Wie [update], aber auch für Abende, die es noch nicht gibt, und fürs Löschen: [transform] bekommt den aktuellen
+     * Stand oder `null` und liefert den neuen; `null` löscht den Abend. Der Abgleich der gemeinsamen Runde legt damit
+     * Abende an, ersetzt und löscht sie, ohne einer Eingabe am Tisch in die Quere zu kommen.
+     *
+     * @return der Abend, wie er danach gespeichert ist, oder `null`, wenn es ihn danach nicht gibt.
+     */
+    suspend fun replace(id: EveningId, transform: (Evening?) -> Evening?): Evening? = mutex.withLock {
+        val current = evenings.evening(id).first()
+        val changed = transform(current)
+        when {
+            changed == null -> if (current != null) evenings.delete(id)
+            changed != current -> evenings.save(changed)
+        }
+        changed
+    }
 }

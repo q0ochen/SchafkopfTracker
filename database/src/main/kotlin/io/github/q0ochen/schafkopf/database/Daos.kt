@@ -80,15 +80,62 @@ interface SettingsDao {
     suspend fun upsert(settings: SettingsEntity)
 }
 
+/** Was sich das Gerät zum Abgleich mit der gemeinsamen Runde merkt. */
+@Dao
+interface RoundDao {
+    /** Die verbundene Runde als Text; `null`, solange keine verbunden ist. Meldet sich bei jeder Änderung neu. */
+    @Query("SELECT json FROM round_link WHERE id = 0")
+    fun observeLink(): Flow<String?>
+
+    @Upsert
+    suspend fun upsertLink(link: RoundLinkEntity)
+
+    @Query("DELETE FROM round_link")
+    suspend fun deleteLink()
+
+    @Query("SELECT * FROM evening_bases")
+    suspend fun eveningBases(): List<EveningBaseEntity>
+
+    @Upsert
+    suspend fun upsertEveningBase(base: EveningBaseEntity)
+
+    @Query("DELETE FROM evening_bases WHERE evening_id = :eveningId")
+    suspend fun deleteEveningBase(eveningId: String)
+
+    @Query("DELETE FROM evening_bases")
+    suspend fun deleteEveningBases()
+
+    @Query("SELECT * FROM player_bases")
+    suspend fun playerBases(): List<PlayerBaseEntity>
+
+    @Upsert
+    suspend fun upsertPlayerBase(base: PlayerBaseEntity)
+
+    @Query("DELETE FROM player_bases WHERE id = :id")
+    suspend fun deletePlayerBase(id: String)
+
+    @Query("DELETE FROM player_bases")
+    suspend fun deletePlayerBases()
+}
+
 @Database(
-    entities = [PlayerEntity::class, EveningEntity::class, EntryEntity::class, SettingsEntity::class],
-    version = 1,
+    entities = [
+        PlayerEntity::class,
+        EveningEntity::class,
+        EntryEntity::class,
+        SettingsEntity::class,
+        RoundLinkEntity::class,
+        EveningBaseEntity::class,
+        PlayerBaseEntity::class,
+    ],
+    version = 2,
     exportSchema = true,
 )
 abstract class SchafkopfDatabase : RoomDatabase() {
     abstract fun playerDao(): PlayerDao
     abstract fun eveningDao(): EveningDao
     abstract fun settingsDao(): SettingsDao
+    abstract fun roundDao(): RoundDao
 
     companion object {
         const val FILE_NAME = "schafkopf.db"

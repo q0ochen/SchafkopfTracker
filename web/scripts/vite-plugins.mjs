@@ -6,16 +6,18 @@ import { build } from "vite";
 
 /**
  * Content-Security-Policy als <meta> (nur im Build; der Entwicklungsserver braucht Inline-Skripte).
- * Die Web-App spricht mit keinem Server: Erlaubt sind nur Dateien der eigenen Herkunft.
+ * Ohne gemeinsame Runde spricht die Web-App mit keinem Server: Erlaubt sind nur Dateien der eigenen Herkunft. Mit
+ * ihr kommt genau die Herkunft ihres Servers dazu (`connect`).
+ * @param {{ connect?: readonly string[] }} [options]
  * @returns {import("vite").Plugin}
  */
-export function contentSecurityPolicyPlugin() {
+export function contentSecurityPolicyPlugin({ connect = [] } = {}) {
   const policy = [
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self'",
     "img-src 'self' blob: data:",
-    "connect-src 'self'",
+    ["connect-src 'self'", ...connect].join(" "),
     "worker-src 'self'",
     "manifest-src 'self'",
     "font-src 'self'",

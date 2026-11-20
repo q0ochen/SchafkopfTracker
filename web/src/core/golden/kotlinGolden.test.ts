@@ -23,12 +23,16 @@ import {
   StatisticEngine,
   winners,
 } from "../index";
+import { DuplicateCheck } from "../round/DuplicateCheck";
+import { EveningMerge } from "../round/EveningMerge";
+import { InviteLinks } from "../round/InviteLinks";
 import type { EveningJson, Json, JsonObject, RuleSetJson } from "./goldenCodec";
 import {
   decodeEvening,
   decodeFacts,
   decodeRuleSet,
   encodeEntryResult,
+  encodeEvening,
   encodeState,
   firstDifference,
   toJson,
@@ -75,6 +79,29 @@ interface HistoryCase {
   readonly history: Json;
 }
 
+/** Drei Fassungen eines Abends für `EveningMerge.merge3` und das Ergebnis des Kotlin-Kerns. */
+interface MergeCase {
+  readonly id: string;
+  readonly base: EveningJson | null;
+  readonly local: EveningJson;
+  readonly remote: EveningJson;
+  readonly merged: EveningJson;
+}
+
+/** Ein Abend für `DuplicateCheck.suspects` und die gemeldeten Kennungen in ihrer Reihenfolge. */
+interface DuplicateCase {
+  readonly id: string;
+  readonly evening: EveningJson;
+  readonly suspects: string[];
+}
+
+/** Ein eingefügter Text für `InviteLinks.tokenFrom` und der gefundene Code. */
+interface InviteCase {
+  readonly id: string;
+  readonly text: string;
+  readonly token: string | null;
+}
+
 interface GoldenFile {
   readonly rules: Readonly<Record<string, RuleSetJson>>;
   readonly score: readonly ScoreCase[];
@@ -82,6 +109,9 @@ interface GoldenFile {
   readonly balances: readonly BalancesCase[];
   readonly evenings: readonly EveningCase[];
   readonly histories: readonly HistoryCase[];
+  readonly merges: readonly MergeCase[];
+  readonly duplicates: readonly DuplicateCase[];
+  readonly invites: readonly InviteCase[];
 }
 
 const golden = JSON.parse(readFileSync(new URL("./kotlin-golden.json", import.meta.url), "utf8")) as GoldenFile;
@@ -214,6 +244,63 @@ describe("Rechenkern gegen den Kotlin-Kern (kotlin-golden.json)", () => {
     });
     expect(failures).toEqual([]);
     expect(golden.histories.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it("Gemeinsame Runde: EveningMerge.merge3 liefert für jeden Fall denselben Abend", () => {
+    // Alle Abweichungen sammeln, nicht nur die ersten zehn: Hier muss wirklich jeder Fall stimmen.
+    const failures: string[] = [];
+    for (const c of golden.merges) {
+      const base = c.base === null ? null : decodeEvening(c.base);
+      const local = decodeEvening(c.local);
+      const remote = decodeEvening(c.remote);
+      const snapshot = (): string => JSON.stringify([base, local, remote].map((it) => (it === null ? null : encodeEvening(it))));
+      const before = snapshot();
+      const merged = EveningMerge.merge3(base, local, remote);
+      const difference = firstDifference(c.merged as unknown as Json, encodeEvening(merged));
+      if (difference !== null) failures.push(`${c.id}: ${difference}`);
+      // Reine Funktion: Die Eingaben bleiben, wie sie waren.
+      if (snapshot() !== before) failures.push(`${c.id}: Die Eingaben wurden verändert.`);
+    }
+    expect(failures).toEqual([]);
+    expect(golden.merges.length).toBe(132);
+  });
+
+  it("Gemeinsame Runde: DuplicateCheck.suspects meldet für jeden Fall dieselben Spiele", () => {
+    const failures: string[] = [];
+    for (const c of golden.duplicates) {
+      const suspects = [...DuplicateCheck.suspects(decodeEvening(c.evening))];
+      const difference = firstDifference(c.suspects, suspects);
+      if (difference !== null) failures.push(`${c.id}: ${difference}`);
+    }
+    expect(failures).toEqual([]);
+    expect(golden.duplicates.length).toBe(60);
+  });
+
+  it("Gemeinsame Runde: InviteLinks.tokenFrom findet in jedem Text denselben Code", () => {
+    const failures: string[] = [];
+    for (const c of golden.invites) {
+      const difference = firstDifference(c.token, InviteLinks.tokenFrom(c.text));
+      if (difference !== null) failures.push(`${c.id}: ${difference}`);
+    }
+    expect(failures).toEqual([]);
+    expect(golden.invites.length).toBe(22);
+  });
+
+  it("die Golden-Daten der gemeinsamen Runde enthalten die gezielten Fallen", () => {
+    const ids = new Set(golden.merges.map((c) => c.id));
+    for (const id of ["kennung-emoji", "kennung-gross-klein", "kennung-ziffern", "kennung-umlaut", "zeit-mit-millisekunden", "doppelte-kennungen"]) {
+      expect(ids).toContain(id);
+    }
+    expect(golden.merges.filter((c) => c.base === null).length).toBeGreaterThan(10);
+    // Als Text verglichen stünde „…:05:00.500Z“ vor „…:05:00Z“; als Zeit ist es umgekehrt.
+    const millis = golden.merges.find((c) => c.id === "zeit-mit-millisekunden");
+    expect(millis?.merged.entries.slice(-2).map((entry) => entry.id)).toEqual(["t", "m"]);
+    // Nach UTF-16-Einheiten steht das Emoji (ein Ersatzzeichenpaar) vor „～“, nach Unicode-Zeichen dahinter.
+    const emoji = golden.merges.find((c) => c.id === "kennung-emoji");
+    expect(emoji?.merged.entries.slice(-2).map((entry) => entry.id)).toEqual(["😀", "～"]);
+    expect(golden.duplicates.filter((c) => c.suspects.length > 0).length).toBeGreaterThan(10);
+    expect(golden.duplicates.find((c) => c.id === "gelegt-gleich-andere-reihenfolge")?.suspects).toEqual(["zwei"]);
+    expect(golden.invites.filter((c) => c.token === null).length).toBeGreaterThan(5);
   });
 
   it("die Golden-Daten decken die Grenzfälle wirklich ab", () => {

@@ -66,16 +66,25 @@ Welche Issues als Nächstes angegangen werden, ist mit dem Nutzer noch abzustimm
 
 ## Aufbau
 
-- `domain/` reines Kotlin/JVM: Regelwerk, Abrechnung, Abend-Logik, Statistik (`StatisticEngine`), Zusammenfassung, Ports.
+- `domain/` reines Kotlin/JVM: Regelwerk, Abrechnung, Abend-Logik, Statistik (`StatisticEngine`), Zusammenfassung, Ports;
+  `domain.round` für die gemeinsame Runde (`EveningMerge`, `RoundSync`, `RoundConnection`, `DuplicateCheck`,
+  `InviteLinks`, dazu ein Server im Speicher für Tests).
 - `data/` reines Kotlin/JVM: Sicherung (JSON), CSV, REST-Anbindung des Sprachmodells, `FileStorage` (Speicher der
-  ersten Testversionen, nur noch für die Übernahme).
-- `database/` Android-Bibliothek: Room (Tabellen, DAOs mit `Flow`, Repositories, Einstellungen, `importMissing`).
+  ersten Testversionen, nur noch für die Übernahme); `data.round` spricht den Supabase-Server an (Anmeldung per PKCE,
+  Sitzung, Datenschnittstelle), ohne Bibliothek von Supabase, nur mit OkHttp.
+- `database/` Android-Bibliothek: Room (Tabellen, DAOs mit `Flow`, Repositories, Einstellungen, `importMissing`);
+  seit Version 2 auch der Gerätezustand der gemeinsamen Runde (`RoomRoundStore`).
 - `app/` Android: Compose-Oberfläche, ViewModels (MVVM), Koin-Module (`app/di/AppModule.kt`), automatische
-  Sicherung (`app/backup`, WorkManager und Dateiauswahl), Übernahme der alten Dateien (`app/storage`).
+  Sicherung (`app/backup`, WorkManager und Dateiauswahl), Übernahme der alten Dateien (`app/storage`), gemeinsame
+  Runde (`app/round`: `RoundCoordinator`, Abgleich im Hintergrund; `ui/round`: Bildschirm „Gemeinsame Runde“).
+- `supabase/` Server der gemeinsamen Runde: Migrationen (Tabellen, Zugriffsregeln, Funktionen), pgTAP-Tests, eine
+  Prüfung ohne Docker (`supabase/tests/lokal/pruefen.sh`). Einrichtung des echten Projekts: `supabase/README.md`,
+  für den Nutzer `docs/EINRICHTUNG-RUNDE.md`.
 - `wear/` (aufgeschoben bis zu einer Ausgabe ohne F-Droid) Wear-OS-App.
 - `web/` Web-App fürs iPhone (TypeScript, Preact, kein Gradle-Modul): Port von `domain` (`web/src/core`) und vom
   Dateiformat aus `data` (`web/src/data/format`), beide mit Golden-Tests gegen den Kotlin-Code; eigene Oberfläche,
-  Speicher in IndexedDB. Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 7; Befehle: `web/README.md`.
+  Speicher in IndexedDB. Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 7; Befehle: `web/README.md`. Gemeinsame Runde:
+  `web/src/core/round` (Port von `domain.round`) und `web/src/round` (Anbindung mit supabase-js, Vertrag Abschnitt 8).
 - Gespeichert werden nur Tatsachen. Beträge, Salden, Geber und Bock-Zähler berechnet `EveningCalculator` neu.
   Beträge sind ganze Cent; in Euro formatiert wird nur in der Oberfläche.
 
@@ -146,10 +155,14 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 539, `data` 241, `database` 16, `app` 105, Web 136 Unit-Tests und 18 Oberflächen-Tests (der Workflow
-  „Android“ prüft Mindestzahlen). Der Build-Cache von Gradle ist bewusst aus (`gradle.properties`): Mit ihm ließ
-  Kotlin nach einer Änderung an einer öffentlichen Schnittstelle stillschweigend die meisten Tests weg. Im Zweifel
-  `--rerun-tasks` anhängen.
+  `domain` 684, `data` 278, `database` 24, `app` 192, Web 560 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 39 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
+  stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
+- **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
+  und `pg_prove` per apt) spielt die Migrationen in eine Wegwerf-Datenbank und lässt die pgTAP-Tests laufen. Die
+  Probe gegen das echte Supabase (`SupabaseLiveTest`, Marke `live`) läuft nur auf GitHub und gehört hier nicht zum
+  Testlauf von `data`.
 - `docs/ORIGINAL-PROMPT.md` (die wörtliche Notiz) gibt es nur auf dem Rechner des Nutzers. Maßgeblich sind dann
   `docs/ANFORDERUNGEN.md`, `docs/ARCHITEKTUR.md` und die Issues #1 bis #19.
 - Gearbeitet wird auf dem Zweig `entwicklung`. Eine Cloud-Sitzung darf nur auf ihren eigenen Zweig `claude/…`
@@ -158,8 +171,10 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-Der neueste Stand liegt auf dem Zweig `claude/gracious-keller-48tcn0`; `main` enthält alles bis Pull Request #22
-(16.11.2026), `entwicklung` ist noch auf dem älteren Stand.
+`main` enthält alles bis Pull Request #24 (16.11.2026, 20:33). Die gemeinsame Runde (Zweig
+`claude/gracious-keller-48tcn0`, seit dem 19.11.2026) ist am 20.11.2026 auf Wunsch des Nutzers („Ja pull request
+anlegen“) als Pull Request nach `main` angelegt; ob er schon zusammengeführt ist, zeigt GitHub. `entwicklung` ist noch
+auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -271,9 +286,9 @@ vermutlich eine Wear-OS-Uhr.
 
 Pull Request #23 nach `main` (Schritte 4 bis 6 ohne Uhr) am 16.11.2026 auf Wunsch des Nutzers angelegt und vom Nutzer
 um 18:01 mit dem Stand `327719b` zusammengeführt; geschlossen sind #6, #10, #12, #13 und #14. Danach wünschte der
-Nutzer, dass Claude den Pull Request beobachtet („Zu 1. ja“) und die Lücken schließt („Zu 2. ja“). Das Folgende liegt
-deshalb auf dem Zweig `claude/gracious-keller-48tcn0`, noch nicht in `main` (neuer Pull Request nur auf Bitte des
-Nutzers):
+Nutzer, dass Claude den Pull Request beobachtet („Zu 1. ja“) und die Lücken schließt („Zu 2. ja“). Das Folgende kam
+deshalb mit einem eigenen Pull Request #24 (auf Wunsch des Nutzers, „Ja. Neuen pull request“), vom Nutzer am
+16.11.2026 um 20:33 zusammengeführt; er schließt #11:
 
 - **#11:** Spielarten als Balkendiagramm in Android-App (`GameModeChart`, `BarScale`) und Web-App
   (`web/src/ui/charts/GameModeChart.tsx`): je Spielart ein Abschnitt, je Spieler Balken für den Durchschnitt je
@@ -289,9 +304,112 @@ Nutzers):
   Zeile; die Tabellen der Statistik wachsen mit und lassen sich seitlich schieben); der Zustimmungstext nennt
   Abendbericht und Bilanz, weil die Zustimmung je Dienst für beides gilt; ein Kommentar in `BarScale`.
 - Offen bleibt außerdem #15 (Client-ID, Erprobung auf einem echten Handy).
+- Der Nutzer führt Pull Requests oft gleich nach dem Anlegen zusammen. Was danach auf den Zweig kommt, braucht
+  einen neuen Pull Request; deshalb vor dem Anlegen alles fertig und geprüft haben.
+- Zweimal (17:57 und 18:02, Läufe 23 und 24) scheiterte „Android“ auf GitHub nach 15 Sekunden, weil das
+  KSP-Plugin nicht aus den Paketquellen zu laden war; Läufe kurz davor und danach mit fast gleichem Stand waren
+  grün. Ursache außerhalb des Codes; tritt es wieder auf, Lauf einmal neu starten.
 
-Als Nächstes: Client-ID eintragen, sobald der Nutzer sie schickt, dann die Anmeldung auf einem echten Handy
-erproben; Rückmeldungen der Tester; abstimmen, welche der Issues #1 bis #19 als erledigt gelten.
+Als Nächstes (neben der gemeinsamen Runde, siehe unten): Client-ID für Google Drive eintragen, sobald der Nutzer sie
+schickt, dann die Anmeldung auf einem echten Handy erproben; Rückmeldungen der Tester; abstimmen, welche der Issues
+#1 bis #19 als erledigt gelten.
+
+## Stand am 19.11.2026: Gemeinsame Runde (gebaut, Server noch nicht eingerichtet)
+
+Der Nutzer hat am 19.11.2026 in einer Sprachnachricht zwei Ideen genannt (gemeinsame Runde „so ähnlich wie bei Drink
+With Me“, Spracheingabe) und um ein Brainstorming gebeten. Termin: Bis zum 12.12.2026 soll die App „einigermaßen gut“
+sein.
+
+**Entscheidungen des Nutzers vom 19.11.2026 (nach dem Brainstorming):** „Macht zuerst die gemeinsame Runde“ und
+„die Runde am 12.12. soll schon mitlaufen“. Namen und Beträge dürfen auf dem Server liegen. Eintragen darf jeder,
+„aber der Geber ist der, der in der Regel einträgt“ (also keine Sperre, nur ein Hinweis). Die Spracheingabe entfällt
+(im Wirtshaus zu laut). Wer über den Link beitritt, hinterlegt in seiner eigenen App seinen eigenen Namen, und alle
+lesen diese Namen; der Name soll sich danach nicht mehr ändern lassen.
+
+**Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 8** (verbindlich für Server, Android-App und Web-App; 8.9 legt die Texte
+der Oberfläche wörtlich fest). Kurz: „lokal zuerst“ (das Handy bleibt vollständig, ein unerreichbarer Server hält
+nie einen Abend auf); auf dem Server je Abend ein Dokument im Format der Sicherung mit Versionsnummer (Speichern nur
+mit der erwarteten Version, sonst neu lesen und zusammenführen); `EveningMerge.merge3` führt die Fassung des Geräts
+mit der des Servers zusammen; Spieler sind Zeilen, der Server gewinnt; ein Zähler `rev` je Runde sagt, ob es Neues
+gibt (im Vordergrund alle 4 Sekunden eine kleine Anfrage); Anmeldung nur mit Google (PKCE im Browser).
+
+Umgesetzt am 19.11.2026 auf dem Zweig `claude/gracious-keller-48tcn0`:
+
+- **Server** (`supabase/`): Tabellen mit Zugriffsregeln, alles Schreiben über Funktionen, 556 pgTAP-Tests.
+- **Rechenkern** (`domain.round`): Zusammenführen, Abgleich (`RoundSync`), Verbinden (`RoundConnection`), Hinweis auf
+  doppelt eingetragene Spiele; Zufallsläufe mit bis zu vier nachgestellten Handys, Funklöchern und verlorenen
+  Antworten (`RoundSimulationTest`).
+- **Android-App**: Bildschirm „Gemeinsame Runde“ (anmelden, Runde anlegen, über Link oder Code beitreten, „Wer bist
+  du?“ mit festem Namen, Mitglieder, einladen, verlassen, abmelden), Wolken-Symbol und Geber-Hinweis im Abend,
+  „Doppelt eingetragen?“, fester Name bei den Spielern. Rückkehr aus dem Browser über
+  `schafkopftracker://auth-callback`, Einladung über `schafkopftracker://einladung/<Code>`.
+- **Web-App**: dasselbe fürs iPhone: Port des Rechenkerns (`web/src/core/round`), Anbindung mit supabase-js
+  (`web/src/round`), Gerätezustand in IndexedDB, Bildschirm „Gemeinsame Runde“, Einladungsseite `#/einladung/<Code>`,
+  Hinweise im Abend und bei den Spielern. Gebaut von zwei Helfern nacheinander (der erste fiel am 19.11.2026 an der
+  Nutzungsgrenze aus; der Nutzer hat am 20.11.2026 auf Opus umgestellt: „Mach mit Opus weiter“).
+- **Probe gegen ein echtes Supabase** (nur auf GitHub, Workflow „Supabase“, Job „Anbindung“): `SupabaseLiveTest`
+  (9 Proben) lässt die Anbindung der Android-App gegen den lokalen Stack der Supabase CLI laufen: Anmeldung erneuern
+  und beenden, jede Funktion mit ihren Fehlercodes, 205 Abende seitenweise, zwei Geräte mit dem ganzen Abgleich.
+  Grün seit dem 19.11.2026, auch mit einem Schlüssel der Form `sb_publishable_…`. Seit dem 20.11.2026 läuft dort
+  auch die Probe der Web-App (`npm run test:live`, 9 Proben), ebenfalls grün.
+- **Unabhängige Durchsicht der Android-Seite (19./20.11.2026):** Kein Weg gefunden, auf dem ein Gerät die Daten der
+  anderen löscht. Behoben: unlesbare Abende rutschten hinter das Lesezeichen und kamen nie wieder (jetzt gemerkt in
+  `RoundLink.unreadable` und bei jedem Abgleich neu gelesen); „Auf diesem Gerät verwenden“ leerte das Gerät, bevor der
+  Server geantwortet hatte; eine Anmeldung mit falschem Konto trennte die Runde (jetzt wird das falsche Konto wieder
+  abgemeldet, und mit fremdem Konto läuft nie ein Abgleich); Links aus „Zuletzt verwendet“ wurden neu ausgewertet;
+  eine verlorene Antwort beim Anlegen ergab eine zweite Runde; dazu Hinweise in „Abend löschen?“, beim Einlesen einer
+  Sicherung und vor dem Ersetzen (automatische Sicherung), „Deine Runden ließen sich nicht laden.“, „Anmeldung läuft“
+  und kleinere Anzeigefehler.
+- **Unabhängige Durchsicht der Web-App (20.11.2026):** neun Funde, alle behoben (Vertrag 8.1, 8.4, 8.8, 8.9): Basis nie
+  neuer als das Gerät (`AppStore.whenSaved`), Unlesbares auf dem Gerät gilt nie als gelöscht, ein Abgleich über alle
+  Fenster (`navigator.locks`, `BroadcastChannel`), eigene Statuszeile für Speicherfehler, Einladungsseite fürs iPhone
+  („Code kopieren“, Hinweis auf die App vom Home-Bildschirm), Kontoauswahl bei Google (auch Android), Zeitlimit beim
+  Einlösen der Anmeldung, Einladung wiederverwenden und nicht verbundene Runden verlassen (auch Android).
+  **Größtes offenes Risiko fürs iPhone:** Ob die Google-Anmeldung *in der App vom Home-Bildschirm* klappt, ist nur auf
+  einem echten iPhone zu prüfen (Drink With Me hat dieselbe offene Frage). Ausweg, falls nicht: die Web-App in Safari
+  selbst benutzen; die Anleitung beschreibt das.
+- **Anleitung für den Nutzer:** `docs/EINRICHTUNG-RUNDE.md` (eigenes Supabase-Projekt in Frankfurt, Google-Client vom
+  Typ „Webanwendung“, zwei Secrets und drei Variablen bei GitHub, Test zu zweit, „vor jedem Spielabend“).
+
+**Der Server ist noch nicht eingerichtet.** Ohne die GitHub-Variablen `SUPABASE_URL` und `SUPABASE_PUBLISHABLE_KEY`
+(öffentlich, kein Geheimnis; Android liest sie beim Bauen der Testversion, sonst `app/supabase.properties`; Web als
+`VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY`) bleibt die Funktion abgeschaltet („Der Server ist noch nicht
+eingerichtet.“). Sobald der Nutzer „Supabase ist eingerichtet“ meldet:
+
+1. Der Stand muss in `main` liegen (der Pull Request dafür ist seit dem 20.11.2026 angelegt; nachsehen, ob er
+   zusammengeführt ist). „Supabase Deploy“ hat nur `workflow_dispatch` und lässt sich deshalb erst starten, wenn die
+   Datei in `main` liegt.
+2. „Supabase Deploy“ starten (wendet die Migrationen an; braucht die Secrets `SUPABASE_ACCESS_TOKEN` und
+   `SUPABASE_DB_PASSWORD` und die Variable `SUPABASE_PROJECT_REF`), danach „Android“ und „Web-App“ neu laufen lassen.
+3. Mit dem Nutzer den Test zu zweit aus der Anleitung durchgehen.
+
+**Nicht geprüft:** die Anmeldung mit Google selbst (in der Probe melden sich Testkonten mit Passwort an), echte
+Geräte, Safari auf einem iPhone, das echte Supabase-Projekt des Nutzers.
+
+Gut zu wissen für die nächste Sitzung:
+
+- Kostenlose Supabase-Projekte pausieren nach etwa 7 Tagen ohne Nutzung. Die Apps arbeiten dann ohne Abgleich weiter
+  („Server nicht erreichbar“) und holen alles nach, sobald das Projekt wieder läuft. Ein regelmäßiger Aufruf, der
+  das Pausieren verhindert, ist nicht gebaut (Entscheidung des Nutzers offen).
+- Bekannte Grenze (Vertrag 8.6): Geht die Antwort auf ein Hochladen verloren und löscht ein anderes Gerät einen neu
+  angelegten Eintrag vor dem nächsten Abgleich, taucht er einmal wieder auf.
+- In der Cloud-Umgebung gibt es kein laufendes Docker. Der Server lässt sich dort nur mit
+  `supabase/tests/lokal/pruefen.sh` prüfen (PostgreSQL mit einer Attrappe des Supabase-Grundgerüsts); ein aus dem Netz
+  geholtes PostgREST auszuführen, hat die Umgebung abgelehnt (nicht erneut versuchen). Alles, was das echte
+  PostgREST oder den Anmelde-Server braucht, läuft über den Workflow „Supabase“ auf GitHub (etwa zweieinhalb
+  Minuten je Lauf).
+- Der Anmelde-Server des lokalen Stacks erlaubt 30 Anmeldungen je 5 Minuten; die Probe der Android-App braucht
+  davon 11, die der Web-App 5.
+- Auf GitHub aufgefallen am 19.11.2026: (1) Der Bildschirmtest der Start-Seite lief einmal (einer von fünf Läufen)
+  in die Wartefrist; hier nicht nachstellbar. `waitForText` nennt jetzt in der Fehlermeldung, was auf dem Bildschirm
+  stand: Tritt es wieder auf, zuerst diese Meldung lesen. (2) Der Tag „testversion“ ließ sich nicht verschieben
+  (HTTP 403), wenn der Stand eine Workflow-Datei änderte und beim Veröffentlichen schon ein neuerer Stand auf dem
+  Zweig lag; die Testversion wird jetzt trotzdem ersetzt.
+- Die Spracheingabe ist verworfen. Falls sie wieder aufkommt: Kern wäre ein Parser Text → `GameDraft` mit Kölner
+  Phonetik und Jaro-Winkler wie in DrinkWithMe (`android/core/…/voice/`); nie ohne Bestätigung buchen.
+- Der Nutzer berichtet, dass das App-Symbol auf seinem iPhone den Browser öffnet (bei welcher der beiden Web-Apps,
+  ist offen). Unsere Web-App ist auf `display: standalone` eingestellt; vermutlich war beim Hinzufügen „Als Web-App
+  öffnen“ aus. Auf einem echten iPhone nicht geprüft.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 

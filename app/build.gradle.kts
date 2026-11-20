@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 // Die Android-App: Oberfläche (Jetpack Compose), ViewModels und die Kompositionswurzel (AppContainer).
 plugins {
@@ -11,6 +12,22 @@ plugins {
 // 1000 + Laufnummer, versionName „0.1.0-test.<Laufnummer>“. Sie werden als Release gebaut (flüssiger als ein
 // Debug-Build) und mit dem öffentlichen Test-Schlüssel signiert. Lokale Builds bleiben bei den festen Werten unten.
 val ciBuildNumber: Int? = providers.gradleProperty("ciBuildNumber").orNull?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+
+// Server der gemeinsamen Runde (docs/ARCHITEKTUR.md, Abschnitt 8.1): Adresse und Publishable Key des
+// Supabase-Projekts. Beides ist öffentlich und kein Geheimnis. Die Werte stehen in app/supabase.properties; sind sie
+// dort leer, gelten die Gradle-Eigenschaften gleichen Namens (-PsupabaseUrl=…, so reicht der Workflow die
+// GitHub-Variablen durch). Ohne Werte bleibt die gemeinsame Runde in der App abgeschaltet.
+val supabaseProperties = Properties().apply {
+    val file = file("supabase.properties")
+    if (file.isFile) file.inputStream().use { load(it) }
+}
+
+fun supabaseSetting(name: String): String =
+    supabaseProperties.getProperty(name)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: providers.gradleProperty(name).orNull?.trim().orEmpty()
+
+/** Ein Text als Zeichenkette für BuildConfig. */
+fun quoted(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 android {
     namespace = "io.github.q0ochen.schafkopf"
@@ -27,6 +44,9 @@ android {
         // Android-Clients verlangt (io.github.q0ochen.schafkopf:/oauth2redirect). Muss zu
         // AppAuthDriveAccount.REDIRECT_SCHEME passen; ein applicationIdSuffix ändert daran nichts.
         manifestPlaceholders["appAuthRedirectScheme"] = "io.github.q0ochen.schafkopf"
+
+        buildConfigField("String", "SUPABASE_URL", quoted(supabaseSetting("supabaseUrl")))
+        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", quoted(supabaseSetting("supabasePublishableKey")))
     }
 
     // Fester, öffentlicher Test-Schlüssel (kein Geheimnis, liegt bewusst im Repository): Alle Debug-Builds und alle
@@ -71,6 +91,8 @@ android {
 
     buildFeatures {
         compose = true
+        // Für die Adresse des Servers der gemeinsamen Runde (siehe oben).
+        buildConfig = true
     }
 
     // F-Droid lehnt den verschlüsselten „Dependency metadata“-Block von Google ab.
@@ -125,6 +147,7 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.okhttp)
     implementation(libs.appauth)
+    implementation(libs.androidx.browser)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

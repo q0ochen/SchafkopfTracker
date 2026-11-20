@@ -5,25 +5,9 @@
  * Unicode (`String.equalsIgnoreCase`).
  */
 
-/**
- * Kotlins `Char.isWhitespace()` auf der JVM: `Character.isWhitespace` oder `Character.isSpaceChar`, also Tabulator,
- * Zeilenumbrüche, U+001C bis U+001F und alle Leer- und Trennzeichen von Unicode (Zs, Zl, Zp) einschließlich der
- * geschützten Leerzeichen.
- */
-export function isKotlinWhitespace(code: number): boolean {
-  if (code <= 0x20) return code === 0x20 || (code >= 0x09 && code <= 0x0d) || (code >= 0x1c && code <= 0x1f);
-  if (code < 0x00a0) return false;
-  return (
-    code === 0x00a0 ||
-    code === 0x1680 ||
-    (code >= 0x2000 && code <= 0x200a) ||
-    code === 0x2028 ||
-    code === 0x2029 ||
-    code === 0x202f ||
-    code === 0x205f ||
-    code === 0x3000
-  );
-}
+import { isKotlinWhitespace, kotlinTrim } from "../../core/kotlin";
+
+export { isKotlinWhitespace, kotlinTrim };
 
 /** Kotlins `String.isBlank()`: leer oder nur aus Leerraum. */
 export function kotlinIsBlank(text: string): boolean {
@@ -31,15 +15,6 @@ export function kotlinIsBlank(text: string): boolean {
     if (!isKotlinWhitespace(text.charCodeAt(i))) return false;
   }
   return true;
-}
-
-/** Kotlins `String.trim()`: Leerraum an beiden Enden entfernt. */
-export function kotlinTrim(text: string): string {
-  let start = 0;
-  let end = text.length;
-  while (start < end && isKotlinWhitespace(text.charCodeAt(start))) start++;
-  while (end > start && isKotlinWhitespace(text.charCodeAt(end - 1))) end--;
-  return text.substring(start, end);
 }
 
 /**

@@ -4,6 +4,9 @@ import io.github.q0ochen.schafkopf.domain.evening.EveningCalculator
 import io.github.q0ochen.schafkopf.domain.evening.GameEntry
 import io.github.q0ochen.schafkopf.domain.evening.Ranking
 import io.github.q0ochen.schafkopf.domain.evening.SettleUp
+import io.github.q0ochen.schafkopf.domain.round.DuplicateCheck
+import io.github.q0ochen.schafkopf.domain.round.EveningMerge
+import io.github.q0ochen.schafkopf.domain.round.InviteLinks
 import io.github.q0ochen.schafkopf.domain.rules.PayoutCalculator
 import io.github.q0ochen.schafkopf.domain.rules.PayoutRule
 import io.github.q0ochen.schafkopf.domain.rules.ScoreCalculator
@@ -12,6 +15,7 @@ import io.github.q0ochen.schafkopf.domain.stats.HistoryStatistics
 import io.github.q0ochen.schafkopf.domain.stats.Progression
 import io.github.q0ochen.schafkopf.domain.stats.StatisticEngine
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -103,6 +107,9 @@ internal object WebGolden {
             "balances" to GoldenCases.balancesCases().map(::balancesCase),
             "evenings" to evenings.map(::eveningCase),
             "histories" to GoldenCases.historyCases(evenings).map { historyCase(it, evenings) },
+            "merges" to RoundGoldenCases.mergeCases().map(::mergeCase),
+            "duplicates" to RoundGoldenCases.duplicateCases().map(::duplicateCase),
+            "invites" to RoundGoldenCases.inviteCases().map(::inviteCase),
         )
         return buildString {
             append("{\n")
@@ -203,6 +210,29 @@ internal object WebGolden {
             put("eveningStatistics", GoldenJson.eveningStats(eveningStats))
             put("statistics", GoldenJson.statistics(statistics, historyPlayerStatsAsOrder = true))
         }
+    }
+
+    /** Gemeinsame Runde: drei Fassungen eines Abends und das Ergebnis von `EveningMerge.merge3`. */
+    private fun mergeCase(case: MergeCase): Pair<String, JsonObject> = case.id to buildJsonObject {
+        put("id", case.id)
+        put("base", case.base?.let(GoldenJson::evening) ?: JsonNull)
+        put("local", GoldenJson.evening(case.local))
+        put("remote", GoldenJson.evening(case.remote))
+        put("merged", GoldenJson.evening(EveningMerge.merge3(case.base, case.local, case.remote)))
+    }
+
+    /** Gemeinsame Runde: ein Abend und die Kennungen der vermutlich doppelt eingetragenen Spiele. */
+    private fun duplicateCase(case: DuplicateCase): Pair<String, JsonObject> = case.id to buildJsonObject {
+        put("id", case.id)
+        put("evening", GoldenJson.evening(case.evening))
+        put("suspects", JsonArray(DuplicateCheck.suspects(case.evening).map { JsonPrimitive(it.value) }))
+    }
+
+    /** Gemeinsame Runde: ein eingefügter Text und der Einladungscode darin (`null`, wenn keiner darin steht). */
+    private fun inviteCase(case: InviteCase): Pair<String, JsonObject> = case.id to buildJsonObject {
+        put("id", case.id)
+        put("text", case.text)
+        put("token", InviteLinks.tokenFrom(case.text)?.let(::JsonPrimitive) ?: JsonNull)
     }
 
     /**

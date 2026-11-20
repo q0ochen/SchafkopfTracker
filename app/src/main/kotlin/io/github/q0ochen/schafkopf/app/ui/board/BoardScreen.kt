@@ -25,6 +25,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import io.github.q0ochen.schafkopf.app.ui.round.RoundStatusKind
+import io.github.q0ochen.schafkopf.app.ui.round.roundStatus
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -99,6 +104,17 @@ fun BoardScreen(eveningId: String, navigator: Navigator) {
                 title = computed?.let { stringResource(R.string.board_title, formatDate(it.evening.startedAt)) }.orEmpty(),
                 onBack = { navigator.back() },
                 actions = {
+                    // Mit gemeinsamer Runde: der Stand des Abgleichs als Symbol; Tippen öffnet „Gemeinsame Runde“.
+                    state.round?.let { round ->
+                        val status = roundStatus(round, LocalContext.current.resources)
+                        IconButton(onClick = { navigator.open(Screen.Round) }) {
+                            Icon(
+                                painter = painterResource(status.kind.icon),
+                                contentDescription = stringResource(R.string.round_status_icon, status.text),
+                                tint = if (status.kind == RoundStatusKind.PROBLEM) MaterialTheme.colorScheme.error else LocalContentColor.current,
+                            )
+                        }
+                    }
                     if (computed != null) {
                         IconButton(onClick = { menuOpen = true }) {
                             Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.common_more))
@@ -202,7 +218,15 @@ fun BoardScreen(eveningId: String, navigator: Navigator) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text(stringResource(R.string.board_delete_title)) },
-            text = { Text(stringResource(R.string.board_delete_text)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.board_delete_text))
+                    // Mit gemeinsamer Runde verschwindet der Abend bei allen: Das soll vorher dastehen.
+                    if (state.round?.link != null) {
+                        Text(stringResource(R.string.round_delete_evening), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -265,6 +289,9 @@ private fun BoardContent(computed: EveningState, state: BoardUiState, onEntryCli
                     }
                 }
                 StatusLine(computed = computed, dealerName = state.name(computed.nextDealer))
+                if (state.round != null && computed.evening.isRunning) {
+                    DealerHint(isMe = state.me == computed.nextDealer, dealerName = state.name(computed.nextDealer))
+                }
             }
         }
 
@@ -278,6 +305,7 @@ private fun BoardContent(computed: EveningState, state: BoardUiState, onEntryCli
                         seating = seating,
                         names = state.names,
                         asMoney = asMoney,
+                        duplicate = result.entry.id in state.duplicates,
                         onClick = { onEntryClick(result) },
                     )
                     HorizontalDivider()
@@ -351,12 +379,30 @@ private fun StatusLine(computed: EveningState, dealerName: String) {
     )
 }
 
+/**
+ * In der gemeinsamen Runde: wer gibt und deshalb in der Regel einträgt. Nur ein Hinweis; eintragen kann jeder.
+ */
+@Composable
+private fun DealerHint(isMe: Boolean, dealerName: String) {
+    Text(
+        text = if (isMe) stringResource(R.string.round_dealer_you) else stringResource(R.string.round_dealer_other, dealerName),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = if (isMe) FontWeight.Bold else FontWeight.Normal,
+        color = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+    )
+}
+
 @Composable
 private fun EntryRow(
     result: EntryResult,
     seating: List<PlayerId>,
     names: Map<PlayerId, String>,
     asMoney: Boolean,
+    duplicate: Boolean,
     onClick: () -> Unit,
 ) {
     val text = entryText(result, names, asMoney)
@@ -385,6 +431,15 @@ private fun EntryRow(
             Text(
                 text = stringResource(R.string.entry_issue),
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (duplicate) {
+            // Dasselbe Spiel steht direkt davor schon einmal: vermutlich haben zwei gleichzeitig eingetragen.
+            Text(
+                text = stringResource(R.string.round_duplicate),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error,
             )
         }

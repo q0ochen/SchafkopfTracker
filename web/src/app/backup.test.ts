@@ -64,4 +64,10 @@ describe("Sicherung", () => {
     expect(hasAnythingToImport({ ...empty, differingPlayers: [anna] })).toBe(true);
     expect(hasAnythingToImport({ ...empty, error: { kind: "X", message: "kaputt" }, newEvenings: [evening] })).toBe(false);
   });
+
+  it("mit gemeinsamer Runde zählen abweichende Namen nicht: Die Namen kommen aus der Runde", () => {
+    expect(hasAnythingToImport({ ...empty, differingPlayers: [anna] }, { renames: false })).toBe(false);
+    expect(hasAnythingToImport({ ...empty, differingPlayers: [anna], newEvenings: [evening] }, { renames: false })).toBe(true);
+    expect(hasAnythingToImport({ ...empty, differingPlayers: [anna] }, { renames: true })).toBe(true);
+  });
 });

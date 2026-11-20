@@ -18,7 +18,7 @@ andere App aus F-Droid. Vorbild ist das Schwesterprojekt Drink With Me, wo das s
 | Eigene F-Droid-Paketquelle | **online** seit 15.11.2026 (Secret `FDROID_REPO_KEYSTORE` gesetzt, Abschnitt 3) |
 | Testversion zum direkten Herunterladen | **eingerichtet** (Release `testversion`, ohne Anmeldung) |
 | Freie Lizenz (CC0 1.0), keine proprietären Bibliotheken in der Ausgabe `fdroid` | **erfüllt** |
-| Anti-Features (Werbung, Tracking, nicht-freie Netzdienste) | **NonFreeNet** (in `fdroid/metadata/` eingetragen): Abend-Kommentator mit Google Gemini und Sicherung in Google Drive, beides freiwillig. Keine Werbung, kein Tracking |
+| Anti-Features (Werbung, Tracking, nicht-freie Netzdienste) | **NonFreeNet** (in `fdroid/metadata/` eingetragen): Abend-Kommentator mit Google Gemini, Sicherung in Google Drive und die gemeinsame Runde (Anmeldung mit einem Google-Konto, Server ist ein eigenes Supabase-Projekt), alles freiwillig. Keine Werbung, kein Tracking |
 | Store-Texte und Symbol (Fastlane) | **teilweise:** Titel, Kurz- und Langbeschreibung (`de-DE`, `en-US`) und Symbol unter `fastlane/metadata/android/`; Bildschirmfotos und Änderungshinweise fehlen noch |
 | Eigener geheimer Release-Schlüssel, reproduzierbare Builds | **fehlt noch** (Abschnitt 5) |
 | Offizielles F-Droid | Antrag frühestens **ab Mitte Februar 2027** (drei Monate sichtbare Entwicklung seit dem öffentlichen Repository am 15.11.2026) [unsicher, Abschnitt 6] |

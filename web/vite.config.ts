@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { defineConfig, loadEnv } from "vite";
 import { basePathFromWebAppUrl, DEFAULT_WEB_APP_URL } from "./scripts/base-path.mjs";
 import { contentSecurityPolicyPlugin, serviceWorkerPlugin } from "./scripts/vite-plugins.mjs";
+import { readRoundConfig } from "./src/round/config.ts";
 
 export default defineConfig(({ mode }) => {
   const env = { ...loadEnv(mode, process.cwd(), "VITE_"), ...process.env };
@@ -10,10 +11,18 @@ export default defineConfig(({ mode }) => {
   const base = basePathFromWebAppUrl(webAppUrl);
   const { version } = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
   const commit = process.env.GITHUB_SHA ? ` (${process.env.GITHUB_SHA.slice(0, 7)})` : "";
+  // Gemeinsame Runde: nur mit Adresse und öffentlichem Schlüssel des Servers (beides kein Geheimnis). Fehlt eines
+  // oder ist die Adresse unbrauchbar, lässt der Build alles dazu weg – auch die Bibliothek für den Server.
+  const round = readRoundConfig(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY);
 
   return {
     base,
-    define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(`${version}${commit}`) },
+    define: {
+      "import.meta.env.VITE_APP_VERSION": JSON.stringify(`${version}${commit}`),
+      "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(round?.url ?? ""),
+      "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(round?.publishableKey ?? ""),
+      "import.meta.env.VITE_ROUND_ENABLED": JSON.stringify(round !== null),
+    },
     // JSX für Preact (Vite 8 übersetzt mit Oxc).
     oxc: { jsx: { runtime: "automatic", importSource: "preact" } },
     build: {
@@ -27,7 +36,11 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
     },
     preview: { port: 4173, strictPort: true },
-    plugins: [contentSecurityPolicyPlugin(), serviceWorkerPlugin({ entry: "src/sw/sw.ts" })],
+    plugins: [
+      // Mit gemeinsamer Runde darf die App außer mit sich selbst nur mit deren Server sprechen.
+      contentSecurityPolicyPlugin({ connect: round === null ? [] : [new URL(round.url).origin] }),
+      serviceWorkerPlugin({ entry: "src/sw/sw.ts" }),
+    ],
     test: {
       include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
       environment: "node",

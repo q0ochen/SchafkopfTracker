@@ -82,7 +82,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import glob, sys, xml.etree.ElementTree as ET
-          minimum = {"domain": 539, "data": 241, "database": 16, "app": 105}
+          minimum = {"domain": 684, "data": 278, "database": 24, "app": 192}
           ok = True
           for module, least in minimum.items():
               files = glob.glob(f"{module}/build/test-results/**/*.xml", recursive=True)
@@ -96,8 +96,16 @@ jobs:
 
       # Laufnummer → steigende versionCode (1000 + Nummer) und versionName „0.1.0-test.<Nummer>“, damit Android,
       # F-Droid und Obtainium jede Testversion als Update erkennen (siehe app/build.gradle.kts).
+      # Gemeinsame Runde: Adresse und Publishable Key des Supabase-Projekts kommen aus app/supabase.properties oder,
+      # solange die Datei leer ist, aus den GitHub-Variablen (beides öffentlich, kein Geheimnis). Ohne Werte ist die
+      # Funktion in der Testversion abgeschaltet.
       - name: Testversion bauen (Release, Ausgabe fdroid)
-        run: ./gradlew :app:assembleFdroidRelease --no-daemon -PciBuildNumber=${{ github.run_number }}
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+        run: >-
+          ./gradlew :app:assembleFdroidRelease --no-daemon -PciBuildNumber=${{ github.run_number }}
+          "-PsupabaseUrl=$SUPABASE_URL" "-PsupabasePublishableKey=$SUPABASE_PUBLISHABLE_KEY"
 
       # Nur mit dem festen Schlüssel aus app/debug.keystore lassen sich neue Testversionen ohne Datenverlust über alte
       # installieren. Außerdem muss die Versionsnummer stimmen.
@@ -302,7 +310,7 @@ jobs:
 
           ### Hinweise
           - Testversion, mit dem öffentlichen Test-Schlüssel signiert. Neue Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten.
-          - Alles bleibt auf dem Handy. Internet braucht die App nur für zwei freiwillige Zusätze: den Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in Google Drive.
+          - Ohne die freiwilligen Zusätze bleibt alles auf dem Handy. Internet braucht die App nur für sie: die gemeinsame Runde (alle tragen vom eigenen Handy ein), den Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in Google Drive.
           - Prüfsumme (SHA-256) der APK: siehe \`SchafkopfTracker.apk.sha256\`.
           EOF
 
@@ -311,8 +319,13 @@ jobs:
         run: |
           TITEL="Testversion (Android)"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            # Tag auf den aktuellen Stand verschieben, Text erneuern.
-            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true
+            # Tag auf den aktuellen Stand verschieben, Text erneuern. Das Verschieben ist nur Zierde und darf scheitern:
+            # Am 19.11.2026 verweigerte GitHub es mit HTTP 403, als der Stand eine Workflow-Datei änderte und beim
+            # Veröffentlichen schon ein neuerer Stand auf dem Zweig lag (drei Läufe davor und danach, bei denen der
+            # Stand noch der neueste war, gingen durch). Die Testversion wird trotzdem ersetzt; ihr Text nennt den
+            # Code-Stand.
+            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true ||
+              echo "::warning::Der Tag $TAG ließ sich nicht auf ${GITHUB_SHA::7} verschieben. Die Testversion wird trotzdem ersetzt."
             gh release edit "$TAG" --title "$TITEL" --notes-file notes.md --prerelease
           else
             gh release create "$TAG" --target "$GITHUB_SHA" --title "$TITEL" --notes-file notes.md --prerelease

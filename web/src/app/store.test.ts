@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AppSettings, Evening, Player } from "../core/model";
 import { IndexedDbRepository, InMemoryRepository, openDatabase, type StorageCodec } from "../data/repository";
 import { game, testEvening } from "../ui/testing";
-import { AppStore, sortEvenings, type Clock } from "./store";
+import { AppStore, sortEvenings, StorageFailedError, type Clock } from "./store";
 
 /** Einfache Umwandlung für Tests (Maps als Paarlisten). Im Browser steckt das Dateiformat der Android-App dahinter. */
 const replacer = (_key: string, value: unknown) => (value instanceof Map ? { __map: [...value] } : value);
@@ -131,6 +131,182 @@ describe("AppStore", () => {
   });
 });
 
+describe("AppStore für den Abgleich der gemeinsamen Runde", () => {
+  it("mit verbundener Runde werden keine Platzhalter angelegt", async () => {
+    const repository = new InMemoryRepository(testCodec);
+    const store = await AppStore.load(repository, clock(), { seedPlayers: false });
+    expect(store.getState().players).toEqual([]);
+    expect(repository.players).toBeUndefined();
+    // Vorhandene Spieler bleiben natürlich.
+    await store.putPlayer({ id: "gast", name: "Gast", colorIndex: 0, archived: false });
+    const again = await AppStore.load(repository, clock(), { seedPlayers: false });
+    expect(again.getState().players.map((it) => it.id)).toEqual(["gast"]);
+  });
+
+  it("ersetzt einen Abend in einem Zug: anlegen, ändern, unverändert lassen, löschen", async () => {
+    const repository = new InMemoryRepository(testCodec);
+    const store = await AppStore.load(repository, clock());
+    const seen: Array<string | null> = [];
+
+    const created = await store.replaceEvening("abend-1", (current) => {
+      seen.push(current?.id ?? null);
+      return testEvening();
+    });
+    expect(created).toEqual(testEvening());
+    expect(repository.evenings.has("abend-1")).toBe(true);
+
+    const changed = await store.replaceEvening("abend-1", (current) => ({ ...(current ?? testEvening()), location: "Wirtshaus" }));
+    expect(changed?.location).toBe("Wirtshaus");
+    expect(store.evening("abend-1")?.location).toBe("Wirtshaus");
+
+    // Inhaltlich gleich: nichts wird geschrieben, niemand benachrichtigt.
+    let calls = 0;
+    store.subscribe(() => calls++);
+    const before = repository.evenings.get("abend-1");
+    repository.failWrites = true;
+    const same = await store.replaceEvening("abend-1", (current) => ({ ...(current ?? testEvening()) }));
+    expect(same?.location).toBe("Wirtshaus");
+    expect(calls).toBe(0);
+    expect(repository.evenings.get("abend-1")).toBe(before);
+    repository.failWrites = false;
+
+    expect(await store.replaceEvening("abend-1", () => null)).toBeNull();
+    expect(store.evening("abend-1")).toBeUndefined();
+    expect(repository.evenings.has("abend-1")).toBe(false);
+    expect(await store.replaceEvening("gibt-es-nicht", () => null)).toBeNull();
+    expect(seen).toEqual([null]);
+  });
+
+  it("eine Eingabe am Tisch und das Zusammenführen überschreiben einander nicht", async () => {
+    const store = await AppStore.load(new InMemoryRepository(testCodec), clock());
+    await store.saveEvening(testEvening([game("g1")]));
+
+    // Beides wird angestoßen, bevor irgendetwas gespeichert ist.
+    const typed = store.updateEvening("abend-1", (it) => ({ ...it, entries: [...it.entries, game("getippt")] }));
+    const merged = store.replaceEvening("abend-1", (current) => ({
+      ...(current ?? testEvening()),
+      entries: [...(current?.entries ?? []), game("vom-server")],
+    }));
+    const typedAgain = store.updateEvening("abend-1", (it) => ({ ...it, entries: [...it.entries, game("noch-eins")] }));
+    await Promise.all([typed, merged, typedAgain]);
+
+    expect(store.evening("abend-1")?.entries.map((it) => it.id)).toEqual(["g1", "getippt", "vom-server", "noch-eins"]);
+  });
+
+  it("die Aufrufe des Abgleichs scheitern, wenn sich nicht speichern lässt", async () => {
+    const repository = new InMemoryRepository(testCodec);
+    const store = await AppStore.load(repository, clock());
+    repository.failWrites = true;
+
+    await expect(store.putEvening(testEvening())).rejects.toBeInstanceOf(StorageFailedError);
+    await expect(store.replaceEvening("abend-2", () => testEvening([], { id: "abend-2" }))).rejects.toBeInstanceOf(StorageFailedError);
+    await expect(store.putPlayer({ id: "gast", name: "Gast", colorIndex: 4, archived: false })).rejects.toBeInstanceOf(StorageFailedError);
+    await expect(store.removePlayer("spieler-1")).rejects.toBeInstanceOf(StorageFailedError);
+    await expect(store.putSettings((it) => ({ ...it, keepScreenOn: false }))).rejects.toBeInstanceOf(StorageFailedError);
+    expect(store.getState().saveError).toContain("Speichern fehlgeschlagen");
+    // Was es nicht gibt, muss auch nicht gespeichert werden.
+    await store.removeEvening("gibt-es-nicht");
+    await store.removePlayer("gibt-es-nicht");
+  });
+
+  it("legt Spieler an ihrer Stelle ab und entfernt sie ohne Rückfrage", async () => {
+    const repository = new InMemoryRepository(testCodec);
+    const store = await AppStore.load(repository, clock());
+
+    await store.putPlayer({ id: "spieler-2", name: "  Ost  ", colorIndex: 9, archived: true });
+    await store.putPlayer({ id: "gast", name: "Gast", colorIndex: 4, archived: false });
+    await store.removePlayer("spieler-3");
+
+    expect(store.getState().players).toEqual([
+      { id: "spieler-1", name: "Spieler 1", colorIndex: 0, archived: false },
+      // Der Name kommt vom Server und wird nicht noch einmal bereinigt.
+      { id: "spieler-2", name: "  Ost  ", colorIndex: 9, archived: true },
+      { id: "spieler-4", name: "Spieler 4", colorIndex: 3, archived: false },
+      { id: "gast", name: "Gast", colorIndex: 4, archived: false },
+    ]);
+    const reloaded = await AppStore.load(repository, clock());
+    expect(reloaded.getState().players).toEqual(store.getState().players);
+  });
+
+  it("holt nach, was sich zuletzt nicht speichern ließ", async () => {
+    const repository = new InMemoryRepository(testCodec);
+    const store = await AppStore.load(repository, clock());
+    await store.saveEvening(testEvening([], { id: "bleibt" }));
+    await store.saveEvening(testEvening([], { id: "geht" }));
+    repository.failWrites = true;
+    await store.saveEvening(testEvening([game("g1")], { id: "neu" }));
+    await store.updateEvening("bleibt", (it) => ({ ...it, location: "Wirtshaus" }));
+    await store.deleteEvening("geht");
+    store.updatePlayer("spieler-1", "Nord", false);
+    await store.updateSettings((it) => ({ ...it, keepScreenOn: false }));
+    await store.flush();
+
+    // Solange der Speicher gestört ist, scheitert auch das Nachholen.
+    await expect(store.settle()).rejects.toBeInstanceOf(StorageFailedError);
+
+    repository.failWrites = false;
+    await store.settle();
+
+    const reloaded = await AppStore.load(repository, clock());
+    expect(reloaded.getState().evenings).toEqual(store.getState().evenings);
+    expect(reloaded.getState().evenings.map((it) => it.id).sort()).toEqual(["bleibt", "neu"]);
+    expect(reloaded.evening("bleibt")?.location).toBe("Wirtshaus");
+    expect(reloaded.getState().players[0].name).toBe("Nord");
+    expect(reloaded.getState().settings.keepScreenOn).toBe(false);
+    expect(store.getState().saveError).toBeNull();
+
+    // Ist alles gespeichert, schreibt das Nachholen nichts.
+    repository.failWrites = true;
+    await store.settle();
+  });
+
+  it("gelingt ein späterer Auftrag für dasselbe Ziel, ist nichts nachzuholen", async () => {
+    const repository = new InMemoryRepository(testCodec);
+    const store = await AppStore.load(repository, clock());
+    repository.failWrites = true;
+    await store.saveEvening(testEvening());
+    repository.failWrites = false;
+    await store.updateEvening("abend-1", (it) => ({ ...it, location: "Wirtshaus" }));
+
+    repository.failWrites = true;
+    await store.settle();
+    expect((await AppStore.load(repository, clock())).evening("abend-1")?.location).toBe("Wirtshaus");
+  });
+
+  it("auch eine nicht gespeicherte Sicherung wird nachgeholt", async () => {
+    const repository = new InMemoryRepository(testCodec);
+    const store = await AppStore.load(repository, clock());
+    repository.failWrites = true;
+    await store.importData([{ id: "gast", name: "Gast", colorIndex: 4, archived: false }], [testEvening([], { id: "aus-sicherung" })]);
+    repository.failWrites = false;
+
+    await store.settle();
+
+    const reloaded = await AppStore.load(repository, clock());
+    expect(reloaded.getState().players.map((it) => it.id)).toContain("gast");
+    expect(reloaded.getState().evenings.map((it) => it.id)).toEqual(["aus-sicherung"]);
+  });
+
+  it("liest neu aus dem Speicher, wenn ein anderes Fenster ihn geändert hat", async () => {
+    const repository = new InMemoryRepository(testCodec);
+    const here = await AppStore.load(repository, clock());
+    const elsewhere = await AppStore.load(repository, clock());
+    await elsewhere.saveEvening(testEvening([game("g1")]));
+    elsewhere.updatePlayer("spieler-1", "Nord", false);
+    await elsewhere.updateSettings((it) => ({ ...it, themeMode: "LIGHT" }));
+    await elsewhere.flush();
+    let calls = 0;
+    here.subscribe(() => calls++);
+
+    await here.reload();
+
+    expect(here.getState().evenings).toEqual([testEvening([game("g1")])]);
+    expect(here.getState().players[0].name).toBe("Nord");
+    expect(here.getState().settings.themeMode).toBe("LIGHT");
+    expect(calls).toBe(1);
+  });
+});
+
 describe("IndexedDbRepository", () => {
   it("speichert und lädt über IndexedDB und lässt unlesbare Abende liegen", async () => {
     const db = await openDatabase(`test-${Math.random()}`);
@@ -148,7 +324,7 @@ describe("IndexedDbRepository", () => {
     expect(again.evenings.map((it) => it.id).sort()).toEqual(["abend-1", "zwei"]);
     expect(again.players?.map((it) => it.id)).toEqual(["gast"]);
     const reloaded = await AppStore.load(repository, clock());
-    expect(reloaded.getState().unreadableEvenings).toBe(1);
+    expect(reloaded.getState().unreadableEvenings).toEqual(["kaputt"]);
     db.close();
   });
 });

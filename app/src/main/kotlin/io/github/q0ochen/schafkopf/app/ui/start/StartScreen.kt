@@ -30,7 +30,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.q0ochen.schafkopf.R
+import io.github.q0ochen.schafkopf.app.round.RoundState
 import io.github.q0ochen.schafkopf.app.ui.common.AmountText
+import io.github.q0ochen.schafkopf.app.ui.round.StatusRow
 import io.github.q0ochen.schafkopf.app.ui.common.SectionHeading
 import org.koin.androidx.compose.koinViewModel
 import io.github.q0ochen.schafkopf.app.ui.common.formatDate
@@ -43,6 +45,7 @@ import io.github.q0ochen.schafkopf.app.ui.navigation.Screen
 fun StartScreen(navigator: Navigator) {
     val viewModel: StartViewModel = koinViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val round by viewModel.round.collectAsStateWithLifecycle()
 
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) }) { padding ->
         LazyColumn(
@@ -90,6 +93,8 @@ fun StartScreen(navigator: Navigator) {
                 }
             }
 
+            item(key = "round") { RoundRow(round) { navigator.open(Screen.Round) } }
+
             item(key = "heading") { SectionHeading(stringResource(R.string.start_past_evenings)) }
 
             if (!state.loading && state.evenings.isEmpty()) {
@@ -115,6 +120,37 @@ private fun LinkButton(labelRes: Int, modifier: Modifier, onClick: () -> Unit) {
         modifier = modifier.heightIn(min = 48.dp),
     ) {
         Text(stringResource(labelRes), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Der Weg zur gemeinsamen Runde; mit verbundener Runde stehen hier ihr Name und der Stand des Abgleichs. */
+@Composable
+private fun RoundRow(round: RoundState, onClick: () -> Unit) {
+    val link = round.link
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            if (link == null) {
+                Text(stringResource(R.string.round_title), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.round_entry_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    stringResource(R.string.round_entry_linked, link.roundName),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                StatusRow(round)
+            }
+        }
     }
 }
 

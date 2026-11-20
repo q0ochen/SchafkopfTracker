@@ -23,6 +23,7 @@ class ScreenTest {
             Screen.Rules("a"),
             Screen.AiSettings,
             Screen.Backup,
+            Screen.Round,
         )
         for (screen in screens) assertEquals(screen, Screen.decode(screen.encode()))
     }

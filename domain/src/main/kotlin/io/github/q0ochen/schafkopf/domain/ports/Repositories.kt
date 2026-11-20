@@ -37,6 +37,8 @@ interface EveningRepository {
 
     /**
      * Speichert den Abend dauerhaft. Kehrt erst zurück, wenn die Daten sicher auf dem Gerät liegen.
+     *
+     * @throws EveningNotStorableException wenn sich der Abend wegen seines Inhalts nicht speichern lässt.
      */
     suspend fun save(evening: Evening)
 
@@ -61,3 +63,9 @@ interface SecretStore {
     /** Speichert den Schlüssel; `null` oder ein leerer Text löscht ihn. */
     suspend fun setApiKey(key: String?)
 }
+
+/**
+ * Ein Abend lässt sich wegen seines Inhalts nicht speichern, zum Beispiel weil einer seiner Einträge eine Kennung
+ * trägt, die es in einem anderen Abend schon gibt (beschädigte oder fremde Daten). Gespeichert wurde dann nichts.
+ */
+class EveningNotStorableException(message: String, cause: Throwable? = null) : Exception(message, cause)
