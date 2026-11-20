@@ -267,6 +267,31 @@ class SupabaseAuthTest {
     }
 
     @Test
+    fun `beginnt waehrend des Einloesens eine neue Anmeldung, bleibt deren Verifier`() = runTest {
+        val storage = MemoryStorage()
+        session(storage).beginSignIn()
+        val first = checkNotNull(storage.verifier)
+        val newer = Pkce.newVerifier()
+        val racing = object : SessionStorage by storage {
+            var reads = 0
+
+            override suspend fun pendingVerifier(): String? {
+                reads++
+                // Beim zweiten Blick, nach dem Tausch, hat inzwischen eine neue Anmeldung begonnen.
+                if (reads == 2) storage.verifier = newer
+                return storage.verifier
+            }
+        }
+        server.enqueueJson(200, tokens("ZUGRIFF-1", "ERNEUERN-1"))
+
+        val account = session(racing).completeSignIn("CODE")
+
+        assertEquals("konto-1", account.userId)
+        assertTrue(server.nextRequest().body!!.utf8().contains(first))
+        assertEquals(newer, storage.verifier)
+    }
+
+    @Test
     fun `scheitert der Tausch, bleibt die begonnene Anmeldung fuer einen neuen Versuch`() = runTest {
         val storage = MemoryStorage()
         val session = session(storage)

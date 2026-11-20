@@ -213,12 +213,17 @@ class RoundScreenshotTest {
         var confirmed = 0
         content(
             RoundState(configured = true, loaded = true, account = account),
-            RoundUi(replace = PendingAttach.Join("0123456789abcdef0123456789abcdef"), eveningCount = 7),
+            RoundUi(replace = PendingAttach.Join("0123456789abcdef0123456789abcdef"), eveningCount = 7, autoBackup = true),
             RoundActions(confirmReplace = { confirmed++ }),
         )
 
         compose.onNodeWithText("Daten dieses Geräts ersetzen?").assertExists()
-        compose.onNodeWithText("Auf diesem Gerät liegen 7 Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten willst.").assertExists()
+        compose.onNodeWithText(
+            "Auf diesem Gerät liegen 7 Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten willst.",
+            substring = true,
+        ).assertExists()
+        // Die automatische Sicherung ist eingeschaltet: Auch sie bekommt danach die Daten der Runde.
+        compose.onNodeWithText("Die automatische Sicherung wird danach mit den Daten der Runde überschrieben.", substring = true).assertExists()
         compose.onNodeWithText("Zur Sicherung").assertExists()
         capture("43_runde_ersetzen")
         compose.onNodeWithText("Ersetzen").performClick()
@@ -316,6 +321,33 @@ class RoundScreenshotTest {
         compose.onNodeWithText("Runde verlassen").assertDoesNotExist()
         compose.onNodeWithText("Abmelden").assertExists()
         capture("49_runde_anmeldung_abgelaufen")
+    }
+
+    @Test
+    fun liessen_sich_die_runden_nicht_laden_steht_das_da() {
+        var refreshed = 0
+        content(
+            RoundState(configured = true, loaded = true, account = account),
+            RoundUi(roundsFailed = true),
+            RoundActions(refresh = { refreshed++ }),
+        )
+
+        compose.onNodeWithText("Deine Runden ließen sich nicht laden.").assertExists()
+        capture("56_runde_runden_nicht_geladen")
+        compose.onNodeWithText("Erneut versuchen").performClick()
+        assertEquals(1, refreshed)
+    }
+
+    @Test
+    fun ein_anderes_konto_wird_gemeldet_und_die_runde_bleibt() {
+        content(linked.copy(account = null, message = RoundMessage.OTHER_ACCOUNT, pending = 2))
+
+        compose.onNodeWithText(
+            "Diese Runde gehört zu einem anderen Google-Konto. Melde dich mit dem Konto an, mit dem du der Runde beigetreten bist.",
+        ).assertExists()
+        compose.onNodeWithText("Schafkopfrunde").assertExists()
+        compose.onNodeWithText("Mit Google anmelden").assertIsEnabled()
+        capture("57_runde_anderes_konto")
     }
 
     @Test

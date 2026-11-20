@@ -25,8 +25,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Nur beim ersten Anlegen: Nach einer Drehung trüge die Activity denselben Link noch einmal vor.
-        if (savedInstanceState == null) handleLink(intent)
+        // Nur beim ersten Anlegen: Nach einer Drehung trüge die Activity denselben Link noch einmal vor. Und nicht,
+        // wenn Android die App aus „Zuletzt verwendet“ neu startet: Dann bringt es den Link vom letzten Mal wieder mit
+        // (eine längst eingelöste Einladung, eine alte Rückkehr aus der Anmeldung).
+        val fromHistory = (intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
+        if (savedInstanceState == null && !fromHistory) handleLink(intent)
         setContent {
             val settings by settingsRepository.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
             SchafkopfTheme(themeMode = settings.themeMode) {

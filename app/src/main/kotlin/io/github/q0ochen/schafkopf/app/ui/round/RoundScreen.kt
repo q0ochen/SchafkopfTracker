@@ -73,6 +73,7 @@ class RoundActions(
     val joinInvited: () -> Unit = {},
     val discardInvite: () -> Unit = {},
     val use: (RoundSummary) -> Unit = {},
+    val refresh: () -> Unit = {},
     val confirmReplace: () -> Unit = {},
     val cancelReplace: () -> Unit = {},
     val openBackup: () -> Unit = {},
@@ -115,7 +116,8 @@ fun RoundScreen(navigator: Navigator) {
     ) { padding ->
         RoundContent(
             state = state,
-            ui = ui,
+            // Auch während die Anmeldung nach der Rückkehr aus dem Browser eingelöst wird, ruhen die Knöpfe.
+            ui = if (state.signingIn) ui.copy(busy = true) else ui,
             players = players,
             actions = remember(viewModel, navigator) {
                 RoundActions(
@@ -125,6 +127,7 @@ fun RoundScreen(navigator: Navigator) {
                     joinInvited = viewModel::joinInvited,
                     discardInvite = viewModel::discardInvite,
                     use = viewModel::use,
+                    refresh = viewModel::refresh,
                     confirmReplace = viewModel::confirmReplace,
                     cancelReplace = viewModel::cancelReplace,
                     openBackup = {
@@ -195,10 +198,15 @@ fun RoundContent(state: RoundState, ui: RoundUi, players: List<Player>, actions:
             title = { Text(stringResource(R.string.round_replace_title)) },
             text = {
                 Text(
-                    if (ui.eveningCount > 0) {
-                        pluralStringResource(R.plurals.round_replace_text, ui.eveningCount, ui.eveningCount)
-                    } else {
-                        stringResource(R.string.round_replace_text_players)
+                    buildString {
+                        append(
+                            if (ui.eveningCount > 0) {
+                                pluralStringResource(R.plurals.round_replace_text, ui.eveningCount, ui.eveningCount)
+                            } else {
+                                stringResource(R.string.round_replace_text_players)
+                            },
+                        )
+                        if (ui.autoBackup) append("\n\n").append(stringResource(R.string.round_replace_auto_backup))
                     },
                 )
             },
@@ -252,6 +260,7 @@ private fun messageText(message: RoundMessage): String = stringResource(
         RoundMessage.SIGN_IN_CANCELLED -> R.string.round_sign_in_cancelled
         RoundMessage.OTHER_ACCOUNT -> R.string.round_other_account
         RoundMessage.DETACHED -> R.string.round_detached
+        RoundMessage.INVALID_LINK -> R.string.round_error_no_code
     },
 )
 
@@ -355,6 +364,11 @@ private fun SignedIn(state: RoundState, ui: RoundUi, actions: RoundActions) {
     }
 
     val rounds = ui.rounds.orEmpty()
+    if (ui.roundsFailed && rounds.isEmpty()) {
+        SectionHeading(stringResource(R.string.round_my_rounds))
+        Text(stringResource(R.string.round_my_rounds_failed), style = MaterialTheme.typography.bodyLarge)
+        QuietButton(stringResource(R.string.round_retry), onClick = actions.refresh, enabled = !ui.busy)
+    }
     if (rounds.isNotEmpty()) {
         SectionHeading(stringResource(R.string.round_my_rounds))
         for (round in rounds) {

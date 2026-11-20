@@ -23,6 +23,10 @@ import io.github.q0ochen.schafkopf.domain.round.RoundException
 import io.github.q0ochen.schafkopf.domain.round.RoundStore
 import io.github.q0ochen.schafkopf.domain.round.RoundSync
 import io.github.q0ochen.schafkopf.domain.rules.GameType
+import io.github.q0ochen.schafkopf.domain.round.RoundApi
+import io.github.q0ochen.schafkopf.domain.round.RoundHead
+import io.github.q0ochen.schafkopf.domain.round.RoundId
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -38,6 +42,12 @@ internal class FakeAccount(private val stored: Account? = null) : RoundAccount {
 
     /** Die nächste Anmeldung scheitert. */
     var fail = false
+
+    /** Zur nächsten Rückkehr gibt es keine begonnene Anmeldung (zum Beispiel derselbe Link ein zweites Mal). */
+    var noPendingSignIn = false
+
+    /** Solange gesetzt, hängt das Einlösen der Anmeldung, bis der Test es freigibt. */
+    var exchange: CompletableDeferred<Unit>? = null
     var signOuts = 0
 
     override suspend fun load(): Account? {
@@ -48,6 +58,8 @@ internal class FakeAccount(private val stored: Account? = null) : RoundAccount {
     override suspend fun beginSignIn(): String = "https://anmeldung.example/authorize"
 
     override suspend fun completeSignIn(code: String): Account {
+        exchange?.await()
+        if (noPendingSignIn) throw RoundException(RoundError.SIGNED_OUT, RoundAccount.NO_SIGN_IN_PENDING)
         if (fail) throw RoundException(RoundError.SERVER, "Anmeldung")
         account.value = next
         return next
@@ -56,6 +68,17 @@ internal class FakeAccount(private val stored: Account? = null) : RoundAccount {
     override suspend fun signOut() {
         signOuts++
         account.value = null
+    }
+}
+
+/** Ein Zugang zum Server, dessen Kopf-Anfrage ein Test anhalten kann (zum Beispiel: langsames Netz). */
+internal class GatedApi(private val inner: RoundApi) : RoundApi by inner {
+    /** Solange gesetzt, wartet jede Anfrage nach dem Kopf der Runde, bis der Test sie freigibt. */
+    var gate: CompletableDeferred<Unit>? = null
+
+    override suspend fun head(round: RoundId): RoundHead? {
+        gate?.await()
+        return inner.head(round)
     }
 }
 
@@ -85,20 +108,21 @@ internal class RoundTestKit(
     private val clock: Clock = Clock.systemUTC(),
 ) {
     val session = server.sessionFor(userId)
+    val api = GatedApi(session)
     val account = FakeAccount(if (signedIn) Account(userId, "$userId@example.org") else null).apply {
         next = Account(userId, "$userId@example.org")
     }
     private var counter = 0
     private val ids = IdGenerator { "$userId-${++counter}" }
     val editor = EveningEditor(evenings, clock, ids)
-    val sync = RoundSync(session, store, players, evenings, settings, editor)
-    val connection = RoundConnection(session, store, players, evenings, sync, ids)
+    val sync = RoundSync(api, store, players, evenings, settings, editor)
+    val connection = RoundConnection(api, store, players, evenings, sync, ids)
     val invites = MemoryInvites()
     var backgroundRequests = 0
     val coordinator = RoundCoordinator(
         configured = configured,
         account = account,
-        api = session,
+        api = api,
         store = store,
         sync = sync,
         connection = connection,

@@ -267,9 +267,16 @@ class RoundSyncRoomTest {
         assertNull(two.evenings.evening(clash.id).first())
         assertFalse(two.evenings.evening(EveningId("gut")).first() == null)
         assertEquals(fullEvening(), two.evenings.evening(EveningId("abend-1")).first())
-        // Auf dem Server bleibt der fremde Abend unberührt, und der nächste Abgleich versucht es nicht noch einmal.
+        // Auf dem Server bleibt der fremde Abend unberührt. Das Gerät merkt ihn sich und liest ihn bei jedem Abgleich
+        // einzeln nach (vielleicht lässt er sich später speichern), schreibt aber nichts.
+        assertEquals(setOf(clash.id), two.store.link.first()?.unreadable)
+        two.session.calls.clear()
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 0, unreadable = 1), two.sync.sync())
+        assertEquals(listOf("head", "evening"), two.session.calls)
         assertEquals(1, server.eveningRow(round, clash.id)?.version)
-        assertSettled(two)
+        assertNull(two.evenings.evening(clash.id).first())
+        // Und nach einem Neustart weiß das Gerät das noch.
+        assertEquals(setOf(clash.id), two.restarted().store.link.first()?.unreadable)
     }
 
     @Test

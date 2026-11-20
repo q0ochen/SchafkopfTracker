@@ -49,6 +49,14 @@ interface RoundAccount {
 
     /** Meldet ab; auf dem Gerät klappt das immer, auch ohne Netz. */
     suspend fun signOut()
+
+    companion object {
+        /**
+         * [RoundException.detail], wenn [completeSignIn] ohne begonnene Anmeldung gerufen wird (zum Beispiel, weil
+         * derselbe Link ein zweites Mal kommt).
+         */
+        const val NO_SIGN_IN_PENDING = "keine begonnene Anmeldung"
+    }
 }
 
 /** Liefert gültige Zugriffstoken für Aufrufe im Namen des Kontos. */
@@ -102,9 +110,11 @@ class RoundSession(
      */
     override suspend fun completeSignIn(code: String): Account = mutex.withLock {
         ensureLoaded()
-        val verifier = storage.pendingVerifier() ?: throw RoundException(RoundError.SIGNED_OUT, "keine begonnene Anmeldung")
+        val verifier = storage.pendingVerifier() ?: throw RoundException(RoundError.SIGNED_OUT, RoundAccount.NO_SIGN_IN_PENDING)
         val tokens = auth.exchangeCode(code, verifier)
-        storage.setPendingVerifier(null)
+        // Nur den benutzten Verifier vergessen: Wurde inzwischen eine neue Anmeldung begonnen, gehört der gespeicherte
+        // schon zu ihr.
+        if (storage.pendingVerifier() == verifier) storage.setPendingVerifier(null)
         apply(tokens)
         tokens.account
     }

@@ -114,6 +114,8 @@ data class SavedEvening(val version: Int, val rev: Long)
  * @property playerId Der eigene Spieler; `null`, solange „Das bin ich“ noch aussteht.
  * @property cursor Das größte `rev`, das dieses Gerät vollständig verarbeitet hat.
  * @property rulesBase Das zuletzt abgeglichene Regelwerk für neue Abende.
+ * @property unreadable Abende des Servers, die dieses Gerät nicht lesen oder nicht speichern konnte (zum Beispiel von
+ *   einer neueren App). Sie liegen hinter [cursor] und werden deshalb bei jedem Abgleich einzeln neu gelesen.
  */
 data class RoundLink(
     val roundId: RoundId,
@@ -124,6 +126,7 @@ data class RoundLink(
     val cursor: Long = 0,
     val rulesBase: RuleSet? = null,
     val members: List<RoundMember> = emptyList(),
+    val unreadable: Set<EveningId> = emptySet(),
 )
 
 /** Was beim Reden mit dem Server schiefgehen kann. Die Namen in Kleinbuchstaben sind die Fehlercodes des Servers. */

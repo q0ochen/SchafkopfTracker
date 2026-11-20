@@ -7,7 +7,9 @@ import io.github.q0ochen.schafkopf.domain.round.InMemoryRoundServer
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.SyncNotice
 import io.github.q0ochen.schafkopf.domain.round.SyncOutcome
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -242,7 +244,7 @@ class RoundCoordinatorTest {
         assertNull(kit.state.problem)
         assertFalse(kit.state.needsSignIn)
         assertEquals(0, kit.state.pending)
-        assertEquals(1, kit.state.openRequests)
+        assertTrue(kit.state.openRound)
     }
 
     @Test
@@ -306,7 +308,60 @@ class RoundCoordinatorTest {
         runCurrent()
 
         assertEquals("konto-1", kit.state.account?.userId)
-        assertEquals(1, kit.state.openRequests)
+        assertTrue(kit.state.openRound)
+        assertNull(kit.state.message)
+        // Der Bildschirm ist offen: Der Wunsch ist verbraucht.
+        kit.coordinator.roundOpened()
+        assertFalse(kit.state.openRound)
+    }
+
+    @Test
+    fun `waehrend die Anmeldung eingeloest wird, ist das zu sehen`() = runTest {
+        val kit = RoundTestKit(backgroundScope, signedIn = false)
+        kit.coordinator.start()
+        runCurrent()
+        val exchange = CompletableDeferred<Unit>()
+        kit.account.exchange = exchange
+
+        kit.coordinator.onLink("schafkopftracker://auth-callback?code=abc")
+        runCurrent()
+        assertTrue(kit.state.signingIn)
+
+        exchange.complete(Unit)
+        runCurrent()
+        assertFalse(kit.state.signingIn)
+        assertEquals("konto-1", kit.state.account?.userId)
+    }
+
+    @Test
+    fun `kommt dieselbe Rueckkehr ein zweites Mal, gibt es keine Fehlermeldung`() = runTest {
+        val kit = RoundTestKit(backgroundScope, signedIn = false)
+        kit.coordinator.start()
+        runCurrent()
+        kit.coordinator.onLink("schafkopftracker://auth-callback?code=abc")
+        runCurrent()
+        // Eine alte Meldung räumt die geglückte Anmeldung weg.
+        assertNull(kit.state.message)
+
+        kit.account.noPendingSignIn = true
+        kit.coordinator.onLink("schafkopftracker://auth-callback?code=abc")
+        runCurrent()
+
+        assertNull(kit.state.message)
+        assertEquals("konto-1", kit.state.account?.userId)
+    }
+
+    @Test
+    fun `eine geglueckte Anmeldung raeumt eine alte Meldung zur Anmeldung weg`() = runTest {
+        val kit = RoundTestKit(backgroundScope, signedIn = false)
+        kit.coordinator.start()
+        runCurrent()
+        kit.coordinator.onLink("schafkopftracker://auth-callback?error=access_denied")
+        assertEquals(RoundMessage.SIGN_IN_CANCELLED, kit.state.message)
+
+        kit.coordinator.onLink("schafkopftracker://auth-callback?code=abc")
+        runCurrent()
+
         assertNull(kit.state.message)
     }
 
@@ -327,21 +382,61 @@ class RoundCoordinatorTest {
         runCurrent()
         assertEquals(RoundMessage.SIGN_IN_FAILED, kit.state.message)
         assertNull(kit.state.account)
-        assertEquals(3, kit.state.openRequests)
+        assertTrue(kit.state.openRound)
+        // Ohne Anmeldung ist auch eine zweite Rückkehr ohne begonnene Anmeldung ein Fehler.
+        kit.coordinator.clearMessage()
+        kit.account.fail = false
+        kit.account.noPendingSignIn = true
+        kit.coordinator.onLink("schafkopftracker://auth-callback?code=abc")
+        runCurrent()
+        assertEquals(RoundMessage.SIGN_IN_FAILED, kit.state.message)
     }
 
     @Test
-    fun `meldet sich ein anderes Konto an, wird die Runde vom Geraet getrennt`() = runTest {
+    fun `meldet sich ein anderes Konto an, bleibt die Runde verbunden und das Konto wird wieder abgemeldet`() = runTest {
         val kit = linked()
+        val evening = kit.evenings.evenings.first().single().id
+        val round = kit.state.link!!.roundId
+        // Die Anmeldung ist abgelaufen; inzwischen wurde ein Spiel eingetragen, das noch wartet.
+        kit.session.signedOut = true
+        kit.addGame(evening)
+        settle()
+        assertTrue(kit.state.needsSignIn)
+        kit.session.signedOut = false
+        kit.session.calls.clear()
         kit.account.next = Account("konto-9", "konto-9@example.org")
 
         kit.coordinator.onLink("schafkopftracker://auth-callback?code=abc")
         settle()
 
-        assertNull(kit.state.link)
+        // Nichts lief unter dem fremden Konto, und nichts ging verloren.
+        assertEquals(round, kit.state.link?.roundId)
         assertEquals(RoundMessage.OTHER_ACCOUNT, kit.state.message)
-        assertEquals("konto-9", kit.state.account?.userId)
-        assertEquals(1, kit.evenings.evenings.first().size)
+        assertNull(kit.state.account)
+        assertEquals(1, kit.account.signOuts)
+        assertEquals(emptyList<String>(), kit.session.calls)
+        assertEquals(1, kit.state.pending)
+
+        // Mit dem richtigen Konto geht das wartende Spiel hoch.
+        kit.account.next = Account("konto-1", "konto-1@example.org")
+        kit.coordinator.onLink("schafkopftracker://auth-callback?code=def")
+        settle()
+        assertNull(kit.state.message)
+        assertEquals(0, kit.state.pending)
+        assertEquals(1, kit.server.evenings(round).single().entries.size)
+    }
+
+    @Test
+    fun `im Hintergrund wird nie unter fremdem Konto abgeglichen`() = runTest {
+        val kit = linked()
+        kit.account.account.value = Account("konto-9", "konto-9@example.org")
+        runCurrent()
+        kit.session.calls.clear()
+
+        assertEquals(SyncOutcome.SignedOut, kit.coordinator.syncInBackground())
+
+        assertEquals(emptyList<String>(), kit.session.calls)
+        assertNotNull(kit.state.link)
     }
 
     @Test
@@ -354,18 +449,52 @@ class RoundCoordinatorTest {
         assertTrue(kit.coordinator.onLink("schafkopftracker://einladung/$token"))
         assertEquals(token, kit.state.pendingInvite)
         assertEquals(token, kit.invites.get())
-        assertEquals(1, kit.state.openRequests)
+        assertTrue(kit.state.openRound)
+        kit.coordinator.roundOpened()
 
-        // Ein Link ohne gültigen Code öffnet nur den Bildschirm; fremde Links gehen die Runde nichts an.
+        // Ein Link ohne gültigen Code öffnet den Bildschirm mit einer Meldung; fremde Links gehen die Runde nichts an.
         assertTrue(kit.coordinator.onLink("schafkopftracker://einladung/kaputt"))
         assertEquals(token, kit.state.pendingInvite)
+        assertEquals(RoundMessage.INVALID_LINK, kit.state.message)
+        assertTrue(kit.state.openRound)
+        kit.coordinator.roundOpened()
         assertFalse(kit.coordinator.onLink("https://example.org/irgendwas"))
         assertFalse(kit.coordinator.onLink("io.github.q0ochen.schafkopf:/oauth2redirect?code=x"))
-        assertEquals(2, kit.state.openRequests)
+        assertFalse(kit.state.openRound)
 
         kit.coordinator.rememberInvite(null)
         assertNull(kit.state.pendingInvite)
         assertNull(kit.invites.get())
+    }
+
+    @Test
+    fun `was beim Start schon wartet, zeigt die Statuszeile gleich`() = runTest {
+        val kit = RoundTestKit(backgroundScope)
+        val evening = kit.seed()
+        kit.connection.create("Stammtisch", kit.userId, emptyList())
+        kit.addGame(evening)
+        // Das Netz ist langsam: Der erste Abgleich hängt.
+        kit.api.gate = CompletableDeferred()
+
+        kit.coordinator.start()
+        runCurrent()
+
+        assertTrue(kit.state.syncing)
+        assertEquals(1, kit.state.pending)
+    }
+
+    @Test
+    fun `bricht ein Abgleich ab, steht danach nicht mehr da, dass er laeuft`() = runTest {
+        val kit = linked()
+        kit.api.gate = CompletableDeferred()
+        val job = launch { kit.coordinator.syncInBackground() }
+        runCurrent()
+        assertTrue(kit.state.syncing)
+
+        job.cancel()
+        runCurrent()
+
+        assertFalse(kit.state.syncing)
     }
 
     // --- Runden ---

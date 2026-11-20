@@ -93,11 +93,67 @@ class RoundSyncTest {
         )
         assertEquals(
             listOf(
-                "createRound", "head", "members", "playersSince", "eveningsSince",
+                "myRounds", "createRound", "head", "members", "playersSince", "eveningsSince",
                 "savePlayer", "savePlayer", "savePlayer", "savePlayer", "saveRules", "saveEvening", "head",
             ),
             one.session.calls,
         )
+    }
+
+    @Test
+    fun `geht die Antwort auf das Anlegen verloren, entsteht beim zweiten Versuch keine zweite Runde`() = runTest {
+        one.firstStart()
+        one.session.loseNextAnswer = true
+
+        assertEquals(RoundError.OFFLINE, errorOf { one.connection.create("Stammtisch", one.userId, PLACEHOLDERS) })
+
+        assertNull(one.link())
+        assertEquals(1, one.api.myRounds().size)
+        // Der zweite Versuch nimmt die leere Runde vom ersten.
+        assertTrue(one.connection.create("  Stammtisch ", one.userId, PLACEHOLDERS) is SyncOutcome.Synced)
+        assertEquals(listOf(one.roundId()), one.api.myRounds().map { it.id })
+        // Eine Runde, in der schon etwas liegt, oder eine mit anderem Namen wird nie wiederverwendet.
+        one.connection.disconnect()
+        assertTrue(one.connection.create("Stammtisch", one.userId, PLACEHOLDERS) is SyncOutcome.Synced)
+        assertEquals(2, one.api.myRounds().size)
+        one.connection.disconnect()
+        assertTrue(one.connection.create("Zweite Runde", one.userId, PLACEHOLDERS) is SyncOutcome.Synced)
+        assertEquals(3, one.api.myRounds().size)
+    }
+
+    @Test
+    fun `ohne Netz bleibt das Geraet beim Verwenden einer Runde, wie es ist`() = runTest {
+        round()
+        three.firstStart()
+        three.startEvening("eigener")
+        three.api.joinRound(one.api.createInvite(one.roundId()))
+        val summary = three.api.myRounds().single()
+        three.session.offline = true
+
+        assertEquals(RoundError.OFFLINE, errorOf { three.connection.use(summary, three.userId) })
+
+        assertNull(three.link())
+        assertEquals(listOf("eigener"), three.allEvenings().map { it.id.value })
+        assertEquals(PLACEHOLDERS, three.allPlayers())
+        // Mit Netz klappt es, und erst dann werden die Daten des Geräts ersetzt.
+        three.session.offline = false
+        assertTrue(three.connection.use(summary, three.userId) is SyncOutcome.Synced)
+        one.synced()
+        assertEquals(one.allEvenings(), three.allEvenings())
+        assertEquals(one.allPlayers(), three.allPlayers())
+    }
+
+    @Test
+    fun `eine Runde, die es nicht mehr gibt, laesst das Geraet unberuehrt`() = runTest {
+        three.firstStart()
+        three.startEvening("eigener")
+        val gone = RoundSummary(RoundId("gibt-es-nicht"), "Verschwunden", rev = 3, memberCount = 1, myPlayerId = null, isCreator = false)
+
+        assertEquals(RoundError.NOT_MEMBER, errorOf { three.connection.use(gone, three.userId) })
+
+        assertNull(three.link())
+        assertEquals(1, three.allEvenings().size)
+        assertEquals(PLACEHOLDERS, three.allPlayers())
     }
 
     @Test
@@ -569,9 +625,9 @@ class RoundSyncTest {
         assertNull(server.eveningRow(round, huge))
         assertEquals(two.evening(normal), server.eveningRow(round, normal)?.evening)
 
-        // Derselbe Stand wird nicht noch einmal versucht; nach einer Änderung schon.
+        // Derselbe Stand wird nicht noch einmal versucht, bleibt aber gezählt; nach einer Änderung geht er hoch.
         two.session.calls.clear()
-        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 1), two.sync.sync())
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 1, refused = 1), two.sync.sync())
         assertFalse("saveEvening" in two.session.calls)
         two.editor.update(huge) { it.copy(entries = it.entries.take(3)) }
         assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 1, pending = 0), two.sync.sync())
@@ -617,8 +673,54 @@ class RoundSyncTest {
         assertEquals(InMemoryRoundServer.MAX_ENTRIES + 2, two.evening(abend)?.entries?.size)
         assertEquals(2, server.eveningRow(round, abend)?.evening?.entries?.size)
         two.session.calls.clear()
-        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 1), two.sync.sync())
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 1, refused = 1), two.sync.sync())
         assertFalse("saveEvening" in two.session.calls)
+        // Löscht man den Abend hier, ist auch die Zählung weg (der Server hat ihn weiter in der alten Fassung).
+        two.evenings.delete(abend)
+        assertEquals(0, (two.sync.sync() as SyncOutcome.Synced).refused)
+    }
+
+    @Test
+    fun `ein unlesbarer Abend bleibt gemerkt und kommt an, sobald er sich lesen laesst`() = runTest {
+        val round = round()
+        val newer = one.startEvening("abend-neu")
+        one.addGame(newer)
+        one.synced()
+        val content = one.evening(newer)!!
+        // Eine neuere App schreibt den Abend in einer Form, die Handy zwei nicht lesen kann.
+        server.makeUnreadable(round, newer)
+
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 0, unreadable = 1), two.sync.sync())
+        assertNull(two.evening(newer))
+        assertEquals(setOf(newer), two.link()?.unreadable)
+
+        // Der Abend liegt jetzt hinter dem Lesezeichen. Er bleibt trotzdem gemerkt und gezählt.
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 0, unreadable = 1), two.sync.sync())
+        two.addGame(abend)
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 1, pending = 0, unreadable = 1), two.sync.sync())
+        assertEquals(SyncOutcome.Unchanged, two.sync.sync(quick = true))
+
+        // Nach dem Update der App lässt er sich lesen; auf dem Server hat sich dabei nichts geändert.
+        server.makeReadable(round, newer, content)
+        assertEquals(SyncOutcome.Synced(pulled = 1, pushed = 0, pending = 0), two.sync.sync())
+        assertEquals(content, two.evening(newer))
+        assertEquals(emptySet<EveningId>(), two.link()?.unreadable)
+        one.synced()
+        assertSameEverywhere(round, one, two)
+    }
+
+    @Test
+    fun `ein unlesbarer Abend, den es nicht mehr gibt, ist vergessen`() = runTest {
+        val round = round()
+        val newer = one.startEvening("abend-neu")
+        one.synced()
+        server.makeUnreadable(round, newer)
+        assertEquals(1, (two.sync.sync() as SyncOutcome.Synced).unreadable)
+
+        server.forgetEvening(round, newer)
+
+        assertEquals(SyncOutcome.Synced(pulled = 0, pushed = 0, pending = 0), two.sync.sync())
+        assertEquals(emptySet<EveningId>(), two.link()?.unreadable)
     }
 
     @Test

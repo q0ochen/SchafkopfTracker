@@ -100,6 +100,15 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
         state.evenings[id] = row.copy(version = row.version + 1, rev = state.nextRev(), evening = null)
     }
 
+    /**
+     * Macht das Dokument eines Abends wieder lesbar, ohne dass sich auf dem Server etwas ändert – wie nach einem
+     * Update der App auf dem Gerät, das ihn bisher nicht lesen konnte.
+     */
+    fun makeReadable(round: RoundId, id: EveningId, evening: Evening): Unit = synchronized(this) {
+        val state = rounds.getValue(round)
+        state.evenings[id] = state.evenings.getValue(id).copy(evening = evening)
+    }
+
     /** Vergisst einen Abend ganz, als hätte es ihn auf dem Server nie gegeben. */
     fun forgetEvening(round: RoundId, id: EveningId): Unit = synchronized(this) {
         rounds.getValue(round).evenings.remove(id)

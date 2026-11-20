@@ -4,10 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.lifecycle.ViewModel
@@ -62,14 +59,15 @@ fun AppNavHost() {
 
     LaunchedEffect(entryIds) { stores.retainOnly(entryIds.toSet()) }
 
-    // Ein Einladungslink oder die Rückkehr aus der Anmeldung öffnet die gemeinsame Runde (einmal je Anlass).
+    // Ein Einladungslink oder die Rückkehr aus der Anmeldung öffnet die gemeinsame Runde, einmal je Anlass: Der
+    // Wunsch wird beim Öffnen verbraucht. (Ein Zähler hier und einer im Koordinator liefen auseinander, sobald Android
+    // nur die Activity oder nur den Prozess neu anlegt.)
     val coordinator: RoundCoordinator = koinInject()
-    val openRequests = coordinator.state.collectAsStateWithLifecycle().value.openRequests
-    var handledRequests by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(openRequests) {
-        if (openRequests > handledRequests) {
-            handledRequests = openRequests
+    val openRound = coordinator.state.collectAsStateWithLifecycle().value.openRound
+    LaunchedEffect(openRound) {
+        if (openRound) {
             if (navigator.current.screen != Screen.Round) navigator.open(Screen.Round)
+            coordinator.roundOpened()
         }
     }
     BackHandler(enabled = navigator.canGoBack) { navigator.back() }

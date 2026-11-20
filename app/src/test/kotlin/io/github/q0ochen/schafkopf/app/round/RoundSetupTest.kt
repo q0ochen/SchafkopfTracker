@@ -132,6 +132,7 @@ class RoundSetupTest {
             cursor = 123_456_789_012L,
             rulesBase = RuleSet.sauspiel(),
             members = listOf(RoundMember("konto-1", PlayerId("spieler-1")), RoundMember("konto-2", null)),
+            unreadable = setOf(EveningId("abend-von-morgen"), EveningId("noch-einer")),
         )
         val start = Instant.parse("2026-12-12T18:00:00Z")
         val seating = listOf("spieler-1", "spieler-2", "spieler-3", "spieler-4").map(::PlayerId)
@@ -140,6 +141,8 @@ class RoundSetupTest {
         assertEquals(link, JsonRoundCodec.decodeLink(JsonRoundCodec.encodeLink(link)))
         val bare = RoundLink(RoundId("runde"), "Stammtisch", "konto-1")
         assertEquals(bare, JsonRoundCodec.decodeLink(JsonRoundCodec.encodeLink(bare)))
+        // Ein Stand von vor dem 20.11.2026 kennt die Liste der unlesbaren Abende noch nicht.
+        assertEquals(bare, JsonRoundCodec.decodeLink("{\"roundId\":\"runde\",\"roundName\":\"Stammtisch\",\"userId\":\"konto-1\"}"))
         assertEquals(evening, JsonRoundCodec.decodeEvening(JsonRoundCodec.encodeEvening(evening)))
         // Unlesbares gilt als nicht vorhanden; ein unlesbares Regelwerk in der Runde als unbekannt.
         assertNull(JsonRoundCodec.decodeLink("kein json"))

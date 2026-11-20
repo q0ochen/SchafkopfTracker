@@ -45,7 +45,7 @@
     <string name="round_no_browser">Für die Anmeldung braucht es einen Browser auf dem Handy.</string>
     <string name="round_sign_in_failed">Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen.</string>
     <string name="round_sign_in_cancelled">Die Anmeldung wurde abgebrochen.</string>
-    <string name="round_other_account">Du bist jetzt mit einem anderen Konto angemeldet. Die Runde wurde von diesem Gerät getrennt; die Daten bleiben hier.</string>
+    <string name="round_other_account">Diese Runde gehört zu einem anderen Google-Konto. Melde dich mit dem Konto an, mit dem du der Runde beigetreten bist.</string>
     <string name="round_detached">Die Runde gibt es nicht mehr, oder du gehörst nicht mehr dazu. Die Daten bleiben als Kopie auf diesem Gerät.</string>
 
     <!-- Angemeldet, ohne Runde -->
@@ -60,6 +60,8 @@
     <string name="round_invite_discard">Einladung verwerfen</string>
     <string name="round_my_rounds">Deine Runden</string>
     <string name="round_use">Auf diesem Gerät verwenden</string>
+    <string name="round_my_rounds_failed">Deine Runden ließen sich nicht laden.</string>
+    <string name="round_retry">Erneut versuchen</string>
     <string name="round_create_heading">Neue Runde anlegen</string>
     <string name="round_create_name">Name der Runde</string>
     <string name="round_create_default_name">Schafkopfrunde</string>
@@ -77,6 +79,7 @@
         <item quantity="other">Auf diesem Gerät liegen %1$d Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten willst.</item>
     </plurals>
     <string name="round_replace_text_players">Die Spieler dieses Geräts werden durch die der Runde ersetzt.</string>
+    <string name="round_replace_auto_backup">Die automatische Sicherung wird danach mit den Daten der Runde überschrieben.</string>
     <string name="round_replace_confirm">Ersetzen</string>
     <string name="round_replace_backup">Zur Sicherung</string>
 
@@ -135,6 +138,10 @@
     <string name="round_dealer_you">Du gibst – trag dieses Spiel ein.</string>
     <string name="round_dealer_other">%1$s gibt und trägt ein.</string>
     <string name="round_duplicate">Doppelt eingetragen?</string>
+    <string name="round_delete_evening">Der Abend wird für alle in der Runde gelöscht.</string>
+
+    <!-- Sicherung einlesen -->
+    <string name="round_import_hint">Dieses Gerät gehört zu einer gemeinsamen Runde. Was du einliest, erscheint bei allen.</string>
 
     <!-- Spieler -->
     <string name="round_name_locked">Name selbst festgelegt</string>

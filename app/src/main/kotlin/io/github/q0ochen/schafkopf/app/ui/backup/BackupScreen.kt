@@ -45,7 +45,9 @@ import io.github.q0ochen.schafkopf.app.ui.common.SectionHeading
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
 import io.github.q0ochen.schafkopf.app.ui.common.formatDateTime
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
+import io.github.q0ochen.schafkopf.app.round.RoundCoordinator
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import java.time.LocalDate
 
 /** Dateitypen, unter denen Anbieter eine Sicherung (JSON) führen; andere Dateien gar nicht erst anbieten. */
@@ -56,6 +58,8 @@ private val BACKUP_TYPES = arrayOf("application/json", "text/*", "application/oc
 fun BackupScreen(navigator: Navigator) {
     val viewModel: BackupViewModel = koinViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // Mit gemeinsamer Runde wirkt das Einlesen auf alle: Der Dialog sagt es und lässt die Namen, wie sie sind.
+    val round by koinInject<RoundCoordinator>().state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val resources = LocalContext.current.resources
 
@@ -219,6 +223,7 @@ fun BackupScreen(navigator: Navigator) {
         ImportDialog(
             state = state,
             pending = pending,
+            linked = round.link != null,
             onConfirm = viewModel::confirmImport,
             onDismiss = viewModel::dismissImport,
         )
@@ -271,13 +276,16 @@ private fun AutoStatus(status: AutoBackupStatus) {
 private fun ImportDialog(
     state: BackupUiState,
     pending: PendingImport,
+    linked: Boolean,
     onConfirm: (takeNames: Boolean, takeRules: Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val preview = pending.preview
     val resources = LocalContext.current.resources
     val readable = preview.isReadable
-    val canImport = readable && (preview.hasNewData || preview.differingPlayerCount > 0 || state.rulesDiffer)
+    // Mit gemeinsamer Runde kommen die Namen aus der Runde: Umbenennen aus einer Sicherung träfe alle.
+    val canRename = !linked && preview.differingPlayerCount > 0
+    val canImport = readable && (preview.hasNewData || canRename || state.rulesDiffer)
     var takeNames by rememberSaveable { mutableStateOf(true) }
     var takeRules by rememberSaveable { mutableStateOf(false) }
     val currentNames = state.players.associate { it.id to it.name }
@@ -308,8 +316,15 @@ private fun ImportDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                if (readable && linked) {
+                    Text(
+                        stringResource(R.string.round_import_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 importSummary(resources, preview).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                if (readable && renames.isNotEmpty()) {
+                if (readable && !linked && renames.isNotEmpty()) {
                     CheckRow(
                         text = stringResource(R.string.backup_import_take_names, renames.joinToString(", ")),
                         checked = takeNames,
@@ -330,7 +345,7 @@ private fun ImportDialog(
         },
         confirmButton = {
             if (canImport) {
-                Button(onClick = { onConfirm(takeNames, takeRules && state.rulesDiffer) }) {
+                Button(onClick = { onConfirm(takeNames && canRename, takeRules && state.rulesDiffer) }) {
                     Text(stringResource(R.string.backup_import_confirm))
                 }
             } else {

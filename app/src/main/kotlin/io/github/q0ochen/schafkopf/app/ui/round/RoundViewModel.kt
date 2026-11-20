@@ -13,7 +13,6 @@ import io.github.q0ochen.schafkopf.domain.round.InviteLinks
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.RoundException
 import io.github.q0ochen.schafkopf.domain.round.RoundSummary
-import io.github.q0ochen.schafkopf.domain.round.SyncOutcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -51,6 +50,8 @@ sealed interface RoundUiError {
  * Was der Bildschirm „Gemeinsame Runde“ über den Stand der Runde hinaus braucht.
  *
  * @property rounds Die Runden des Kontos; `null`, solange sie nicht gelesen sind.
+ * @property roundsFailed Die Runden ließen sich nicht lesen (kein Netz, Server gestört).
+ * @property autoBackup Die automatische Sicherung ist eingeschaltet (für den Hinweis in der Rückfrage).
  * @property invite Was die wartende Einladung verrät; `null`, solange unbekannt.
  * @property replace Wartet auf die Rückfrage „Daten dieses Geräts ersetzen?“.
  * @property eveningCount So viele Abende lägen beim Ersetzen auf dem Gerät.
@@ -62,6 +63,8 @@ data class RoundUi(
     val busy: Boolean = false,
     val error: RoundUiError? = null,
     val rounds: List<RoundSummary>? = null,
+    val roundsFailed: Boolean = false,
+    val autoBackup: Boolean = false,
     val invite: InviteInfo? = null,
     val replace: PendingAttach? = null,
     val eveningCount: Int = 0,
@@ -75,6 +78,7 @@ class RoundViewModel(
     private val coordinator: RoundCoordinator,
     players: PlayerRepository,
     private val evenings: EveningRepository,
+    private val autoBackupEnabled: () -> Boolean = { false },
 ) : ViewModel() {
 
     val state: StateFlow<RoundState> = coordinator.state
@@ -91,7 +95,11 @@ class RoundViewModel(
                 .map { Triple(it.account?.userId, it.link == null, it.pendingInvite) }
                 .distinctUntilChanged()
                 .collect { (userId, unlinked, _) ->
-                    if (userId != null && unlinked) refresh() else mutable.update { it.copy(rounds = null, invite = null) }
+                    if (userId != null && unlinked) {
+                        refresh()
+                    } else {
+                        mutable.update { it.copy(rounds = null, roundsFailed = false, invite = null) }
+                    }
                 }
         }
     }
@@ -100,7 +108,8 @@ class RoundViewModel(
     fun refresh() {
         viewModelScope.launch {
             val rounds = attempt { coordinator.myRounds() }
-            mutable.update { it.copy(rounds = rounds ?: it.rounds) }
+            // Scheitert das Lesen, sagt der Bildschirm es: Sonst sähe es auf einem neuen Handy aus, als gäbe es keine Runde.
+            mutable.update { it.copy(rounds = rounds ?: it.rounds, roundsFailed = rounds == null) }
             val token = coordinator.state.value.pendingInvite
             if (token == null) {
                 mutable.update { it.copy(invite = null) }
@@ -151,7 +160,7 @@ class RoundViewModel(
 
     // --- Runde anlegen, beitreten, verwenden ---
 
-    fun create(name: String) = busy(roundName = true) { requireSynced(coordinator.create(name)) }
+    fun create(name: String) = busy(roundName = true) { coordinator.create(name) }
 
     /** Löst einen eingefügten Link oder Code ein. */
     fun redeem(text: String) {
@@ -174,7 +183,7 @@ class RoundViewModel(
     private fun requestAttach(target: PendingAttach) = busy {
         if (coordinator.hasOwnData()) {
             val count = evenings.evenings.first().size
-            mutable.update { it.copy(replace = target, eveningCount = count) }
+            mutable.update { it.copy(replace = target, eveningCount = count, autoBackup = autoBackupEnabled()) }
         } else {
             attach(target)
         }
@@ -189,18 +198,16 @@ class RoundViewModel(
     }
 
     private suspend fun attach(target: PendingAttach) {
-        requireSynced(
-            when (target) {
-                is PendingAttach.Join -> coordinator.join(target.token)
-                is PendingAttach.Use -> coordinator.use(target.round)
-            },
-        )
+        when (target) {
+            is PendingAttach.Join -> coordinator.join(target.token)
+            is PendingAttach.Use -> coordinator.use(target.round)
+        }
     }
 
     // --- Verbunden ---
 
     /** „Das bin ich“; `player == null` heißt „Ich bin neu“. */
-    fun claim(player: PlayerId?, name: String) = busy { requireSynced(coordinator.claim(player, name)) }
+    fun claim(player: PlayerId?, name: String) = busy { coordinator.claim(player, name) }
 
     fun invite() = busy { mutable.update { it.copy(shareLink = coordinator.inviteLink()) } }
 
@@ -216,15 +223,11 @@ class RoundViewModel(
 
     // --- Gemeinsames ---
 
-    /** Die Verbindung steht schon; scheitert nur der erste Abgleich, holt die App ihn von selbst nach. */
-    private fun requireSynced(outcome: SyncOutcome) {
-        when (outcome) {
-            SyncOutcome.Offline -> throw RoundException(RoundError.OFFLINE)
-            SyncOutcome.SignedOut -> throw RoundException(RoundError.SIGNED_OUT)
-            is SyncOutcome.Failed -> throw RoundException(outcome.error)
-            else -> Unit
-        }
-    }
+    /*
+     * Anlegen, Beitreten und „Das bin ich“ sind geschafft, sobald der Server sie angenommen hat. Scheitert nur der
+     * Abgleich danach, ist das kein Fehler dieser Aktion: Die Statuszeile sagt es („Kein Netz“), und die App holt ihn
+     * von selbst nach.
+     */
 
     private fun busy(roundName: Boolean = false, block: suspend () -> Unit) {
         if (mutable.value.busy) return

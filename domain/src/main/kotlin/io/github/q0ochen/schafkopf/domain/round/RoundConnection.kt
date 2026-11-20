@@ -38,7 +38,7 @@ class RoundConnection(
      */
     suspend fun create(name: String, userId: String, placeholders: List<Player>): SyncOutcome {
         sync.exclusive {
-            val round = api.createRound(name)
+            val round = emptyOwnRound(name) ?: api.createRound(name)
             val all = evenings.evenings.first()
             players.players.first()
                 .filter { player -> player in placeholders && all.none { it.involves(player.id) } }
@@ -67,14 +67,29 @@ class RoundConnection(
         attach(RoundLink(round.id, round.name, userId, playerId = round.myPlayerId, isCreator = round.isCreator))
 
     private suspend fun attach(link: RoundLink): SyncOutcome {
+        // Erst fragen, dann leeren: Ohne Antwort des Servers bleibt das Gerät, wie es ist. Sonst stünde man ohne Netz
+        // mit einem leeren Gerät da, das schon mit der Runde verbunden ist.
+        api.head(link.roundId) ?: throw RoundException(RoundError.NOT_MEMBER)
         sync.exclusive {
-            // Erst leeren, dann verbinden: Bräche es dazwischen ab, ginge sonst der Rest als neu in die Runde hoch.
+            // Erst Verbindung und Basen weg, dann die Daten, dann verbinden. Mit Basen sähe das Leeren aus wie Löschen
+            // und ginge beim nächsten Abgleich als Löschung in die Runde hoch; und bräche es vor dem Verbinden ab, ginge
+            // der Rest sonst als neu hoch.
+            store.setLink(null)
+            store.clearBases()
             evenings.evenings.first().forEach { evenings.delete(it.id) }
             players.players.first().forEach { players.delete(it.id) }
-            store.clearBases()
             store.setLink(link)
         }
         return sync.sync()
+    }
+
+    /**
+     * Eine eigene, noch leere Runde dieses Namens. Sie stammt von einem Versuch, dessen Antwort verloren ging; ohne
+     * diese Prüfung legte der zweite Versuch eine zweite Runde an, und die erste bliebe für immer leer liegen.
+     */
+    private suspend fun emptyOwnRound(name: String): RoundId? {
+        val wanted = name.trim().replace(WHITESPACE, " ")
+        return api.myRounds().firstOrNull { it.isCreator && it.memberCount == 1 && it.rev == FRESH_REV && it.name == wanted }?.id
     }
 
     /**
@@ -108,5 +123,11 @@ class RoundConnection(
             store.setLink(null)
             store.clearBases()
         }
+    }
+
+    private companion object {
+        /** Den Stand `rev = 1` hat eine Runde nur unmittelbar nach dem Anlegen. */
+        const val FRESH_REV = 1L
+        val WHITESPACE = Regex("\\s+")
     }
 }

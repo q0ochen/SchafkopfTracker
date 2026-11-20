@@ -218,7 +218,15 @@ fun BoardScreen(eveningId: String, navigator: Navigator) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text(stringResource(R.string.board_delete_title)) },
-            text = { Text(stringResource(R.string.board_delete_text)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.board_delete_text))
+                    // Mit gemeinsamer Runde verschwindet der Abend bei allen: Das soll vorher dastehen.
+                    if (state.round?.link != null) {
+                        Text(stringResource(R.string.round_delete_evening), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {

@@ -3,6 +3,7 @@ package io.github.q0ochen.schafkopf.data.round
 import io.github.q0ochen.schafkopf.data.storage.StorageCodec
 import io.github.q0ochen.schafkopf.data.storage.UnreadableDataException
 import io.github.q0ochen.schafkopf.domain.evening.Evening
+import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.round.RoundId
 import io.github.q0ochen.schafkopf.domain.round.RoundLink
@@ -33,6 +34,7 @@ object RoundStoreJson {
             cursor = link.cursor,
             rulesBase = link.rulesBase?.let(StorageCodec::encodeRulesElement),
             members = link.members.map { MemberDto(it.userId, it.playerId?.value) },
+            unreadable = link.unreadable.map { it.value },
         ),
     )
 
@@ -55,6 +57,7 @@ object RoundStoreJson {
                 }
             },
             members = dto.members.map { RoundMember(it.userId, it.playerId?.let(::PlayerId)) },
+            unreadable = dto.unreadable.mapTo(LinkedHashSet(), ::EveningId),
         )
     } catch (e: SerializationException) {
         null
@@ -81,6 +84,8 @@ object RoundStoreJson {
         val cursor: Long = 0,
         val rulesBase: JsonElement? = null,
         val members: List<MemberDto> = emptyList(),
+        // Fehlt in Ständen von vor dem 20.11.2026: dann keine.
+        val unreadable: List<String> = emptyList(),
     )
 
     @Serializable

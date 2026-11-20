@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -55,11 +56,17 @@ enum class RoundMessage {
     /** Die Anmeldung im Browser wurde abgebrochen. */
     SIGN_IN_CANCELLED,
 
-    /** Angemeldet wurde ein anderes Konto als das der verbundenen Runde: Die Verbindung wurde gelöst. */
+    /**
+     * Angemeldet wurde ein anderes Konto als das der verbundenen Runde. Es wurde gleich wieder abgemeldet; die Runde
+     * bleibt verbunden.
+     */
     OTHER_ACCOUNT,
 
     /** Die Runde gibt es nicht mehr, oder das Konto gehört nicht mehr dazu. */
     DETACHED,
+
+    /** Die App wurde mit einem Einladungslink geöffnet, in dem kein gültiger Code steht. */
+    INVALID_LINK,
 }
 
 /**
@@ -69,8 +76,9 @@ enum class RoundMessage {
  * @property loaded Anmeldung und Verbindung sind gelesen (vorher weiß die Oberfläche noch nicht, was sie zeigen soll).
  * @property pending So viele Änderungen dieses Geräts sind noch nicht auf dem Server.
  * @property players Der Stand der Spieler auf dem Server (Besitzer, fester Name), solange eine Runde verbunden ist.
- * @property openRequests Zählt, wie oft die App von außen gebeten wurde, den Bildschirm zu zeigen (Einladungslink,
- *   Rückkehr aus der Anmeldung).
+ * @property signingIn Die Anmeldung wird nach der Rückkehr aus dem Browser gerade eingelöst.
+ * @property openRound Die App wurde von außen gebeten, den Bildschirm zu zeigen (Einladungslink, Rückkehr aus der
+ *   Anmeldung). Die Oberfläche öffnet ihn und meldet das mit [RoundCoordinator.roundOpened] zurück.
  */
 data class RoundState(
     val configured: Boolean,
@@ -86,7 +94,8 @@ data class RoundState(
     val players: Map<PlayerId, RemotePlayer> = emptyMap(),
     val pendingInvite: String? = null,
     val message: RoundMessage? = null,
-    val openRequests: Int = 0,
+    val signingIn: Boolean = false,
+    val openRound: Boolean = false,
 ) {
     /** Verbunden, aber die Anmeldung fehlt oder ist abgelaufen: Bis zur neuen Anmeldung wird nichts abgeglichen. */
     val needsSignIn: Boolean get() = link != null && (account == null || problem == RoundProblem.SIGNED_OUT)
@@ -159,13 +168,15 @@ class RoundCoordinator(
                             account = signedIn,
                             pendingInvite = current.pendingInvite,
                             message = current.message,
-                            openRequests = current.openRequests,
+                            signingIn = current.signingIn,
+                            openRound = current.openRound,
                         )
                     } else {
                         current.copy(
                             loaded = true,
                             account = signedIn,
                             link = link,
+                            unreadable = link.unreadable.size,
                             // Nach einer neuen Anmeldung gilt die alte Meldung nicht mehr.
                             problem = current.problem.takeUnless { it == RoundProblem.SIGNED_OUT && signedIn != current.account },
                         )
@@ -175,6 +186,8 @@ class RoundCoordinator(
                 val now = signedIn?.userId to link?.roundId
                 if (now != known) {
                     known = now
+                    // Was schon vor dem ersten Abgleich wartet, soll die Statuszeile gleich zeigen.
+                    if (link != null) refreshPending()
                     wake()
                 }
             }
@@ -208,7 +221,10 @@ class RoundCoordinator(
 
     /** Ein vollständiger Abgleich für die Arbeit im Hintergrund (WorkManager), ohne die Schleife zu wecken. */
     suspend fun syncInBackground(): SyncOutcome {
-        account.load()
+        val signedIn = account.load()
+        val link = store.link.first()
+        // Nie unter fremdem Namen: Mit einem anderen Konto sähe die Runde aus, als gäbe es sie nicht mehr.
+        if (link != null && signedIn != null && signedIn.userId != link.userId) return SyncOutcome.SignedOut
         return run(full = true)
     }
 
@@ -236,27 +252,42 @@ class RoundCoordinator(
             }
             null -> {
                 if (!uri.startsWith(InviteLinks.appLink(""))) return false
-                InviteLinks.tokenFrom(uri)?.let(::rememberInvite)
+                val token = InviteLinks.tokenFrom(uri)
+                if (token == null) mutable.update { it.copy(message = RoundMessage.INVALID_LINK) } else rememberInvite(token)
             }
         }
-        mutable.update { it.copy(openRequests = it.openRequests + 1) }
+        mutable.update { it.copy(openRound = true) }
         return true
     }
 
+    /** Die Oberfläche hat den Bildschirm „Gemeinsame Runde“ auf einen Wunsch von außen hin geöffnet. */
+    fun roundOpened() = mutable.update { it.copy(openRound = false) }
+
     private suspend fun completeSignIn(code: String) {
+        mutable.update { it.copy(signingIn = true) }
         try {
             val signedIn = account.completeSignIn(code)
-            val link = state.value.link
+            val link = store.link.first()
             if (link != null && link.userId != signedIn.userId) {
-                // Die Runde hängt an einem anderen Konto: lösen, sonst liefe der Abgleich unter falschem Namen.
-                connection.disconnect()
+                // Die Runde hängt an einem anderen Konto. Der Abgleich darf nie unter fremdem Namen laufen; trennen
+                // wäre aber zu viel (was noch wartet, käme nie mehr an). Also das falsche Konto gleich wieder abmelden.
+                account.signOut()
                 mutable.update { it.copy(message = RoundMessage.OTHER_ACCOUNT) }
+            } else {
+                // Geklappt: Ältere Meldungen zur Anmeldung gelten nicht mehr.
+                mutable.update { it.copy(message = it.message.takeUnless { message -> message in SIGN_IN_MESSAGES }) }
+                syncNow()
             }
-            syncNow()
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
-            mutable.update { it.copy(message = RoundMessage.SIGN_IN_FAILED) }
+        } catch (e: Exception) {
+            // Eine Rückkehr, zu der keine Anmeldung (mehr) offen ist, während längst jemand angemeldet ist (zum Beispiel
+            // derselbe Link ein zweites Mal): kein Grund für eine Fehlermeldung.
+            val stale = e is RoundException && e.detail == RoundAccount.NO_SIGN_IN_PENDING
+            val signedIn = state.value.let { it.account != null && it.problem != RoundProblem.SIGNED_OUT }
+            if (!(stale && signedIn)) mutable.update { it.copy(message = RoundMessage.SIGN_IN_FAILED) }
+        } finally {
+            mutable.update { it.copy(signingIn = false) }
         }
     }
 
@@ -312,7 +343,11 @@ class RoundCoordinator(
 
     private fun isDirty(): Boolean = changeCount.get() != cleanAt
 
-    private fun canSync(): Boolean = state.value.let { it.link != null && it.account != null }
+    /**
+     * Abgeglichen wird nur mit dem Konto, mit dem das Gerät der Runde beigetreten ist. Mit einem anderen Konto sähe der
+     * Server die Runde nicht und der Abgleich hielte sie für aufgelöst (siehe [completeSignIn]).
+     */
+    private fun canSync(): Boolean = state.value.let { it.link != null && it.account != null && it.account.userId == it.link.userId }
 
     private fun userId(): String = state.value.account?.userId ?: throw RoundException(RoundError.SIGNED_OUT)
 
@@ -341,6 +376,8 @@ class RoundCoordinator(
         val outcome = try {
             sync.sync(quick = !full)
         } catch (e: CancellationException) {
+            // Zum Beispiel bricht WorkManager den Auftrag ab, wenn das Netz weg ist: nicht „gleicht ab“ stehen lassen.
+            mutable.update { it.copy(syncing = false) }
             throw e
         } catch (_: Exception) {
             // Zum Beispiel ein Fehler der Datenbank: Der nächste Versuch kommt von selbst.
@@ -392,6 +429,17 @@ class RoundCoordinator(
         mutable.update { it.copy(syncing = false, problem = problem, pending = pending) }
     }
 
+    private suspend fun refreshPending() {
+        val pending = try {
+            sync.pendingCount()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return
+        }
+        mutable.update { it.copy(pending = pending) }
+    }
+
     private suspend fun refreshPlayers() {
         val players = if (state.value.link == null) emptyMap() else store.playerBases()
         mutable.update { it.copy(players = players) }
@@ -400,5 +448,8 @@ class RoundCoordinator(
     private companion object {
         /** So viele Hinweise aus dem Abgleich bleiben höchstens stehen. */
         const val MAX_NOTICES = 20
+
+        /** Meldungen, die eine geglückte Anmeldung erledigt. */
+        val SIGN_IN_MESSAGES = setOf(RoundMessage.SIGN_IN_FAILED, RoundMessage.SIGN_IN_CANCELLED, RoundMessage.OTHER_ACCOUNT)
     }
 }

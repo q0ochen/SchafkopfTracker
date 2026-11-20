@@ -31,9 +31,10 @@ sealed interface SyncOutcome {
      * @property pulled So viele Abende, Spieler und Regelwerke haben sich auf diesem Gerät durch den Server geändert.
      * @property pushed So viele Änderungen hat dieses Gerät hochgeladen.
      * @property pending So viele Änderungen warten danach noch (zum Beispiel, weil gerade jemand anders schrieb).
-     * @property unreadable So viele Abende des Servers kann diese Version der App nicht lesen; sie bleiben unberührt.
-     * @property refused So viele Abende nimmt der Server nicht an (zum Beispiel, weil einer zu groß ist); sie bleiben
-     *   auf dem Gerät und warten, bis sie sich ändern.
+     * @property unreadable So viele Abende des Servers kann diese Version der App nicht lesen; sie bleiben unberührt
+     *   und werden bei jedem Abgleich neu gelesen ([RoundLink.unreadable]).
+     * @property refused So viele Abende hat der Server in dieser Sitzung nicht angenommen (zum Beispiel, weil einer
+     *   zu groß ist); sie bleiben auf dem Gerät und warten, bis sie sich ändern.
      */
     data class Synced(
         val pulled: Int,
@@ -144,8 +145,9 @@ class RoundSync(
     private inner class Run(private var link: RoundLink) {
         private var pulled = 0
         private var pushed = 0
-        private val unreadable = HashSet<EveningId>()
-        private val refused = HashSet<EveningId>()
+
+        /** Abende des Servers, die sich in diesem Durchgang nicht lesen oder nicht speichern ließen. */
+        private val unreadable = LinkedHashSet<EveningId>()
         private val notices = ArrayList<SyncNotice>()
 
         /** Die Nummer, die der Server der nächsten Änderung gibt, wenn außer diesem Gerät niemand schreibt. */
@@ -170,7 +172,7 @@ class RoundSync(
                 pass(head)
                 if (!gap && !again) break
             }
-            return SyncOutcome.Synced(pulled, pushed, pendingCount(), unreadable.size, refused.size, notices)
+            return SyncOutcome.Synced(pulled, pushed, pendingCount(), link.unreadable.size, refusedEvenings.size, notices)
         }
 
         /** Der Kopf der Runde fehlt: Gibt es sie wirklich nicht mehr, wird die Verbindung gelöst. */
@@ -398,6 +400,12 @@ class RoundSync(
                 val known = latest[row.id]
                 if (known == null || row.version >= known.version) latest[row.id] = row
             }
+            // Was dieses Gerät früher nicht lesen konnte, liegt hinter dem Lesezeichen und käme nie wieder: einzeln neu
+            // lesen. Gibt es den Abend nicht mehr, ist er damit vergessen.
+            for (id in link.unreadable) {
+                if (id !in latest) api.evening(link.roundId, id)?.let { latest[id] = it }
+            }
+            unreadable.clear()
             val ids = LinkedHashSet(latest.keys)
             val localIds = HashSet<EveningId>()
             for (evening in local) {
@@ -408,6 +416,7 @@ class RoundSync(
             refusedEvenings.keys.retainAll(localIds)
             eveningBases.keys.filterTo(ids) { it !in localIds }
             for (id in ids) syncEvening(id, latest[id])
+            link = link.copy(unreadable = unreadable.toSet())
         }
 
         private suspend fun setBase(id: EveningId, base: EveningBase?) {
@@ -418,11 +427,12 @@ class RoundSync(
         private suspend fun syncEvening(id: EveningId, pulledRow: RemoteEvening?) {
             try {
                 trySyncEvening(id, pulledRow)
+                refusedEvenings.remove(id)
             } catch (e: RoundException) {
                 if (e.error !in DOCUMENT_REJECTIONS) throw e
                 // Der Server nimmt diesen einen Abend nicht an. Die anderen sollen deshalb nicht liegen bleiben.
-                refused += id
-                evenings.evening(id).first()?.let { refusedEvenings[id] = it }
+                val current = evenings.evening(id).first()
+                if (current == null) refusedEvenings.remove(id) else refusedEvenings[id] = current
             } catch (e: EveningNotStorableException) {
                 // Dieses Gerät kann die Fassung des Servers nicht speichern (beschädigte Daten): wie unlesbar behandeln.
                 unreadable += id
