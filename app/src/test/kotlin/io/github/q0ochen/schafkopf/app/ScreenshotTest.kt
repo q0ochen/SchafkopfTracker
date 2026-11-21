@@ -21,6 +21,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
@@ -33,6 +35,7 @@ import io.github.q0ochen.schafkopf.app.ui.common.labelRes
 import io.github.q0ochen.schafkopf.app.ui.statistics.GameModeChart
 import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsScreen
 import io.github.q0ochen.schafkopf.app.ui.statistics.modeChartGroups
+import io.github.q0ochen.schafkopf.app.ui.subscribers
 import io.github.q0ochen.schafkopf.app.ui.waitForText
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormScreen
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
@@ -192,12 +195,16 @@ class ScreenshotTest {
     fun start_mit_laufendem_abend() {
         seed()
         var viewModel: StartViewModel? = null
+        var lifecycle: Lifecycle? = null
         show {
             viewModel = koinViewModel()
+            lifecycle = LocalLifecycleOwner.current.lifecycle
             StartScreen(Navigator())
         }
+        // Scheitert das Warten, nennt die Meldung auch den Stand des ViewModels (CLAUDE.md, „Gut zu wissen“).
         compose.waitForText("Wirtshaus zur Post") {
-            "ViewModel: ${viewModel?.state?.value?.let { "loading=${it.loading}, ${it.evenings.size} Abende" }}"
+            "ViewModel: ${viewModel?.state?.value?.let { "loading=${it.loading}, ${it.evenings.size} Abende" }}, " +
+                "sammelnd: ${subscribers(viewModel?.state)}, Lebenszyklus: ${lifecycle?.currentState}"
         }
         capture("01_start")
     }

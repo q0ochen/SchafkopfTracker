@@ -1,6 +1,8 @@
 package io.github.q0ochen.schafkopf.app.ui
 
 import android.os.Looper
+import android.os.Message
+import android.os.MessageQueue
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -9,8 +11,8 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onAllNodesWithText
-import org.robolectric.Shadows
-import org.robolectric.shadows.ShadowPausedMessageQueue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import java.lang.management.ManagementFactory
 
 /**
@@ -25,9 +27,9 @@ fun ComposeTestRule.waitForText(text: String, timeoutMillis: Long = 30_000, deta
 
 /**
  * Wartet, bis [condition] gilt. Sonst sagt die Fehlermeldung, was stattdessen auf dem Bildschirm stand, wie voll der
- * Speicher war und was jeder Thread gerade tat: Der Test der Startseite lief auf GitHub mehrmals in die Wartefrist
- * (19. und 21.11.2026), ohne dass sich das hier nachstellen ließ; am 21.11.2026 war der Speicher dabei nur zu einem
- * Siebtel belegt. Die Threads zeigen beim nächsten Mal, worauf die Daten warten.
+ * Speicher war, was in der Warteschlange des Hauptthreads lag und was jeder Thread gerade tat: Der Test der Startseite
+ * lief auf GitHub mehrmals in die Wartefrist (19. und 21.11.2026). Am 21.11.2026 war der Speicher dabei nur zu einem
+ * Siebtel belegt, kein Thread hing, und das ViewModel hatte die Daten längst (Lauf 57); nur die Anzeige bekam sie nicht.
  *
  * @param what Was erscheinen soll, für die Fehlermeldung.
  * @param details Was die Fehlermeldung außerdem nennen soll, etwa den Zustand des ViewModels.
@@ -57,22 +59,40 @@ fun ComposeTestRule.waitFor(
 
 /**
  * Was in der Warteschlange des Hauptthreads liegt. Robolectric führt eine Nachricht erst aus, wenn ihre Zeit auf der
- * angehaltenen Uhr erreicht ist; eine Nachricht „in der Zukunft“ wartet also, bis jemand die Uhr vorstellt.
+ * angehaltenen Uhr erreicht ist; eine Nachricht „in der Zukunft“ wartet also, bis jemand die Uhr vorstellt. Eine
+ * Sperre (Nachricht ohne Ziel) hält alle nicht asynchronen Nachrichten dahinter auf. Gelesen wird über die Felder der
+ * Warteschlange, weil Robolectric sie im angehaltenen Modus nicht über seine Schatten herausgibt (Lauf 57).
  */
 private fun mainQueue(): String = runCatching {
-    val looper = Looper.getMainLooper()
+    val queue = Looper.getMainLooper().queue
+    val head = MessageQueue::class.java.getDeclaredField("mMessages").apply { isAccessible = true }
+    val next = Message::class.java.getDeclaredField("next").apply { isAccessible = true }
     val now = SystemClock.uptimeMillis()
-    val messages = synchronized(looper.queue) {
-        val queue = Shadows.shadowOf(looper.queue) as ShadowPausedMessageQueue
-        generateSequence(queue.head) { Shadows.shadowOf(it).next }.take(MAX_MESSAGES).map { message ->
-            val what = message.callback?.javaClass?.name ?: "${message.target?.javaClass?.name} (what=${message.what})"
-            "${message.`when` - now} ms: $what"
+    val messages = synchronized(queue) {
+        generateSequence(head.get(queue) as Message?) { next.get(it) as Message? }.take(MAX_MESSAGES).map { message ->
+            val what = when {
+                message.target == null -> "Sperre"
+                else -> message.callback?.javaClass?.name ?: "${message.target.javaClass.name} (what=${message.what})"
+            }
+            "${message.`when` - now} ms${if (message.isAsynchronous) ", asynchron" else ""}: $what"
         }.toList()
     }
     "Hauptthread: Uhr $now ms, ${messages.size} Nachrichten" + messages.joinToString("") { "\n    $it" }
 }.getOrElse { "Hauptthread: nicht lesbar ($it)" }
 
 private const val MAX_MESSAGES = 30
+
+/**
+ * Wie viele gerade einen `StateFlow` aus `stateIn` sammeln (für Fehlermeldungen). Steht dort 0, hört die Oberfläche
+ * nicht mehr zu; dann bleibt sie beim alten Stand, auch wenn das ViewModel längst einen neuen hat.
+ */
+fun subscribers(flow: StateFlow<*>?): String = runCatching {
+    val inner = flow?.javaClass?.declaredFields?.firstNotNullOfOrNull { field ->
+        field.isAccessible = true
+        field.get(flow) as? MutableStateFlow<*>
+    }
+    inner?.subscriptionCount?.value?.toString() ?: "?"
+}.getOrElse { "? ($it)" }
 
 /** Wie voll der Speicher der Test-JVM gerade ist (in MB); ist er fast voll, war die JVM vermutlich mit Aufräumen beschäftigt. */
 private fun memory(): String {

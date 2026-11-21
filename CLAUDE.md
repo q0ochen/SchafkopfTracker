@@ -421,10 +421,14 @@ Gut zu wissen für die nächste Sitzung:
   (`start_mit_geplantem_abend_dunkel`, `start_mit_laufendem_abend`), bei 293 von 2048 MB. Hier trat es danach in 2 von 4
   vollen Läufen auf (auf zwei Kerne begrenzt), dann in 27 weiteren nicht mehr, auch nicht unter Last. Der Abzug aller
   Threads zeigte: Nichts hängt, alle warten untätig. Nur diese beiden Tests warten auf die Abende der Startseite; der
-  Abend-Bildschirm mit fast gleichem ViewModel scheiterte nie. Die Fehlermeldung von `waitFor` nennt seitdem auch, was
-  in der Warteschlange des Hauptthreads liegt, und bei diesen beiden Tests den Stand des `StartViewModel`: Steht dort
-  `loading=false`, sind die Daten da und nur die Anzeige hängt; steht dort `loading=true`, kamen sie nie im ViewModel
-  an. Tritt es wieder auf, zuerst diese Zeilen lesen. (2) Der Tag „testversion“ ließ sich nicht verschieben
+  Abend-Bildschirm mit fast gleichem ViewModel scheiterte nie. Die Fehlermeldung von `waitFor` nennt seitdem bei diesen
+  beiden Tests den Stand des `StartViewModel`. Gleich der nächste Lauf auf GitHub (57) scheiterte wieder und zeigte
+  `loading=false, 2 Abende`: Die Daten sind im ViewModel, nur die Anzeige bekommt sie nicht (am Laden aus der
+  Datenbank liegt es also nicht). Seitdem nennt die Meldung außerdem „sammelnd“ (wie viele den Zustand gerade sammeln;
+  0 hieße, die Oberfläche hört nicht mehr zu), den Lebenszyklus der Activity und die Warteschlange des Hauptthreads
+  (Sperren, Nachrichten in der Zukunft der angehaltenen Uhr). Tritt es wieder auf, zuerst diese Zeilen lesen; erst
+  dann ist klar, ob es an der Testumgebung liegt (Robolectric) oder an der App. Bis dahin hilft es, den Lauf einmal neu
+  zu starten. (2) Der Tag „testversion“ ließ sich nicht verschieben
   (HTTP 403), wenn der Stand eine Workflow-Datei änderte und beim Veröffentlichen schon ein neuerer Stand auf dem
   Zweig lag; die Testversion wird jetzt trotzdem ersetzt.
 - `awaitFirst` (Tests der ViewModels in `app`) wartet auf `Dispatchers.Default`. Bis zum 21.11.2026 lief der Test danach

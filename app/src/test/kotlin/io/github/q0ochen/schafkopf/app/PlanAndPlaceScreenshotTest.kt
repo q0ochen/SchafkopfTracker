@@ -19,6 +19,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.q0ochen.schafkopf.app.ui.editevening.EditEveningScreen
@@ -27,6 +29,7 @@ import io.github.q0ochen.schafkopf.app.ui.newevening.NewEveningScreen
 import io.github.q0ochen.schafkopf.app.ui.start.StartScreen
 import io.github.q0ochen.schafkopf.app.ui.start.StartViewModel
 import io.github.q0ochen.schafkopf.app.ui.theme.SchafkopfTheme
+import io.github.q0ochen.schafkopf.app.ui.subscribers
 import io.github.q0ochen.schafkopf.app.ui.waitFor
 import io.github.q0ochen.schafkopf.app.ui.waitForText
 import io.github.q0ochen.schafkopf.domain.evening.Evening
@@ -156,15 +159,20 @@ class PlanAndPlaceScreenshotTest {
     fun start_mit_geplantem_abend_dunkel() {
         seed(planned = true)
         var viewModel: StartViewModel? = null
+        var lifecycle: Lifecycle? = null
         show(ThemeMode.DARK, ready = "Abende") {
             viewModel = koinViewModel()
+            lifecycle = LocalLifecycleOwner.current.lifecycle
             StartScreen(Navigator())
         }
         // Die Überschrift „Abende“ steht schon vor den Daten da; die Karten kommen, sobald die Datenbank geantwortet hat.
         // Scheitert das Warten, nennt die Meldung auch den Stand des ViewModels (CLAUDE.md, „Gut zu wissen“).
         compose.waitFor(
             "Die Marke „geplant“",
-            details = { "ViewModel: ${viewModel?.state?.value?.let { "loading=${it.loading}, ${it.evenings.size} Abende" }}" },
+            details = {
+                "ViewModel: ${viewModel?.state?.value?.let { "loading=${it.loading}, ${it.evenings.size} Abende" }}, " +
+                    "sammelnd: ${subscribers(viewModel?.state)}, Lebenszyklus: ${lifecycle?.currentState}"
+            },
         ) {
             runCatching { compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("geplant")) }.isSuccess
         }
