@@ -1,0 +1,170 @@
+{
+  "repo": {
+    "name": {
+      "en-US": "Schafkopf Tracker – Testversionen"
+    },
+    "description": {
+      "en-US": "Testversionen des Schafkopf Trackers, automatisch aus dem öffentlichen Quellcode auf GitHub gebaut. Das ist nicht das offizielle F-Droid-Verzeichnis."
+    },
+    "icon": {
+      "en-US": {
+        "name": "/icons/icon.png",
+        "sha256": "ba209c101847da9cf2992a3a8423c043ecd1a1c8142a5cca6a5b769c529f4e4f",
+        "size": 18070
+      }
+    },
+    "address": "https://raw.githubusercontent.com/q0ochen/SchafkopfTracker/fdroid-repo/fdroid/repo",
+    "timestamp": 1795293346000,
+    "categories": {
+      "Games": {
+        "name": {
+          "en-US": "Games"
+        }
+      }
+    }
+  },
+  "packages": {
+    "io.github.q0ochen.schafkopf": {
+      "metadata": {
+        "added": 1795293342000,
+        "categories": [
+          "Games"
+        ],
+        "issueTracker": "https://github.com/q0ochen/SchafkopfTracker/issues",
+        "lastUpdated": 1795293343000,
+        "license": "CC0-1.0",
+        "sourceCode": "https://github.com/q0ochen/SchafkopfTracker",
+        "webSite": "https://q0ochen.github.io/SchafkopfTracker/",
+        "authorName": "Schafkopf Tracker",
+        "name": {
+          "de-DE": "Schafkopf Tracker",
+          "en-US": "Schafkopf Tracker"
+        },
+        "summary": {
+          "de-DE": "Schafkopf-Abende eintragen und auf den Cent genau abrechnen",
+          "en-US": "Score and settle Bavarian Schafkopf evenings to the cent"
+        },
+        "description": {
+          "de-DE": "<p><b>Für den Schafkopf-Abend im Wirtshaus.</b> Nach jedem Spiel trägt einer ein, was gespielt wurde, und die App rechnet auf den Cent genau aus, wer wie viel bekommt oder zahlt.</p>\n\n<ul>\n<li><b>Spielarten:</b> Rufspiel, Über Kreuz, Farbsolo, Wenz und Geier, mit Laufenden, Schneider, Schwarz, Tout und Sie, Kontra und Retour.</li>\n<li><b>Gelegt und Bock:</b> Jeder, der gelegt hat, verdoppelt (Streichholzschachtel-Symbol); „6 Nixer“ lösen eine Bockrunde aus, deren Spiele doppelt zählen.</li>\n<li><b>Abend:</b> laufender Stand mit Plätzen, wer gibt, Bock-Zähler; jedes Spiel lässt sich nachträglich ändern oder löschen, alles rechnet sich sofort neu.</li>\n<li><b>Regeln einstellbar:</b> Tarife, Laufende, Bockrunde, Topf-Teilung beim Einzelspiel; jeder Abend behält seine Regeln.</li>\n<li><b>Abschluss und Statistik:</b> Endstand und wer wem wie viel zahlt; Statistik für einen Abend oder alle Abende mit Vermögensverlauf, Spielarten, „Sollte er es lassen?“ beim Legen, Bock-König, Solo-Spezialist und Lieblingspartner.</li>\n<li><b>Teilen:</b> Abschluss und Statistik als Text oder als Bild, zum Beispiel an Signal oder Telegram.</li>\n<li><b>Sicherung:</b> als Datei speichern und einlesen (auch mit der Web-App fürs iPhone austauschbar) und auf Wunsch nach jeder Änderung automatisch, direkt in Google Drive oder in eine Datei, die man einmal wählt.</li>\n<li><b>Abend-Kommentator:</b> eine witzige, leicht stichelnde Zusammenfassung des Abends oder eine Bilanz über alle Abende auf Bairisch, aus Textbausteinen oder auf Wunsch von einem Sprachmodell (Google Gemini mit eigenem Schlüssel).</li>\n<li><b>Gemeinsame Runde:</b> Auf Wunsch tragen alle vom eigenen Handy ein und sehen denselben Stand, auch gemischt mit der Web-App fürs iPhone. Jeder legt seinen eigenen Namen fest; die App zeigt, wer gibt, und markiert doppelt eingetragene Spiele. Dafür braucht die Runde einen eigenen kostenlosen Server (Supabase) und jeder ein Google-Konto.</li>\n<li><b>Gemacht für schummrige Wirtshäuser:</b> dunkles Design, große Tasten, Bedienung mit Screenreader.</li>\n</ul>\n\n<p><b>Datenschutz:</b> Ohne die freiwilligen Zusätze bleibt alles auf dem Gerät. Internet braucht die App nur für sie: die gemeinsame Runde (Namen, Abende und Regeln liegen dann auf dem Server der Runde; lesen können sie nur ihre Mitglieder), die Sicherung in Google Drive den Abend-Kommentator mit Sprachmodell (sendet erst nach Zustimmung, standardmäßig ohne echte Namen) und die Ortsvorschläge (der eingetippte Ort geht an photon.komoot.io, eine Suche in OpenStreetMap, ohne Standort). Keine Werbung, kein Tracking.</p>\n\n<p><b>Testversion:</b> Die Uhr-App kommt später. Fürs iPhone gibt es eine Web-App mit denselben Rechnungen.</p>\n\n<p>Freie Software (CC0 1.0). Quellcode: <a href=\"https://github.com/q0ochen/SchafkopfTracker\">github.com/q0ochen/SchafkopfTracker</a></p>\n",
+          "en-US": "<p><b>For Schafkopf evenings at the pub.</b> After every game one player records what was played, and the app works out to the cent who receives or pays how much. The app is in German.</p>\n\n<ul>\n<li><b>Game types:</b> Rufspiel, Über Kreuz, Farbsolo, Wenz and Geier, with Laufende, Schneider, Schwarz, Tout and Sie, Kontra and Retour.</li>\n<li><b>Doubling:</b> every player who knocked doubles the value (matchbox symbol); “6 Nixer” start a Bock round in which games count double.</li>\n<li><b>Evening:</b> running totals with places, dealer and Bock counter; every game can be edited or deleted later and everything is recalculated at once.</li>\n<li><b>Configurable rules:</b> tariffs, Laufende, Bock round, pot split for solo games; every evening keeps its own rules.</li>\n<li><b>Closing and statistics:</b> final standings and who pays whom; statistics for one evening or all evenings with a balance history chart, game types, a knocking index, Bock king, solo specialist and favourite partners.</li>\n<li><b>Sharing:</b> closing and statistics as text or as an image, for example to Signal or Telegram.</li>\n<li><b>Backup:</b> save and restore a file (also exchangeable with the iPhone web app) and, if you like, automatically after every change, directly to Google Drive or into a file you pick once.</li>\n<li><b>Evening commentator:</b> a funny, slightly teasing summary of the evening, or a review of all evenings, in Bavarian, from text templates or, if you like, written by a language model (Google Gemini with your own key).</li>\n<li><b>Shared round:</b> if you like, everyone records from their own phone and sees the same standings, also mixed with the iPhone web app. Everybody sets their own name; the app shows who deals and marks games that were recorded twice. This needs a free server of your own (Supabase) and a Google account for each player.</li>\n<li><b>Made for dimly lit pubs:</b> dark design, large buttons, works with a screen reader.</li>\n</ul>\n\n<p><b>Privacy:</b> without the optional extras everything stays on the device. The app uses the internet only for them: the shared round (names, evenings and rules are then stored on the round's server; only its members can read them), backup to Google Drive, the evening commentator with a language model (sends only after consent, without real names by default) and place suggestions (the typed place goes to photon.komoot.io, an OpenStreetMap search, without location). No ads, no tracking.</p>\n\n<p><b>Test version:</b> the watch app comes later. For the iPhone there is a web app with the same calculations.</p>\n\n<p>Free software (CC0 1.0). Source code: <a href=\"https://github.com/q0ochen/SchafkopfTracker\">github.com/q0ochen/SchafkopfTracker</a></p>\n"
+        },
+        "icon": {
+          "en-US": {
+            "name": "/io.github.q0ochen.schafkopf/en-US/icon_urbg3nuR-7pxjWMcfCZtW0h7T9VlOlHyusq-lObumug=.png",
+            "sha256": "bab6e0de7b91fbba718d631c7c266d5b487b4fd5653a51f2bacabe94e6ee9ae8",
+            "size": 18282
+          }
+        },
+        "preferredSigner": "74ac151b7cb0f49223e1f8b2e85ec3d989cd4d6b44ed92d8993d409e88b541a4"
+      },
+      "versions": {
+        "cf29350f8b327ef08f8c6d4250fa100e156d0ad142a3be781eea96249492ca01": {
+          "added": 1795293343000,
+          "file": {
+            "name": "/io.github.q0ochen.schafkopf_1061.apk",
+            "sha256": "cf29350f8b327ef08f8c6d4250fa100e156d0ad142a3be781eea96249492ca01",
+            "size": 11759132
+          },
+          "manifest": {
+            "nativecode": [
+              "arm64-v8a",
+              "armeabi-v7a",
+              "x86",
+              "x86_64"
+            ],
+            "versionName": "0.1.0-test.61",
+            "versionCode": 1061,
+            "usesSdk": {
+              "minSdkVersion": 26,
+              "targetSdkVersion": 37
+            },
+            "signer": {
+              "sha256": [
+                "74ac151b7cb0f49223e1f8b2e85ec3d989cd4d6b44ed92d8993d409e88b541a4"
+              ]
+            },
+            "usesPermission": [
+              {
+                "name": "android.permission.INTERNET"
+              },
+              {
+                "name": "android.permission.WAKE_LOCK"
+              },
+              {
+                "name": "android.permission.ACCESS_NETWORK_STATE"
+              },
+              {
+                "name": "android.permission.RECEIVE_BOOT_COMPLETED"
+              },
+              {
+                "name": "android.permission.FOREGROUND_SERVICE"
+              },
+              {
+                "name": "io.github.q0ochen.schafkopf.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+              }
+            ]
+          },
+          "antiFeatures": {
+            "NonFreeNet": {
+              "de": "Freiwillig - Abend-Kommentator mit Google Gemini, Sicherung in Google Drive, gemeinsame Runde mit Anmeldung über Google.",
+              "en-US": "Optional - evening commentator via Google Gemini, backup to Google Drive, shared round with Google sign-in."
+            }
+          }
+        },
+        "396cbb4fdc71435595ebd043c6ed7d31aa205561c9be9b15a39ac20873e7b7f3": {
+          "added": 1795293342000,
+          "file": {
+            "name": "/io.github.q0ochen.schafkopf_1054.apk",
+            "sha256": "396cbb4fdc71435595ebd043c6ed7d31aa205561c9be9b15a39ac20873e7b7f3",
+            "size": 11759128
+          },
+          "manifest": {
+            "nativecode": [
+              "arm64-v8a",
+              "armeabi-v7a",
+              "x86",
+              "x86_64"
+            ],
+            "versionName": "0.1.0-test.54",
+            "versionCode": 1054,
+            "usesSdk": {
+              "minSdkVersion": 26,
+              "targetSdkVersion": 37
+            },
+            "signer": {
+              "sha256": [
+                "74ac151b7cb0f49223e1f8b2e85ec3d989cd4d6b44ed92d8993d409e88b541a4"
+              ]
+            },
+            "usesPermission": [
+              {
+                "name": "android.permission.INTERNET"
+              },
+              {
+                "name": "android.permission.WAKE_LOCK"
+              },
+              {
+                "name": "android.permission.ACCESS_NETWORK_STATE"
+              },
+              {
+                "name": "android.permission.RECEIVE_BOOT_COMPLETED"
+              },
+              {
+                "name": "android.permission.FOREGROUND_SERVICE"
+              },
+              {
+                "name": "io.github.q0ochen.schafkopf.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+              }
+            ]
+          },
+          "antiFeatures": {
+            "NonFreeNet": {
+              "de": "Freiwillig - Abend-Kommentator mit Google Gemini, Sicherung in Google Drive, gemeinsame Runde mit Anmeldung über Google.",
+              "en-US": "Optional - evening commentator via Google Gemini, backup to Google Drive, shared round with Google sign-in."
+            }
+          }
+        }
+      }
+    }
+  }
+}
