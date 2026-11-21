@@ -193,7 +193,7 @@ iPhone user können wir gern wieder eine Web-App als Zwischenlösung bauen“) a
 - **Android-Testversion:** dauerhafte Speicherung (`FileStorage`), öffentlicher Test-Schlüssel `app/debug.keystore`,
   `versionCode` 1000 + Laufnummer. Workflow `android.yml`: Tests, Release-APK, Installationstest im Emulator,
   Release `testversion` (Download ohne Anmeldung) und eigene F-Droid-Paketquelle auf dem Zweig `fdroid-repo`
-  (`docs/F-DROID.md`). Veröffentlicht wird bei jedem Push auf `main`, `entwicklung` und `claude/…`. Die
+  (`docs/F-DROID.md`). Veröffentlicht wird seit dem 21.11.2026 nur noch von `main` (siehe „Stand am 21.11.2026“). Die
   Paketquelle entsteht erst, wenn der Nutzer das Secret `FDROID_REPO_KEYSTORE` gesetzt hat (Schlüsseldatei am
   15.11.2026 an ihn übergeben; liegt nirgends im Repository).
 - Doppeltippen auf „Gewonnen“ bzw. „Abend starten“ legte in der Android-App ein Spiel bzw. einen Abend doppelt an;
@@ -464,10 +464,10 @@ drückt und in den neuen Bildschirm gelangt kann man nicht mehr auf den Rückpfe
 - **Entscheidung des Nutzers (21.11.2026):** „Heb dir den Rückpfeil Fix dann aber für einen gesammelten neuen Release
   zu verschiedenen Bugfixes auf. Es werden jetzt neue Tests kommen“. Also keinen Pull Request, bis er darum bittet;
   die Korrekturen aus den Tests sammeln sich auf dem Zweig `claude/gracious-keller-48tcn0` (Stand dort: `8cbe734`).
-  Die Web-App erreicht das ohnehin erst über `main`. **Aber:** Android-Änderungen auf einem Zweig `claude/…` gehen
-  bisher sofort als Testversion und in die F-Droid-Paketquelle (`android.yml`, Bedingungen mit
-  `refs/heads/claude/`). Dem Nutzer am 21.11.2026 angeboten, das auf `main` und `entwicklung` zu begrenzen; Antwort
-  hier nachtragen. In F-Droid steht seit dem 21.11.2026 die Testversion 49 (= `main` mit Pull Request #26).
+  Die Web-App erreicht das ohnehin erst über `main`. Für Android hat der Nutzer am 21.11.2026 ebenso entschieden
+  („Ja, erst mit dem Release“): Seitdem veröffentlicht `android.yml` Testversion und F-Droid-Paketquelle nur noch von
+  `main` (Push oder „Run workflow“); Arbeitszweige werden nur geprüft. In F-Droid steht seit dem 21.11.2026 die
+  Testversion 49 (= `main` mit Pull Request #26).
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 

@@ -8,8 +8,9 @@ rechnet aus, wer wie viel bekommt oder zahlt. Am Ende des Abends stehen Gewinner
 
 ## Android-Testversion
 
-Die Testversion wird bei jeder Änderung automatisch gebaut, getestet und im Emulator probehalber installiert. Neue
-Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten. Internet braucht
+Neue Testversionen erscheinen gesammelt: Korrekturen werden erst einzeln geprüft und dann zusammen freigegeben. Jede
+Testversion ist vorher automatisch gebaut, getestet und im Emulator probehalber installiert. Neue Testversionen lassen
+sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten. Internet braucht
 die App nur für drei freiwillige Zusätze: die gemeinsame Runde (alle tragen vom eigenen Handy ein), den
 Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in Google Drive.
 

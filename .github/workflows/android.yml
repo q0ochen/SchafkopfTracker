@@ -8,9 +8,10 @@
 #     https://github.com/q0ochen/SchafkopfTracker/releases/download/testversion/SchafkopfTracker.apk
 # - Eigene F-Droid-Paketquelle auf dem Zweig „fdroid-repo“ (braucht das Secret FDROID_REPO_KEYSTORE, docs/F-DROID.md)
 #
-# Veröffentlicht wird nur nach einem Push auf main, entwicklung oder einen Arbeitszweig claude/… (oder „Run workflow“
-# auf einem dieser Zweige), nie für Pull Requests. Es gewinnt immer der neueste Lauf: Ein älterer Lauf überschreibt nie
-# eine neuere Testversion.
+# Veröffentlicht wird nur nach einem Push auf main (also nach dem Zusammenführen eines Pull Requests) oder mit „Run
+# workflow“ auf main, nie für Pull Requests oder andere Zweige: Seit dem 21.11.2026 sammeln sich Korrekturen auf den
+# Arbeitszweigen zu einem Release (Entscheidung des Projektinhabers), damit die Tester einen festen Stand testen. Es
+# gewinnt immer der neueste Lauf: Ein älterer Lauf überschreibt nie eine neuere Testversion.
 name: Android
 
 on:
@@ -253,8 +254,7 @@ jobs:
     needs: [build, installtest]
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/entwicklung' ||
-       startsWith(github.ref, 'refs/heads/claude/'))
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -354,8 +354,7 @@ jobs:
     needs: [build, installtest]
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/entwicklung' ||
-       startsWith(github.ref, 'refs/heads/claude/'))
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
