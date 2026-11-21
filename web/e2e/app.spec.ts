@@ -1,19 +1,27 @@
 /* Oberflächen-Tests der Web-App: ein ganzer Abend am Tisch, Sicherung, Neuladen, Barrierefreiheit. */
 import { readFile } from "node:fs/promises";
+import type { Page } from "@playwright/test";
 import {
   answerPlaces,
   blockPlaceSearch,
+  cancelShareMenu,
   enterGame,
   expect,
   expectAccessible,
+  expectCorner,
+  keepShareMenuOpen,
   nameDefaultPlayers,
   openApp,
   PHOTON_REQUESTS,
   photonAnswer,
+  shareCount,
+  sharedFiles,
   standing,
   startEvening,
+  stubShareMenu,
   test,
   waitUntilSaved,
+  withoutShareMenu,
 } from "./support";
 
 test("Startseite: feste Runde vorbelegt, alles erreichbar und barrierefrei", async ({ page }) => {
@@ -26,7 +34,7 @@ test("Startseite: feste Runde vorbelegt, alles erreichbar und barrierefrei", asy
   await expectAccessible(page);
 });
 
-test("ein Abend am Tisch: eintragen, zurücknehmen, ändern, Bock, Abschluss", async ({ page }) => {
+test("ein Abend am Tisch: eintragen, zurücknehmen, ändern, Bock, Abend teilen", async ({ page }) => {
   await nameDefaultPlayers(page);
   await startEvening(page);
   await expect(page.getByText("Spiel 1 · Geber: Anna")).toBeVisible();
@@ -91,11 +99,18 @@ test("ein Abend am Tisch: eintragen, zurücknehmen, ändern, Bock, Abschluss", a
   // Done: +0,10 (geändertes Rufspiel) + 0,70 (Wenz) + 0,20 (Rufspiel im Bock) = +1,00.
   await expect(standing(page, "Done")).toContainText("+1,00");
 
-  // Abend beenden: Abschluss mit „Wer zahlt wem“.
+  // Abend beenden führt zu „Abend teilen“: Endstand, Vermögensverlauf (wie in der Statistik) und „Wer zahlt wem“.
   await page.getByRole("button", { name: "Mehr" }).click();
   await page.getByRole("button", { name: "Abend beenden" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Abschluss" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Abend teilen" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2 })).toHaveText(["Endstand", "Vermögensverlauf", "Wer zahlt wem"]);
+  await expect(page.getByRole("group", { name: /Vermögensverlauf/ })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Legende" }).getByRole("listitem")).toHaveText(["Anna", "Bert", "Cilli", "Done"]);
   await expect(page.getByRole("list", { name: "Wer zahlt wem" }).getByRole("listitem").first()).toContainText("Bert zahlt");
+  // Knöpfe: „Als Bild teilen“ zuerst (Hauptaktion), dann „Als Text teilen“, dann die Statistik.
+  await expect(page.locator("main .button")).toHaveText(["Als Bild teilen", "Als Text teilen", "Statistik dieses Abends"]);
+  await expect(page.getByRole("button", { name: "Als Bild teilen" })).toHaveClass(/primary/);
+  expect((await page.getByRole("button", { name: "Als Bild teilen" }).boundingBox())?.height).toBeGreaterThanOrEqual(56);
   await expectAccessible(page);
 
   // Statistik dieses Abends.
@@ -176,11 +191,11 @@ test("Abend bearbeiten: Datum, Ort, Sitzordnung und erster Geber; Spiele und Bet
   await enterGame(page, { players: ["Anna", "Cilli"], won: true });
   await expect(page.getByText("Spiel 2 · Geber: Bert")).toBeVisible();
 
-  // Im Menü zwischen „Abschluss“ und „Regeln dieses Abends“.
+  // Im Menü zwischen „Abend teilen“ und „Regeln dieses Abends“.
   await page.getByRole("button", { name: "Mehr" }).click();
   await expect(page.locator(".more-menu-list .menu-item")).toHaveText([
     "Statistik dieses Abends",
-    "Abschluss",
+    "Abend teilen",
     "Abend bearbeiten",
     "Regeln dieses Abends",
     "Abend beenden",
@@ -387,7 +402,7 @@ test("Neuer Abend an einem späteren Tag: geplant, nicht in „Abend läuft“",
   await runningCard.getByRole("button", { name: "Weiterspielen" }).click();
   await page.getByRole("button", { name: "Mehr" }).click();
   await page.getByRole("button", { name: "Abend beenden" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Abschluss" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Abend teilen" })).toBeVisible();
   await openApp(page);
   await expect(page.getByRole("heading", { name: "Abend läuft" })).toHaveCount(0);
   await expect(items.first().locator(".badge")).toHaveText("geplant");
@@ -438,6 +453,113 @@ test("Zurück geht auch, wenn der Browser keinen Schritt zurück kann", async ({
   await expect(page.getByRole("button", { name: "Spiel eintragen" })).toBeVisible();
   await page.getByRole("button", { name: "Zurück", exact: true }).click();
   await expect(page.getByRole("button", { name: "Weiterspielen" })).toBeVisible();
+});
+
+/** Ein laufender Abend mit zwei Spielen; danach steht „Abend teilen“ offen (aus dem Menü des Abends). */
+async function openShareScreen(page: Page): Promise<void> {
+  await nameDefaultPlayers(page);
+  await startEvening(page);
+  await enterGame(page, { players: ["Anna", "Cilli"], won: true });
+  await enterGame(page, { type: "Wenz", players: ["Bert"], won: false });
+  await page.getByRole("button", { name: "Mehr" }).click();
+  await page.getByRole("button", { name: "Abend teilen" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Abend teilen" })).toBeVisible();
+}
+
+test("Abend teilen: als Bild über das Teilen-Menü, im selben Takt wie das Antippen", async ({ page }) => {
+  await stubShareMenu(page);
+  await openShareScreen(page);
+  await expect(page.getByText("2 Spiele · Der Abend läuft noch.")).toBeVisible();
+  await page.getByRole("button", { name: "Als Bild teilen" }).click();
+  await expect.poll(() => shareCount(page)).toBe(1);
+  const [image] = await sharedFiles(page);
+  // Genau eine PNG-Datei, 1080 Pixel breit, mit deckendem Hintergrund in der Farbe des dunklen Designs.
+  expect(image).toMatchObject({ name: "schafkopf-abend.png", type: "image/png", width: 1080 });
+  expectCorner(image, [0, 0, 0, 255]);
+  expect(image.height).toBeGreaterThan(1500);
+  expect(image.height).toBeLessThan(2600);
+  // Safari öffnet das Teilen-Menü nur unmittelbar nach dem Antippen: Der Aufruf geschah noch im Klick selbst (ohne
+  // `await` dazwischen), mit Nutzeraktion (`null`: Der Browser kennt `navigator.userActivation` nicht).
+  expect(image.event).toBe("click");
+  expect(image.active).not.toBe(false);
+  // Geteilt: keine Meldung.
+  await expect(page.getByRole("status")).toHaveCount(0);
+
+  // Abbrechen im Teilen-Menü meldet nichts und lädt nichts herunter.
+  await cancelShareMenu(page);
+  let downloads = 0;
+  page.on("download", () => downloads++);
+  await page.getByRole("button", { name: "Als Bild teilen" }).click();
+  await expect.poll(() => shareCount(page)).toBe(2);
+  await page.waitForTimeout(300);
+  expect(downloads).toBe(0);
+  await expect(page.getByRole("status")).toHaveCount(0);
+
+  // Der Text lässt sich weiter teilen.
+  await page.getByRole("button", { name: "Als Text teilen" }).click();
+  await expect(page.getByRole("status")).toHaveCount(0);
+});
+
+test("Abend teilen: doppelt angetippt, während das Teilen-Menü aufgeht, gibt es nur ein Teilen-Menü", async ({ page }) => {
+  await stubShareMenu(page);
+  await openShareScreen(page);
+  await keepShareMenuOpen(page);
+  let downloads = 0;
+  page.on("download", () => downloads++);
+  const button = page.getByRole("button", { name: "Als Bild teilen" });
+  await button.click();
+  await button.click();
+  await expect.poll(() => shareCount(page)).toBe(1);
+  await page.waitForTimeout(300);
+  expect(await shareCount(page)).toBe(1);
+  expect(downloads).toBe(0);
+  await expect(page.getByRole("status")).toHaveCount(0);
+});
+
+test("Abend teilen: Kann der Browser keine Dateien teilen, wird das Bild heruntergeladen", async ({ page }) => {
+  await withoutShareMenu(page);
+  await openShareScreen(page);
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Als Bild teilen" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("schafkopf-abend.png");
+  const png = await readFile(await download.path());
+  // PNG-Signatur, dann im Kopf (IHDR) Breite und Höhe.
+  expect([...png.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  expect(png.readUInt32BE(16)).toBe(1080);
+  expect(png.readUInt32BE(20)).toBeGreaterThan(1500);
+  await expect(page.getByRole("status")).toHaveText("Das Bild ist heruntergeladen.");
+  await expectAccessible(page);
+});
+
+test("Statistik: Auswahl oben und „Als Bild teilen“, im hellen Design auch das Bild hell", async ({ page }) => {
+  await stubShareMenu(page);
+  await openShareScreen(page);
+  await page.getByRole("button", { name: "Statistik dieses Abends" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Statistik dieses Abends" })).toBeVisible();
+  await expect(page.locator("main .card-title")).toHaveText(/^Abend vom .*\d{4}$/);
+  await page.getByRole("button", { name: "Als Bild teilen" }).click();
+  await expect.poll(() => shareCount(page)).toBe(1);
+  const [one] = await sharedFiles(page);
+  expect(one).toMatchObject({ name: "schafkopf-statistik.png", type: "image/png", width: 1080, event: "click" });
+  expectCorner(one, [0, 0, 0, 255]);
+  await expect(page.getByRole("status")).toHaveCount(0);
+
+  // Alle Abende im hellen Design.
+  await openApp(page, "/einstellungen");
+  await page.getByRole("group", { name: "Erscheinungsbild" }).getByRole("button", { name: "hell" }).click();
+  await openApp(page, "/statistik");
+  await expect(page.locator("main .card-title")).toHaveText("Alle Abende (ewige Tabelle)");
+  const before = await shareCount(page);
+  await page.getByRole("button", { name: "Als Bild teilen" }).click();
+  await expect.poll(() => shareCount(page)).toBe(before + 1);
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expectAccessible(page);
+  const all = (await sharedFiles(page)).at(-1);
+  // Hell: deckender Hintergrund #f7faf5 wie die Seite.
+  expect(all).toMatchObject({ name: "schafkopf-statistik.png", type: "image/png", width: 1080, event: "click" });
+  expectCorner(all, [247, 250, 245, 255]);
+  expect(all?.height).toBeGreaterThan(1500);
 });
 
 test("Spieler löschen: ohne Abend mit Rückfrage, mit Abend nur archivieren", async ({ page }) => {

@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 699, `data` 296, `database` 24, `app` 225, Web 664 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 49 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 699, `data` 296, `database` 24, `app` 226, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 53 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -519,6 +519,28 @@ Kreditkarte; Leitplanke „kein Geld ausgeben“).
   `Origin` hatte keine CORS-Kopfzeile, was bei Photon (Javalin) normal ist; eine Probe mit `Origin` wurde hier nicht
   zugelassen. Kommen in der Web-App auf dem iPhone keine Vorschläge, sondern immer „Ortsvorschläge gibt es nur mit
   Internet.“, zuerst das prüfen.
+
+## Stand am 21.11.2026 (abends): Abend teilen
+
+Wunsch des Nutzers (21.11.2026, mit Bildschirmfoto des Abend-Menüs und eines „Geldverlaufs“ aus einer anderen App):
+„Abschluss soll "Abend teilen" heißen und dann soll man die Statistik auch als Bild teilen können in dem dann auch ein
+Aussagekräftiges Diagramm mit den Spielernamen enthalten ist“.
+
+- Vertrag `docs/ARCHITEKTUR.md`, 4.4. Menüpunkt und Bildschirm heißen „Abend teilen“; der Bildschirm zeigt zusätzlich
+  den Vermögensverlauf des Abends (wie in der Statistik, mit Legende der Namen); „Als Bild teilen“ ist die Hauptaktion
+  und steht vor „Als Text teilen“ (auch in der Statistik der Android-App). Das Bild enthält Datum und Ort, Endstand,
+  Vermögensverlauf und „Wer zahlt wem“.
+- **Android:** `ClosingScreen` (Diagramm `BalanceChart` im geteilten Ausschnitt), `ClosingViewModel` (Verlauf aus
+  `StatisticEngine.forEvening`), `ShareButtons` (Reihenfolge), Bild `schafkopf-abend.png`; Test
+  `ShareTest` (Diagramm und Reihenfolge), Bildschirmfotos 11 und 18.
+- **Web-App** (gebaut von einem Helfer, von Claude durchgesehen und geprüft): teilt jetzt Bilder, „Abend teilen“ und die
+  Statistik (`shareImage.ts`, `shareImageCanvas.ts`, `ShareImageButton.tsx`), 1080 Pixel breit in den Farben des
+  Designs. Linien, die genau gleich verlaufen (Partner mit gleichem Stand), liegen im Bild nebeneinander statt
+  übereinander; jeder Name am Linienende hat seinen Farbpunkt. Teilen über das Teilen-Menü des iPhones ohne Warten
+  nach dem Antippen (Safari verlangt das), sonst Herunterladen. Die Adresse bleibt `#/abend/<id>/abschluss`.
+- Nicht geprüft: echte Geräte, vor allem ob das Teilen-Menü auf dem iPhone das Bild annimmt (in Chromium und, auf
+  GitHub, mit WebKit getestet).
+- Auf dem Zweig `claude/gracious-keller-48tcn0`; Pull Request nur auf Bitte des Nutzers.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 

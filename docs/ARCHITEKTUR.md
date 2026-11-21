@@ -387,8 +387,13 @@ ein „Geldverlauf“ mit einer farbigen Linie je Spieler und einer Legende mit 
   Text bleibt, wie er ist.
 - **Statistik:** Auch dort heißen die Knöpfe „Als Bild teilen“ (zuerst) und „Als Text teilen“ (Android wie bisher;
   die Web-App bekommt nur „Als Bild teilen“). Das Bild zeigt den oberen Teil der Statistik: Auswahl („Abend vom …“ bzw.
-  „Alle Abende (ewige Tabelle)“), Kontostand und Vermögensverlauf mit Legende (bei allen Abenden mit den feinen
-  Linien, wo ein Abend beginnt). Dateiname `schafkopf-statistik.png`.
+  „Alle Abende (ewige Tabelle)“; Android nennt einen Abend wie in seiner Auswahl nur mit Datum und Ort), Kontostand und
+  Vermögensverlauf mit Legende (bei allen Abenden mit den feinen Linien, wo ein Abend beginnt). Dateiname
+  `schafkopf-statistik.png`. Die Adresse der Web-App bleibt `#/abend/<id>/abschluss` (Lesezeichen und der von iOS
+  wiederhergestellte letzte Bildschirm funktionieren weiter).
+- **Safari:** `navigator.share` geht dort nur direkt nach dem Antippen. Die Web-App zeichnet das Bild deshalb im Klick
+  selbst und macht es mit `toDataURL` zur Datei; bis zum Teilen-Menü wird auf nichts gewartet (der Oberflächentest prüft,
+  dass das Teilen noch im Klick geschieht). Ein zweites Antippen, solange das Teilen-Menü offen ist, tut nichts.
 - **Weitergeben:** Android über den Teilen-Dialog wie bisher. Die Web-App über das Teilen-Menü des Browsers
   (`navigator.share` mit der Datei, auf dem iPhone also direkt in WhatsApp und Co.); kann der Browser keine Dateien
   teilen, wird das Bild heruntergeladen. Meldungen: „Das Bild ist heruntergeladen.“ bzw. „Das Bild ließ sich nicht
@@ -435,7 +440,7 @@ Home-Bildschirm“), braucht keinen Server und wird von `main` aus auf GitHub Pa
 | Speicher | IndexedDB (`web/src/data/repository.ts`): je Abend, für die Spielerliste und für die Einstellungen ein JSON-Text im Dateiformat der Android-App. Daten verlassen das Gerät nur mit der gemeinsamen Runde (Abschnitt 8); für Ortsvorschläge geht nur der eingetippte Ort an photon.komoot.io (4.3). |
 | Gleiche Spieler | Die vorbelegte Runde hat dieselben Kennungen wie in der Android-App (`spieler-1` bis `spieler-4`). |
 | Navigation | Adressen mit Anker (`#/abend/<id>`, `web/src/app/router.ts`). „Zurück“ geht einen Schritt in der Geschichte des Browsers zurück; gibt es in der App keinen Schritt davor, geht es zum übergeordneten Bildschirm (`parentOf`). Dorthin geht es auch, wenn der Browser nach 400 ms nichts bewegt hat: iOS stellt die App vom Home-Bildschirm nach dem Neuladen am letzten Bildschirm samt Zustand wieder her, aber ohne die Schritte davor. Ein Bildschirm, der schon offen ist, wird nicht ein zweites Mal in die Geschichte gelegt (doppeltes Antippen). |
-| Oberfläche | Logik der Bildschirme als reine Funktionen nach dem Vorbild der ViewModels (`web/src/ui/gameForm.ts`, `newEvening.ts`, `board.ts`, `editEvening.ts`, `placeSuggestions.ts`, `localDate.ts`; Ortsvorschläge in `web/src/data/place/photon.ts` und `web/src/ui/LocationField.tsx`), Oberflächen-Tests mit Playwright in iPhone-Größe und Prüfung mit axe. Spielerfarben aus einer auf Farbfehlsichtigkeit geprüften Palette, als Punkt neben dem Namen. |
+| Oberfläche | Logik der Bildschirme als reine Funktionen nach dem Vorbild der ViewModels (`web/src/ui/gameForm.ts`, `newEvening.ts`, `board.ts`, `editEvening.ts`, `placeSuggestions.ts`, `localDate.ts`, `shareImage.ts`; Ortsvorschläge in `web/src/data/place/photon.ts` und `web/src/ui/LocationField.tsx`; das Bild zum Teilen zeichnet `web/src/ui/shareImageCanvas.ts` in einem Canvas, `ShareImageButton.tsx` gibt es ohne Warten über `navigator.share` weiter), Oberflächen-Tests mit Playwright in iPhone-Größe und Prüfung mit axe. Spielerfarben aus einer auf Farbfehlsichtigkeit geprüften Palette, als Punkt neben dem Namen. |
 | Leitplanken | Dieselben wie oben, sinngemäß: nur freie Bibliotheken (`preact`, `idb`), keine Analyse, Content-Security-Policy mit nur zwei fremden Zielen für Anfragen (`connect-src`: `https://photon.komoot.io` für die Ortsvorschläge, mit gemeinsamer Runde deren Server), Start ohne Netz über den Service Worker. Die KI-Zusammenfassung gibt es in der Web-App nicht. |
 
 

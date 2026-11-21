@@ -12,7 +12,7 @@ Adresse: **https://q0ochen.github.io/SchafkopfTracker/** (GitHub Pages, kostenlo
 - **Neuer Abend**: vier Spieler wählen (Vorschlag: wie letztes Mal), Sitzordnung, erster Geber, Datum (vorbelegt ist
   heute; ein späterer Tag legt den Abend als geplanten an, Knopf „Abend anlegen“), Ort mit Ortsvorschlägen.
 - **Abend**: Stand je Spieler mit Platz und Geber, alle Einträge mit Beträgen, große Knöpfe „Spiel eintragen“,
-  „Zusammengeworfen“, „6 Nixer – Bock“ und „Rückgängig“ (mit „Wiederherstellen“). Menü: Statistik, Abschluss,
+  „Zusammengeworfen“, „6 Nixer – Bock“ und „Rückgängig“ (mit „Wiederherstellen“). Menü: Statistik, Abend teilen,
   Abend bearbeiten, Regeln dieses Abends, beenden/wieder öffnen, löschen. Der Bildschirm bleibt an, solange der
   Abend läuft.
 - **Abend bearbeiten**: Datum (dieselbe Uhrzeit am neuen Tag, auch ein Tag nach heute), Ort (mit Ortsvorschlägen),
@@ -21,10 +21,12 @@ Adresse: **https://q0ochen.github.io/SchafkopfTracker/** (GitHub Pages, kostenlo
   anderes Handy inzwischen geändert hat.
 - **Spiel eintragen/ändern**: Spielart, wer spielt (Über Kreuz: ein Tipp wählt das Paar), gelegt, Kontra/Retour,
   Laufende, Tout/Sie, Ausgang, Bock, Farbe, Spielwert mit Rechenweg; „Gewonnen“/„Verloren“ speichert sofort.
-- **Abschluss**: Endstand, „Wer zahlt wem“, als Text teilen.
+- **Abend teilen** (bis 21.11.2026 „Abschluss“): Endstand, Vermögensverlauf, „Wer zahlt wem“; als Bild (PNG,
+  1080 Pixel breit, in den Farben des Designs) über das Teilen-Menü des iPhones, zum Beispiel direkt in WhatsApp, oder
+  als Text. Kann der Browser keine Dateien teilen, wird das Bild heruntergeladen.
 - **Statistik** (ein Abend oder alle): Kontostand, Vermögensverlauf (Diagramm mit Fadenkreuz, Tabelle),
   Spielarten, „Sollte er es lassen?“ (Legen), Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner,
-  weitere Zahlen und Rekorde.
+  weitere Zahlen und Rekorde. Auswahl, Kontostand und Vermögensverlauf lassen sich als Bild teilen.
 - **Einstellungen**: dunkel/hell/wie System, Bildschirm anlassen, Regeln für neue Abende, **Sicherung speichern
   und einlesen**.
 - **Gemeinsame Runde** (nur, wenn die App mit einem Server gebaut wurde, siehe unten): Alle tragen vom eigenen
@@ -71,6 +73,12 @@ web/
 - Laufzeit-Abhängigkeiten (frei): `preact` (MIT), `idb` (ISC) und, nur mit gemeinsamer Runde geladen,
   `@supabase/supabase-js` (MIT). Content-Security-Policy im Build: Anfragen gehen nur an die eigene Herkunft, an
   `https://photon.komoot.io` (Ortsvorschläge, in jedem Build) und mit gemeinsamer Runde an deren Server.
+- Bild zum Teilen (Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 4.4): `src/ui/shareImage.ts` baut Inhalt und Anordnung
+  als reine Funktionen (Texte wie auf dem Bildschirm, Achsen, Legende, Kürzen und Umbrechen langer Namen und Orte);
+  `src/ui/shareImageCanvas.ts` zeichnet das in ein Canvas, in den Farben der CSS-Variablen der Seite. Zwischen dem
+  Antippen und `navigator.share` wird auf nichts gewartet (`toDataURL` statt `toBlob`), denn Safari öffnet das
+  Teilen-Menü nur unmittelbar nach dem Antippen. Linien, die genau gleich verlaufen (Partner im Rufspiel), liegen im
+  Bild nebeneinander, damit jede Farbe zu sehen bleibt. Die Bildschirmfotos (`screenshots`) speichern auch die Bilder.
 - Ortsvorschläge: `src/data/place/photon.ts` macht aus der Antwort von Photon die Vorschläge (gelesen wie in Kotlin
   mit dem Nachbau von kotlinx.serialization); `src/ui/placeSuggestions.ts` steuert Warten (400 ms), Verwerfen und
   Hinweis, `src/ui/LocationField.tsx` zeigt das Feld mit der Liste. Die Oberflächen-Tests nehmen `test` aus

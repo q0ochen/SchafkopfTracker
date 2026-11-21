@@ -1,7 +1,8 @@
-/* Abschluss eines Abends: Endstand, „Wer zahlt wem“ und der Text zum Teilen. */
+/* „Abend teilen“ (bis 21.11.2026 „Abschluss“): Endstand, „Wer zahlt wem“ und der Text zum Teilen. */
+import { isRunning } from "../core/evening/Evening";
 import type { EveningState } from "../core/evening/EveningCalculator";
 import { SettleUp, type Transfer } from "../core/evening/SettleUp";
-import type { PlayerId } from "../core/model";
+import type { Evening, PlayerId } from "../core/model";
 import { formatAmount, formatDate, plural } from "./format";
 
 export interface FinalStanding {
@@ -34,7 +35,23 @@ export function closingOf(state: EveningState, names: ReadonlyMap<PlayerId, stri
   };
 }
 
-/** Der Abschluss als schlichter Text, zum Beispiel für eine Nachricht an die Runde. */
+/** Oberste Zeile von „Abend teilen“: das Datum wie im Titel des Abends, mit Ort „‹Datum› · ‹Ort›“. */
+export function closingTitle(evening: Evening): string {
+  const location = evening.location.trim();
+  return `${formatDate(evening.startedAt)}${location !== "" ? ` · ${location}` : ""}`;
+}
+
+/** „‹n› Spiele“, solange der Abend läuft mit „ · Der Abend läuft noch.“ dahinter. */
+export function closingSubtitle(state: EveningState): string {
+  return `${plural(state.gamesPlayed, "Spiel", "Spiele")}${isRunning(state.evening) ? " · Der Abend läuft noch." : ""}`;
+}
+
+/** Eine Zeile von „Wer zahlt wem“ ohne Betrag, zum Beispiel „Bert zahlt Anna“. */
+export function transferText(transfer: Transfer, names: ReadonlyMap<PlayerId, string>): string {
+  return `${names.get(transfer.from) ?? "?"} zahlt ${names.get(transfer.to) ?? "?"}`;
+}
+
+/** Der Abend als schlichter Text, zum Beispiel für eine Nachricht an die Runde. */
 export function closingText(state: EveningState, closing: Closing, names: ReadonlyMap<PlayerId, string>): string {
   const evening = state.evening;
   const asMoney = evening.rules.displayAsMoney;

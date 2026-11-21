@@ -240,7 +240,7 @@ export function BoardScreen({ eveningId }: { eveningId: string }) {
 
   const menuItems = [
     { label: "Statistik dieses Abends", onSelect: () => router.open({ name: "statistics", eveningId }) },
-    { label: "Abschluss", onSelect: () => router.open({ name: "closing", eveningId }) },
+    { label: "Abend teilen", onSelect: () => router.open({ name: "closing", eveningId }) },
     { label: "Abend bearbeiten", onSelect: () => router.open({ name: "editEvening", eveningId }) },
     { label: "Regeln dieses Abends", onSelect: () => router.open({ name: "rules", eveningId }) },
     running
