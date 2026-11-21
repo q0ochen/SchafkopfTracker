@@ -2,11 +2,12 @@
  * Bildschirmfotos zum Ansehen (nicht Teil der normalen Testsuite): `SCREENSHOT_DIR=/pfad npx playwright test
  * screenshots --project handy`. Ohne SCREENSHOT_DIR werden die Tests übersprungen.
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { devices, type Page } from "@playwright/test";
-import type { Evening, Player } from "../src/core/model";
+import type { Evening, GameType, Player } from "../src/core/model";
 import { RuleSets } from "../src/core/rules/RuleSet";
 import { writeBackup } from "../src/data/format";
+import { game } from "../src/ui/testing";
 import { FAKE_SUPABASE_URL, ROUND_APP_URL } from "./roundConfig";
 import {
   anotherDevice,
@@ -24,7 +25,20 @@ import {
   signIn,
   SYNC,
 } from "./roundSupport";
-import { answerPlaces, enterGame, expect, nameDefaultPlayers, openApp, PHOTON_REQUESTS, photonAnswer, startEvening, test } from "./support";
+import {
+  answerPlaces,
+  enterGame,
+  expect,
+  nameDefaultPlayers,
+  openApp,
+  PHOTON_REQUESTS,
+  photonAnswer,
+  shareCount,
+  sharedFiles,
+  startEvening,
+  stubShareMenu,
+  test,
+} from "./support";
 
 const directory = process.env.SCREENSHOT_DIR ?? "";
 test.skip(directory === "", "nur mit SCREENSHOT_DIR");
@@ -34,12 +48,24 @@ async function shot(page: Page, name: string, fullPage = false): Promise<void> {
   await page.screenshot({ path: `${directory}/${test.info().project.name}-${name}.png`, fullPage });
 }
 
+/** Tippt „Als Bild teilen“ und speichert das geteilte PNG zum Ansehen (das Teilen-Menü ist nachgestellt). */
+async function shareImage(page: Page, name: string): Promise<void> {
+  const before = await shareCount(page);
+  await page.getByRole("button", { name: "Als Bild teilen" }).click();
+  await expect.poll(() => shareCount(page)).toBe(before + 1);
+  const files = await sharedFiles(page);
+  const image = files[files.length - 1];
+  await mkdir(directory, { recursive: true });
+  await writeFile(`${directory}/${test.info().project.name}-${name}.png`, Buffer.from(image.dataUrl.slice(image.dataUrl.indexOf(",") + 1), "base64"));
+}
+
 /** Ans Ende der Seite scrollen, damit über einer festen Leiste unten das Letzte zu sehen ist. */
 async function scrollToEnd(page: Page): Promise<void> {
   await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }));
 }
 
 test("Bildschirme eines Abends", async ({ page }) => {
+  await stubShareMenu(page);
   await nameDefaultPlayers(page);
   await openApp(page);
   await shot(page, "01-start-leer");
@@ -78,11 +104,13 @@ test("Bildschirme eines Abends", async ({ page }) => {
   await page.getByRole("button", { name: "Speichern" }).click();
   await page.getByRole("button", { name: "Mehr" }).click();
   await page.getByRole("button", { name: "Abend beenden" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Abschluss" })).toBeVisible();
-  await shot(page, "07-abschluss", true);
+  await expect(page.getByRole("heading", { level: 1, name: "Abend teilen" })).toBeVisible();
+  await shot(page, "07-abend-teilen", true);
+  await shareImage(page, "07b-bild-abend");
   await page.getByRole("button", { name: "Statistik dieses Abends" }).click();
   await page.getByRole("group", { name: /Vermögensverlauf/ }).click({ position: { x: 200, y: 120 } });
   await shot(page, "08-statistik", true);
+  await shareImage(page, "08b-bild-statistik-abend");
   await openApp(page);
   await shot(page, "09-start-mit-abend");
   await openApp(page, "/einstellungen");
@@ -138,6 +166,84 @@ test("Neuer Abend: Datum, geplanter Abend und Ortsvorschläge", async ({ page })
   await expect(page.getByText("Ortsvorschläge gibt es nur mit Internet.")).toBeVisible();
   await scrollToEnd(page);
   await shot(page, "02d-neuer-abend-ohne-internet-hell");
+});
+
+/** Drei beendete Abende mit vielen Spielen (fest ausgewürfelt), der letzte mit einem langen Ort. */
+function sampleEvenings(): Evening[] {
+  const seating = ["spieler-1", "spieler-2", "spieler-3", "spieler-4"];
+  let seed = 20261121;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+  const days: Array<[string, string]> = [
+    ["2026-10-31", "Gasthaus Post"],
+    ["2026-11-07", "Beim Huber"],
+    ["2026-11-14", "Klinikum Bamberg, Buger Straße 80, 96049 Bamberg"],
+  ];
+  return days.map(([day, location], k) => ({
+    id: `abend-${day}`,
+    startedAt: `${day}T18:00:00Z`,
+    finishedAt: `${day}T23:00:00Z`,
+    location,
+    seating,
+    firstDealer: seating[k],
+    rules: RuleSets.standard(),
+    entries: Array.from({ length: 16 + 4 * k }, (_, g) => {
+      const declarer = seating[(g + k) % 4];
+      const roll = random();
+      const type: GameType = roll < 0.6 ? "RUFSPIEL" : roll < 0.8 ? "FARBSOLO" : roll < 0.93 ? "WENZ" : "GEIER";
+      return game(`${day}-${g}`, {
+        type,
+        declarer,
+        partner: type === "RUFSPIEL" ? seating[(seating.indexOf(declarer) + 1 + Math.floor(random() * 3)) % 4] : null,
+        suit: type === "FARBSOLO" ? "HERZ" : null,
+        declarerWon: random() < 0.6,
+        laufende: random() < 0.25 ? 3 : 0,
+        level: random() < 0.15 ? "SCHNEIDER" : "NORMAL",
+        recordedAt: `${day}T${18 + Math.floor(g / 6)}:${String((g * 9) % 60).padStart(2, "0")}:00Z`,
+      });
+    }),
+  }));
+}
+
+test("Bilder zum Teilen: alle Abende, helles Design, lange Namen", async ({ page }) => {
+  await stubShareMenu(page);
+  const players: Player[] = ["Anna", "Bert", "Cilli", "Done"].map((name, index) => ({ id: `spieler-${index + 1}`, name, colorIndex: index, archived: false }));
+  const evenings = sampleEvenings();
+  const backup = writeBackup(players, evenings, RuleSets.standard(), "0.1.0", "2026-11-21T10:00:00Z");
+  await openApp(page, "/einstellungen");
+  await page.locator('input[type="file"]').setInputFiles({ name: "sicherung.json", mimeType: "application/json", buffer: Buffer.from(backup) });
+  await page.getByRole("dialog", { name: "Sicherung einlesen?" }).getByRole("button", { name: "Einlesen" }).click();
+  await expect(page.getByText("Sicherung eingelesen.")).toBeVisible();
+
+  // Alle Abende: Linien, wo ein Abend beginnt.
+  await openApp(page, "/statistik");
+  await shot(page, "50-statistik-alle-abende");
+  await shareImage(page, "50b-bild-statistik-alle-abende");
+
+  // Ein Abend im hellen Design.
+  await openApp(page, "/einstellungen");
+  await page.getByRole("group", { name: "Erscheinungsbild" }).getByRole("button", { name: "hell" }).click();
+  await openApp(page, `/abend/${evenings[1].id}/abschluss`);
+  await shot(page, "51-abend-teilen-hell", true);
+  await shareImage(page, "51b-bild-abend-hell");
+
+  // Lange Namen (höchstens 24 Zeichen) und ein langer Ort, wieder dunkel.
+  await openApp(page, "/einstellungen");
+  await page.getByRole("group", { name: "Erscheinungsbild" }).getByRole("button", { name: "dunkel" }).click();
+  const long = ["Annalena-Maximiliane Hub", "Bartholomäus Brandstette", "Cäcilia von Hohenzollern", "Dominik"];
+  await openApp(page, "/spieler");
+  for (let index = 0; index < long.length; index++) {
+    await page.getByRole("button", { name: `${players[index].name} bearbeiten` }).click();
+    const dialog = page.getByRole("dialog", { name: "Spieler bearbeiten" });
+    await dialog.getByLabel("Name").fill(long[index]);
+    await dialog.getByRole("button", { name: "Speichern" }).click();
+    await expect(dialog).toBeHidden();
+  }
+  await openApp(page, `/abend/${evenings[2].id}/abschluss`);
+  await shot(page, "52-abend-teilen-lange-namen", true);
+  await shareImage(page, "52b-bild-abend-lange-namen");
 });
 
 test("Gemeinsame Runde ohne Server", async ({ page }) => {

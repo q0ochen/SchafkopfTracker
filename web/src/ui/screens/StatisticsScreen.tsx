@@ -1,10 +1,11 @@
 /*
  * Statistik eines Abends oder aller Abende („ewige Tabelle“): Kontostand, Vermögensverlauf, Spielarten,
  * „Sollte-er-es-lassen?“-Index, Auszeichnungen und weitere Zahlen. Gerechnet wird mit der `StatisticEngine`
- * (verhaltensgleich zur Android-App).
+ * (verhaltensgleich zur Android-App). Oben steht, was ausgewertet ist; dieser Teil bis zum Vermögensverlauf lässt sich
+ * als Bild teilen (docs/ARCHITEKTUR.md, 4.4).
  */
 import type { ComponentChildren } from "preact";
-import { useMemo } from "preact/hooks";
+import { useMemo, useState } from "preact/hooks";
 import type { Evening, PlayerId } from "../../core/model";
 import { StatisticEngine, type GelegtBadge, type Statistics } from "../../core/stats/StatisticEngine";
 import { BalanceChart, type ChartSeries } from "../charts/BalanceChart";
@@ -12,6 +13,9 @@ import { GameModeChart, modeChartGroups } from "../charts/GameModeChart";
 import { Amount, Hint, PlayerName, SectionHeading, TopBar } from "../components";
 import { useAppState, useColors, useNames, useServices } from "../context";
 import { formatAmount, formatDate, formatPercent, plural } from "../format";
+import { STATISTICS_IMAGE_NAME, statisticsShareImage, type ShareImage } from "../shareImage";
+import { ShareImageButton } from "../ShareImageButton";
+import { accountRows, balanceSeriesOf, statisticsSummary, statisticsTitle } from "../statistics";
 
 const BADGE_TEXTS: Readonly<Record<GelegtBadge, string>> = {
   STREICHHOLZ_SPARER: "Streichholz-Sparer: hat noch nie gelegt",
@@ -33,30 +37,27 @@ function Fact({ label, children }: { label: string; children: ComponentChildren 
 
 function StatisticsContent({
   stats,
+  series,
   evenings,
   asMoney,
   single,
+  image,
 }: {
   stats: Statistics;
+  series: readonly ChartSeries[];
   evenings: readonly Evening[];
   asMoney: boolean;
   single: boolean;
+  /** „Als Bild teilen“: Auswahl, Kontostand und Vermögensverlauf als Bild. */
+  image: () => ShareImage;
 }) {
   const names = useNames();
   const colors = useColors();
   const name = (id: PlayerId) => names.get(id) ?? "?";
   const color = (id: PlayerId) => colors.get(id) ?? 0;
   const history = stats.history;
-  const playerStat = (id: PlayerId) => history.playerStats.find((it) => it.player === id) ?? null;
-
-  const standings = [...stats.finance.standings].sort((a, b) => a.rank - b.rank);
-  const series: ChartSeries[] = stats.players.map((id) => ({
-    id,
-    name: name(id),
-    colorIndex: color(id),
-    values: stats.finance.balanceSeries.get(id) ?? [0],
-  }));
   const modeGroups = modeChartGroups(stats, name, color);
+  const [message, setMessage] = useState<string | null>(null);
 
   // Tabelle zum Verlauf: bei einem Abend jedes Spiel, bei vielen Abenden der Stand nach jedem Abend.
   const lastPoint = Math.max(0, ...series.map((it) => it.values.length - 1));
@@ -70,10 +71,7 @@ function StatisticsContent({
 
   return (
     <>
-      <Hint>
-        {single ? "" : `${plural(stats.eveningCount, "Abend", "Abende")} · `}
-        {plural(stats.gameCount, "Spiel", "Spiele")} · Umsatz {formatAmount(stats.finance.turnover, asMoney)}
-      </Hint>
+      <Hint>{statisticsSummary(stats, single, asMoney)}</Hint>
 
       <SectionHeading>Kontostand</SectionHeading>
       <div class="table-scroll">
@@ -87,21 +85,18 @@ function StatisticsContent({
             </tr>
           </thead>
           <tbody>
-            {standings.map((standing) => {
-              const stat = playerStat(standing.player);
-              return (
-                <tr key={standing.player}>
-                  <th scope="row">
-                    {standing.rank}. <PlayerName name={name(standing.player)} colorIndex={color(standing.player)} />
-                  </th>
-                  <td>
-                    <Amount cents={standing.balance} asMoney={asMoney} />
-                  </td>
-                  <td>{stat?.games ?? 0}</td>
-                  <td>{formatPercent(stat && stat.games > 0 ? stat.gamesWon / stat.games : null)}</td>
-                </tr>
-              );
-            })}
+            {accountRows(stats).map((row) => (
+              <tr key={row.player}>
+                <th scope="row">
+                  {row.rank}. <PlayerName name={name(row.player)} colorIndex={color(row.player)} />
+                </th>
+                <td>
+                  <Amount cents={row.balance} asMoney={asMoney} />
+                </td>
+                <td>{row.games}</td>
+                <td>{formatPercent(row.wonRate)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -144,6 +139,13 @@ function StatisticsContent({
             </table>
           </div>
         </details>
+      ) : null}
+
+      <ShareImageButton image={image} fileName={STATISTICS_IMAGE_NAME} onMessage={setMessage} />
+      {message ? (
+        <p class="hint" role="status">
+          {message}
+        </p>
       ) : null}
 
       {modeGroups.length > 0 ? (
@@ -285,14 +287,18 @@ function formatEveningDate(evenings: readonly Evening[], id: string): string {
 export function StatisticsScreen({ eveningId }: { eveningId: string | null }) {
   const { router } = useServices();
   const { evenings } = useAppState();
+  const names = useNames();
+  const colors = useColors();
   const evening = eveningId === null ? null : (evenings.find((it) => it.id === eveningId) ?? null);
   const stats = useMemo(() => {
     if (eveningId !== null) return evening ? StatisticEngine.forEvening(evening) : null;
     return StatisticEngine.forEvenings(evenings);
   }, [eveningId, evening, evenings]);
+  const series = useMemo(() => (stats ? balanceSeriesOf(stats, names, colors) : []), [stats, names, colors]);
   // Euro oder Punkte: wie beim Abend; über alle Abende wie beim neuesten.
   const asMoney = (evening ?? evenings[0])?.rules.displayAsMoney ?? true;
   const title = eveningId === null ? "Statistik" : "Statistik dieses Abends";
+  const single = eveningId !== null;
 
   return (
     <div class="screen">
@@ -304,8 +310,27 @@ export function StatisticsScreen({ eveningId }: { eveningId: string | null }) {
           <p class="empty">Noch keine Spiele – die Statistik füllt sich mit dem ersten eingetragenen Spiel.</p>
         ) : (
           <>
-            {eveningId === null ? <Hint>Alle Abende zusammen („ewige Tabelle“).</Hint> : null}
-            <StatisticsContent stats={stats} evenings={evenings} asMoney={asMoney} single={eveningId !== null} />
+            {/* Was ausgewertet ist; so steht es auch oben im Bild. */}
+            <p class="card-title">{statisticsTitle(evening)}</p>
+            <StatisticsContent
+              stats={stats}
+              series={series}
+              evenings={evenings}
+              asMoney={asMoney}
+              single={single}
+              image={() =>
+                statisticsShareImage({
+                  stats,
+                  title: statisticsTitle(evening),
+                  summary: statisticsSummary(stats, single, asMoney),
+                  series,
+                  single,
+                  asMoney,
+                  names,
+                  colors,
+                })
+              }
+            />
           </>
         )}
       </main>

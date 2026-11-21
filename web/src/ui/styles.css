@@ -1255,9 +1255,11 @@ button.card {
   stroke-width: 1;
 }
 
+/* Wo ein neuer Abend beginnt: fein gestrichelt (wie in der Android-App und im geteilten Bild). */
 .chart-boundary {
   stroke: var(--outline-variant);
   stroke-width: 1;
+  stroke-dasharray: 4 4;
 }
 
 .chart-tick {

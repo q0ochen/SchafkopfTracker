@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 699, `data` 296, `database` 24, `app` 225, Web 664 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 49 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 699, `data` 296, `database` 24, `app` 229, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 53 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -171,9 +171,9 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-`main` enthält alles bis Pull Request #26 („Abend bearbeiten“, am 21.11.2026 zusammengeführt); #25 (gemeinsame Runde)
-war am 20.11.2026 auf Wunsch des Nutzers angelegt („Ja pull request anlegen“) und von ihm um 18:40 zusammengeführt
-worden. Der gesammelte Release vom 21.11.2026 (siehe unten) folgt als eigener Pull Request. `entwicklung` ist noch auf dem älteren Stand.
+`main` enthält alles bis Pull Request #27 (gesammelter Release vom 21.11.2026: Rückpfeil, geplante Abende,
+Ortsvorschläge; siehe unten); davor #26 („Abend bearbeiten“) und #25 (gemeinsame Runde, am 20.11.2026 auf Wunsch des
+Nutzers angelegt, „Ja pull request anlegen“, und von ihm um 18:40 zusammengeführt). `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -416,9 +416,26 @@ Gut zu wissen für die nächste Sitzung:
   Fehlschlägen die Testergebnisse hoch (Artefakt „Testergebnisse“). Gleich der nächste Lauf (46) zeigte: Die Startseite
   stand noch auf „wird geladen“, die Daten kamen in 30 s nicht an. Die Test-JVM hatte nur Gradles 512 MB, und hier war
   der Speicher während der Bildschirmtests zeitweise zu 99 % belegt; seitdem bekommen die Tests von `app` 2 GB, und
-  `waitForText` nennt bei einem Fehlschlag auch die Speicherbelegung. (2) Der Tag „testversion“ ließ sich nicht verschieben
+  `waitForText` nennt bei einem Fehlschlag auch die Speicherbelegung. Am Speicher lag es aber nicht: In Lauf 55
+  (21.11.2026 abends) scheiterten beide Tests, die auf die Abende der Startseite warten
+  (`start_mit_geplantem_abend_dunkel`, `start_mit_laufendem_abend`), bei 293 von 2048 MB. Hier trat es danach in 2 von 4
+  vollen Läufen auf (auf zwei Kerne begrenzt), dann in 27 weiteren nicht mehr, auch nicht unter Last. Der Abzug aller
+  Threads zeigte: Nichts hängt, alle warten untätig. Nur diese beiden Tests warten auf die Abende der Startseite; der
+  Abend-Bildschirm mit fast gleichem ViewModel scheiterte nie. Die Fehlermeldung von `waitFor` nennt seitdem bei diesen
+  beiden Tests den Stand des `StartViewModel`. Gleich der nächste Lauf auf GitHub (57) scheiterte wieder und zeigte
+  `loading=false, 2 Abende`: Die Daten sind im ViewModel, nur die Anzeige bekommt sie nicht (am Laden aus der
+  Datenbank liegt es also nicht). Seitdem nennt die Meldung außerdem „sammelnd“ (wie viele den Zustand gerade sammeln;
+  0 hieße, die Oberfläche hört nicht mehr zu), den Lebenszyklus der Activity und die Warteschlange des Hauptthreads
+  (Sperren, Nachrichten in der Zukunft der angehaltenen Uhr). Tritt es wieder auf, zuerst diese Zeilen lesen; erst
+  dann ist klar, ob es an der Testumgebung liegt (Robolectric) oder an der App. Bis dahin hilft es, den Lauf einmal neu
+  zu starten. (2) Der Tag „testversion“ ließ sich nicht verschieben
   (HTTP 403), wenn der Stand eine Workflow-Datei änderte und beim Veröffentlichen schon ein neuerer Stand auf dem
   Zweig lag; die Testversion wird jetzt trotzdem ersetzt.
+- `awaitFirst` (Tests der ViewModels in `app`) wartet auf `Dispatchers.Default`. Bis zum 21.11.2026 lief der Test danach
+  auf jenem Thread weiter (mit `UnconfinedTestDispatcher` kehrt nichts von selbst zurück), manchmal noch nach
+  `Dispatchers.resetMain()`; hier scheiterte so einmal `ClosingViewModelTest` mit „Dispatchers.Main was accessed when
+  the platform dispatcher was absent“. Jetzt geht es über den Planer von `runTest` zurück auf den Thread des Tests
+  (`AwaitTest` prüft das).
 - Die Spracheingabe ist verworfen. Falls sie wieder aufkommt: Kern wäre ein Parser Text → `GameDraft` mit Kölner
   Phonetik und Jaro-Winkler wie in DrinkWithMe (`android/core/…/voice/`); nie ohne Bestätigung buchen.
 - Der Nutzer berichtet, dass das App-Symbol auf seinem iPhone den Browser öffnet (bei welcher der beiden Web-Apps,
@@ -466,8 +483,8 @@ drückt und in den neuen Bildschirm gelangt kann man nicht mehr auf den Rückpfe
   die Korrekturen aus den Tests sammeln sich auf dem Zweig `claude/gracious-keller-48tcn0` (Stand dort: `8cbe734`).
   Die Web-App erreicht das ohnehin erst über `main`. Für Android hat der Nutzer am 21.11.2026 ebenso entschieden
   („Ja, erst mit dem Release“): Seitdem veröffentlicht `android.yml` Testversion und F-Droid-Paketquelle nur noch von
-  `main` (Push oder „Run workflow“); Arbeitszweige werden nur geprüft. In F-Droid steht seit dem 21.11.2026 die
-  Testversion 49 (= `main` mit Pull Request #26).
+  `main` (Push oder „Run workflow“); Arbeitszweige werden nur geprüft. In F-Droid stand bis zum
+  Release am 21.11.2026 die Testversion 49 (= `main` mit Pull Request #26), seitdem 54.
 
 ## Stand am 21.11.2026 (nachmittags): Abend vorab anlegen und Ortsvorschläge
 
@@ -510,14 +527,47 @@ Kreditkarte; Leitplanke „kein Geld ausgeben“).
   wie gewollt übersprungen. Lauf 50 (nur die Umstellung) scheiterte, weil Robolectric seine Android-Laufzeit nicht
   herunterladen konnte (`MavenArtifactFetcher`, FileNotFoundException), also außerhalb des Codes; tritt das wieder auf,
   Lauf einmal neu starten.
-- **Gesammelter Release:** Pull Request nach `main` am 21.11.2026 auf Wunsch des Nutzers angelegt („pull request anlegen
-  ja“), mit Rückpfeil-Korrektur, Veröffentlichen nur von `main`, geplanten Abenden und Ortsvorschlägen. Nach dem
-  Zusammenführen veröffentlichen GitHub Pages, Testversion und F-Droid-Paketquelle neu; was danach auf den Zweig
-  kommt, braucht einen neuen Pull Request.
+- **Gesammelter Release:** Pull Request #27 nach `main` am 21.11.2026 auf Wunsch des Nutzers angelegt („pull request
+  anlegen ja“), mit Rückpfeil-Korrektur, Veröffentlichen nur von `main`, geplanten Abenden und Ortsvorschlägen; vom
+  Nutzer um 14:42 zusammengeführt (`dda9ec5`). Läufe auf `main` grün (Android 54, Web-App 33, Supabase 19): Web-App
+  neu auf GitHub Pages, Testversion 54 im Release `testversion` und in der F-Droid-Paketquelle (daneben weiter 49).
+  Der Nutzer will danach auf dem iPhone prüfen, ob der Rückpfeil reagiert und ob Ortsvorschläge kommen (CORS).
 - **Nicht geprüft:** echte Geräte; ob der Browser auf dem iPhone den Dienst abfragen darf (CORS): Die Antwort ohne
   `Origin` hatte keine CORS-Kopfzeile, was bei Photon (Javalin) normal ist; eine Probe mit `Origin` wurde hier nicht
   zugelassen. Kommen in der Web-App auf dem iPhone keine Vorschläge, sondern immer „Ortsvorschläge gibt es nur mit
   Internet.“, zuerst das prüfen.
+
+## Stand am 21.11.2026 (abends): Abend teilen
+
+Wunsch des Nutzers (21.11.2026, mit Bildschirmfoto des Abend-Menüs und eines „Geldverlaufs“ aus einer anderen App):
+„Abschluss soll "Abend teilen" heißen und dann soll man die Statistik auch als Bild teilen können in dem dann auch ein
+Aussagekräftiges Diagramm mit den Spielernamen enthalten ist“.
+
+- Vertrag `docs/ARCHITEKTUR.md`, 4.4. Menüpunkt und Bildschirm heißen „Abend teilen“; der Bildschirm zeigt zusätzlich
+  den Vermögensverlauf des Abends (wie in der Statistik, mit Legende der Namen); „Als Bild teilen“ ist die Hauptaktion
+  und steht vor „Als Text teilen“ (auch in der Statistik der Android-App). Das Bild enthält Datum und Ort, Endstand,
+  Vermögensverlauf und „Wer zahlt wem“.
+- **Android:** `ClosingScreen` (Diagramm `BalanceChart` im geteilten Ausschnitt), `ClosingViewModel` (Verlauf aus
+  `StatisticEngine.forEvening`), `ShareButtons` (Reihenfolge), Bild `schafkopf-abend.png`; Test
+  `ShareTest` (Diagramm und Reihenfolge), Bildschirmfotos 11 und 18. Nachgezogen (Vertrag 4.4, „Diagramm im Bild“):
+  `BalanceChart` legt gleich verlaufende Linien nebeneinander (`ChartMath.chartPaths`, dieselben Testfälle wie die
+  Web-App) und setzt vor jeden Namen am Linienende einen Farbpunkt mit feiner Linie zum Linienende. Vorher lag die Linie
+  eines Partners mit gleichem Stand unsichtbar unter der anderen, und ein Name stand neben dem Punkt eines anderen.
+- **Web-App** (gebaut von einem Helfer, von Claude durchgesehen und geprüft): teilt jetzt Bilder, „Abend teilen“ und die
+  Statistik (`shareImage.ts`, `shareImageCanvas.ts`, `ShareImageButton.tsx`), 1080 Pixel breit in den Farben des
+  Designs. Linien, die genau gleich verlaufen (Partner mit gleichem Stand), liegen im Bild nebeneinander statt
+  übereinander; jeder Name am Linienende hat seinen Farbpunkt. Teilen über das Teilen-Menü des iPhones ohne Warten
+  nach dem Antippen (Safari verlangt das), sonst Herunterladen. Die Adresse bleibt `#/abend/<id>/abschluss`.
+- Nicht geprüft: echte Geräte, vor allem ob das Teilen-Menü auf dem iPhone das Bild annimmt (in Chromium und, auf
+  GitHub, mit WebKit getestet).
+- Geprüft am 21.11.2026: „Android“ 56 und „Web-App“ 34 grün (Stand `f57c1e3`). Lauf 55 davor (nur der Android-Teil)
+  scheiterte am wackligen Test der Startseite (siehe „Gut zu wissen“). Dessen Ursache ist noch offen, die Fehlermeldung
+  ist seitdem genauer. Bei der Suche fiel ein zweiter wackliger Fall auf, der Fehler in `awaitFirst` (ebenda); der ist
+  behoben. Mit dem Diagramm-Nachzug und den genaueren Meldungen: „Android“ 58 und 59 grün (Stand `1969ecb`, samt
+  Installationstest im Emulator); 57 scheiterte am wackligen Test der Startseite (`loading=false, 2 Abende`).
+- Pull Request nach `main` am 21.11.2026 abends auf Wunsch des Nutzers angelegt („nein mach einen pull request. nicht
+  weiter sammeln“): „Abend teilen“ in beiden Apps, Diagramm-Nachzug in Android, Korrektur von `awaitFirst` und die
+  genaueren Meldungen des Tests der Startseite. Schließt kein Issue (der Wunsch kam direkt vom Nutzer).
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 

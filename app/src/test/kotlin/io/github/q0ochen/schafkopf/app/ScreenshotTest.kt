@@ -21,6 +21,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.github.q0ochen.schafkopf.app.backup.AutoBackupStore
@@ -33,11 +35,13 @@ import io.github.q0ochen.schafkopf.app.ui.common.labelRes
 import io.github.q0ochen.schafkopf.app.ui.statistics.GameModeChart
 import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsScreen
 import io.github.q0ochen.schafkopf.app.ui.statistics.modeChartGroups
+import io.github.q0ochen.schafkopf.app.ui.subscribers
 import io.github.q0ochen.schafkopf.app.ui.waitForText
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormScreen
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
 import io.github.q0ochen.schafkopf.app.ui.newevening.NewEveningScreen
 import io.github.q0ochen.schafkopf.app.ui.start.StartScreen
+import io.github.q0ochen.schafkopf.app.ui.start.StartViewModel
 import io.github.q0ochen.schafkopf.app.ui.theme.SchafkopfTheme
 import io.github.q0ochen.schafkopf.domain.evening.BockReason
 import io.github.q0ochen.schafkopf.domain.evening.BockTriggerEntry
@@ -66,6 +70,7 @@ import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.koin.androidx.compose.koinViewModel
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.stopKoin
 import org.robolectric.RobolectricTestRunner
@@ -189,7 +194,18 @@ class ScreenshotTest {
     @Test
     fun start_mit_laufendem_abend() {
         seed()
-        show(ready = "Wirtshaus zur Post") { StartScreen(Navigator()) }
+        var viewModel: StartViewModel? = null
+        var lifecycle: Lifecycle? = null
+        show {
+            viewModel = koinViewModel()
+            lifecycle = LocalLifecycleOwner.current.lifecycle
+            StartScreen(Navigator())
+        }
+        // Scheitert das Warten, nennt die Meldung auch den Stand des ViewModels (CLAUDE.md, „Gut zu wissen“).
+        compose.waitForText("Wirtshaus zur Post") {
+            "ViewModel: ${viewModel?.state?.value?.let { "loading=${it.loading}, ${it.evenings.size} Abende" }}, " +
+                "sammelnd: ${subscribers(viewModel?.state)}, Lebenszyklus: ${lifecycle?.currentState}"
+        }
         capture("01_start")
     }
 

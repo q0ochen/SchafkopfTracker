@@ -260,7 +260,7 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 
 - MVVM: je Bildschirm ein ViewModel mit `StateFlow` als Zustand; die Oberfläche liest nur diesen Zustand.
 - Navigation: eigener Stapel aus `Screen`-Werten (`Navigator`), je Eintrag ein eigener ViewModel-Speicher.
-- Bildschirme: Start, Neuer Abend (Datum 4.2, Ortsvorschläge 4.3), Abend, Abend bearbeiten (4.1), Spiel eintragen, Abschluss, Statistik (ein Abend oder alle Abende, oben
+- Bildschirme: Start, Neuer Abend (Datum 4.2, Ortsvorschläge 4.3), Abend, Abend bearbeiten (4.1), Spiel eintragen, Abend teilen (4.4, bis 21.11.2026 „Abschluss“), Statistik (ein Abend oder alle Abende, oben
   wählbar; Vermögensverlauf als selbst gezeichnetes Liniendiagramm mit Tabelle als Alternative; Spielarten als
   Balkendiagramm `GameModeChart` mit eigenem Maßstab je Spielart, `BarScale`), Spieler, Einstellungen, Regelwerk,
   Sicherung, Abend-Kommentator.
@@ -269,13 +269,13 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
   Abend `SummaryFactsBuilder` und `SummaryPrompt.SYSTEM_PROMPT`, für alle Abende `HistoryFactsBuilder` (auf der
   `StatisticEngine`) und `SummaryPrompt.HISTORY_SYSTEM_PROMPT`. Abschluss und Statistik teilen sich den Ablauf
   (`ui/ai/Commentary.kt`: `CommentaryFlow`, `CommentarySection`, Zustimmungsdialog).
-- Teilen: Abschluss und Statistik als Text (`ACTION_SEND`) und als Bild (Compose-Ansicht über `GraphicsLayer` als PNG
-  im Cache, weitergegeben über `FileProvider`, nur der Ordner `cache/geteilt`).
+- Teilen: „Abend teilen“ (4.4) und Statistik als Bild (Compose-Ansicht über `GraphicsLayer` als PNG im Cache,
+  weitergegeben über `FileProvider`, nur der Ordner `cache/geteilt`) und als Text (`ACTION_SEND`).
 - Texte der Oberfläche stehen in `res/values/strings*.xml`; Beträge formatiert ausschließlich `:app`.
 
 ### 4.1 Abend bearbeiten (Android-App und Web-App gleich, Texte wörtlich)
 
-- Menü des Abends, in dieser Reihenfolge: „Statistik dieses Abends“, „Abschluss“, **„Abend bearbeiten“**, „Regeln
+- Menü des Abends, in dieser Reihenfolge: „Statistik dieses Abends“, „Abend teilen“ (4.4), **„Abend bearbeiten“**, „Regeln
   dieses Abends“, „Abend beenden“ bzw. „Abend wieder öffnen“, „Abend löschen“. Für laufende und beendete Abende.
 - Bildschirm „Abend bearbeiten“. Beim Öffnen wird der Abend einmal gelesen; das ist `original` für
   `EveningEdit.apply`. Gibt es ihn nicht (mehr): „Diesen Abend gibt es nicht mehr.“
@@ -366,6 +366,45 @@ Entscheidung des Projektinhabers vom 21.11.2026: Suche per Name, ohne Standort d
   Content-Security-Policy enthält immer `https://photon.komoot.io`. Der Service Worker lässt fremde Herkünfte ohnehin
   durch.
 
+### 4.4 Abend teilen (Android-App und Web-App gleich, Texte wörtlich)
+
+Wunsch des Projektinhabers vom 21.11.2026: „Abschluss soll "Abend teilen" heißen und dann soll man die Statistik auch
+als Bild teilen können in dem dann auch ein aussagekräftiges Diagramm mit den Spielernamen enthalten ist“ (Vorbild:
+ein „Geldverlauf“ mit einer farbigen Linie je Spieler und einer Legende mit den Namen).
+
+- **Name:** Menüpunkt und Bildschirm heißen „Abend teilen“ (bis 21.11.2026 „Abschluss“). „Abend beenden“ führt wie
+  bisher dorthin.
+- **Bildschirm**, von oben: Datum wie im Titel des Abends, mit Ort „‹Datum› · ‹Ort›“; „‹n› Spiele“ (läuft der Abend
+  noch, dahinter „ · Der Abend läuft noch.“ bzw. in Android die Zeile „Der Abend läuft noch.“ wie bisher); „Endstand“
+  mit „‹Platz›. ‹Name›“ und Betrag je Spieler; **neu: „Vermögensverlauf“** mit dem Diagramm dieses Abends wie in der
+  Statistik (eine Linie je Spieler in seiner Farbe, Start und nach jedem Spiel, Beträge an der senkrechten Achse, die
+  Null deutlich, darunter die Legende mit Farbe und Name je Spieler; ohne Spiele „Der Verlauf erscheint nach dem
+  ersten Spiel.“); „Wer zahlt wem“ wie bisher. Darunter die Knöpfe „Als Bild teilen“ (Hauptaktion, zuerst) und „Als
+  Text teilen“, dann „Statistik dieses Abends“ (Android danach wie bisher der Abend-Kommentator).
+- **Das Bild** zeigt genau diesen oberen Teil, vom Datum bis „Wer zahlt wem“, ohne Knöpfe, in den Farben des
+  eingestellten Designs (dunkel oder hell). Android nimmt den Bildschirmausschnitt (`captureInto`); die Web-App zeichnet
+  dasselbe in einem Canvas, 1080 Pixel breit, und gibt es als PNG weiter. Dateiname `schafkopf-abend.png`. Der geteilte
+  Text bleibt, wie er ist.
+- **Diagramm im Bild:** Linien, die auf einem Stück genau gleich verlaufen (etwa die Partner eines Rufspiels), liegen
+  dort nebeneinander statt übereinander, damit jede Farbe zu sehen ist. Rechts neben den Linienenden steht je Spieler
+  ein Punkt in seiner Farbe und sein Name; liegen Enden nah beieinander, werden Punkt und Name auseinandergeschoben, und
+  eine feine Linie in seiner Farbe führt vom Ende seiner Linie zum Punkt. Android zeichnet sein Diagramm (auch in der
+  Statistik) seit dem 21.11.2026 abends ebenso (`ChartMath.chartPaths`, wie `chartPaths` in `web/src/ui/shareImage.ts`);
+  das Diagramm auf dem Bildschirm der Web-App behält die Punkte am Linienende.
+- **Statistik:** Auch dort heißen die Knöpfe „Als Bild teilen“ (zuerst) und „Als Text teilen“ (Android wie bisher;
+  die Web-App bekommt nur „Als Bild teilen“). Das Bild zeigt den oberen Teil der Statistik: Auswahl („Abend vom …“ bzw.
+  „Alle Abende (ewige Tabelle)“; Android nennt einen Abend wie in seiner Auswahl nur mit Datum und Ort), Kontostand und
+  Vermögensverlauf mit Legende (bei allen Abenden mit den feinen Linien, wo ein Abend beginnt). Dateiname
+  `schafkopf-statistik.png`. Die Adresse der Web-App bleibt `#/abend/<id>/abschluss` (Lesezeichen und der von iOS
+  wiederhergestellte letzte Bildschirm funktionieren weiter).
+- **Safari:** `navigator.share` geht dort nur direkt nach dem Antippen. Die Web-App zeichnet das Bild deshalb im Klick
+  selbst und macht es mit `toDataURL` zur Datei; bis zum Teilen-Menü wird auf nichts gewartet (der Oberflächentest prüft,
+  dass das Teilen noch im Klick geschieht). Ein zweites Antippen, solange das Teilen-Menü offen ist, tut nichts.
+- **Weitergeben:** Android über den Teilen-Dialog wie bisher. Die Web-App über das Teilen-Menü des Browsers
+  (`navigator.share` mit der Datei, auf dem iPhone also direkt in WhatsApp und Co.); kann der Browser keine Dateien
+  teilen, wird das Bild heruntergeladen. Meldungen: „Das Bild ist heruntergeladen.“ bzw. „Das Bild ließ sich nicht
+  erstellen.“; Abbrechen im Teilen-Menü meldet nichts.
+
 ## 5. Tests
 
 - `:domain`: JUnit Jupiter, MockK, Turbine; Ziel über 90 % Abdeckung (gemessen mit Kover).
@@ -407,7 +446,7 @@ Home-Bildschirm“), braucht keinen Server und wird von `main` aus auf GitHub Pa
 | Speicher | IndexedDB (`web/src/data/repository.ts`): je Abend, für die Spielerliste und für die Einstellungen ein JSON-Text im Dateiformat der Android-App. Daten verlassen das Gerät nur mit der gemeinsamen Runde (Abschnitt 8); für Ortsvorschläge geht nur der eingetippte Ort an photon.komoot.io (4.3). |
 | Gleiche Spieler | Die vorbelegte Runde hat dieselben Kennungen wie in der Android-App (`spieler-1` bis `spieler-4`). |
 | Navigation | Adressen mit Anker (`#/abend/<id>`, `web/src/app/router.ts`). „Zurück“ geht einen Schritt in der Geschichte des Browsers zurück; gibt es in der App keinen Schritt davor, geht es zum übergeordneten Bildschirm (`parentOf`). Dorthin geht es auch, wenn der Browser nach 400 ms nichts bewegt hat: iOS stellt die App vom Home-Bildschirm nach dem Neuladen am letzten Bildschirm samt Zustand wieder her, aber ohne die Schritte davor. Ein Bildschirm, der schon offen ist, wird nicht ein zweites Mal in die Geschichte gelegt (doppeltes Antippen). |
-| Oberfläche | Logik der Bildschirme als reine Funktionen nach dem Vorbild der ViewModels (`web/src/ui/gameForm.ts`, `newEvening.ts`, `board.ts`, `editEvening.ts`, `placeSuggestions.ts`, `localDate.ts`; Ortsvorschläge in `web/src/data/place/photon.ts` und `web/src/ui/LocationField.tsx`), Oberflächen-Tests mit Playwright in iPhone-Größe und Prüfung mit axe. Spielerfarben aus einer auf Farbfehlsichtigkeit geprüften Palette, als Punkt neben dem Namen. |
+| Oberfläche | Logik der Bildschirme als reine Funktionen nach dem Vorbild der ViewModels (`web/src/ui/gameForm.ts`, `newEvening.ts`, `board.ts`, `editEvening.ts`, `placeSuggestions.ts`, `localDate.ts`, `shareImage.ts`; Ortsvorschläge in `web/src/data/place/photon.ts` und `web/src/ui/LocationField.tsx`; das Bild zum Teilen zeichnet `web/src/ui/shareImageCanvas.ts` in einem Canvas, `ShareImageButton.tsx` gibt es ohne Warten über `navigator.share` weiter), Oberflächen-Tests mit Playwright in iPhone-Größe und Prüfung mit axe. Spielerfarben aus einer auf Farbfehlsichtigkeit geprüften Palette, als Punkt neben dem Namen. |
 | Leitplanken | Dieselben wie oben, sinngemäß: nur freie Bibliotheken (`preact`, `idb`), keine Analyse, Content-Security-Policy mit nur zwei fremden Zielen für Anfragen (`connect-src`: `https://photon.komoot.io` für die Ortsvorschläge, mit gemeinsamer Runde deren Server), Start ohne Netz über den Service Worker. Die KI-Zusammenfassung gibt es in der Web-App nicht. |
 
 

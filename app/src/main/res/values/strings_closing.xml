@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Abschluss eines Abends -->
-    <string name="closing_title">Abschluss</string>
+    <!-- „Abend teilen“ (bis 21.11.2026 „Abschluss“; docs/ARCHITEKTUR.md, Abschnitt 4.4) -->
+    <string name="closing_title">Abend teilen</string>
     <string name="closing_running">Der Abend läuft noch.</string>
     <string name="closing_standings">Endstand</string>
     <string name="closing_standing_description">Platz %1$d: %2$s, %3$s</string>

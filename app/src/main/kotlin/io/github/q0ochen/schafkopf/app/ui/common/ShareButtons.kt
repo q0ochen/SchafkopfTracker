@@ -44,7 +44,7 @@ class ShareActions(val shareText: () -> Unit, val shareImage: () -> Unit, val bu
  *
  * @param text Liefert den Text erst beim Tippen, damit er immer zum aktuellen Stand passt.
  * @param capture Was als Bild geteilt wird (siehe [captureInto]).
- * @param imageName Dateiname des Bildes, zum Beispiel „schafkopf-abschluss.png“.
+ * @param imageName Dateiname des Bildes, zum Beispiel „schafkopf-abend.png“.
  * @param onMessage Zeigt eine Meldung, wenn das Teilen nicht klappt.
  */
 @Composable
@@ -91,28 +91,28 @@ fun rememberShareActions(
     )
 }
 
-/** „Als Text teilen“ (Hauptaktion) und „Als Bild teilen“ untereinander. */
+/** „Als Bild teilen“ (Hauptaktion, zuerst) und „Als Text teilen“ untereinander (docs/ARCHITEKTUR.md, Abschnitt 4.4). */
 @Composable
 fun ShareButtons(actions: ShareActions, modifier: Modifier = Modifier) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier.fillMaxWidth()) {
         Button(
-            onClick = actions.shareText,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp),
-        ) {
-            Icon(Icons.Filled.Share, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.share_as_text), style = MaterialTheme.typography.titleMedium)
-        }
-        OutlinedButton(
             enabled = !actions.busy,
             onClick = actions.shareImage,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp),
         ) {
+            Icon(Icons.Filled.Share, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.share_as_image), style = MaterialTheme.typography.titleMedium)
+        }
+        OutlinedButton(
+            onClick = actions.shareText,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp),
+        ) {
+            Text(stringResource(R.string.share_as_text), style = MaterialTheme.typography.titleMedium)
         }
     }
 }

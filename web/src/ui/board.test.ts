@@ -70,7 +70,7 @@ describe("Texte der Einträge (wie EntryTexts.kt)", () => {
   });
 });
 
-describe("Abschluss", () => {
+describe("Abend teilen", () => {
   it("rechnet Endstand und „Wer zahlt wem“ und schreibt den Text zum Teilen", () => {
     // Rufspiel Anna+Cilli gewinnen 10, Farbsolo Bert verliert 3 × 50.
     const evening = testEvening(

@@ -68,14 +68,24 @@ private val ChartHeight = 260.dp
 private val MarginTop = 14.dp
 private val MarginBottom = 30.dp
 private val LabelGap = 16.dp
+private val LineWidth = 2.dp
+
+/** Die feine Linie vom Ende einer Linie zum Farbpunkt vor dem Namen. */
+private val Leader = 10.dp
+private val EndDot = 4.dp
+private val EndRing = 2.dp
+private val EndNameGap = 4.dp
 private const val MAX_LABEL_CHARS = 10
 
 /**
  * Liniendiagramm „Vermögensverlauf“: der Kontostand je Spieler nach jedem Spiel, wie in der Web-App gestaltet
  * (`web/src/ui/charts/BalanceChart.tsx`): dünne Linien (2 dp), zurückhaltende Gitterlinien, eine einzige Achse, die
- * Null deutlich, Namen in Textfarbe direkt am Linienende, Legende darunter. Antippen oder Wischen zeigt ein
- * Fadenkreuz mit den Ständen aller Spieler nach diesem Spiel; dieselben Werte gibt es als Tabelle. Die Farben folgen
- * dem Spieler, nie seinem Platz.
+ * Null deutlich, Legende darunter. Rechts neben den Linienenden stehen die Namen in Textfarbe, jeder mit einem Punkt in
+ * seiner Farbe, zu dem eine feine Linie vom Ende seiner Linie führt; Linien, die genau gleich verlaufen (Partner mit
+ * gleichem Stand), liegen nebeneinander statt übereinander. Beides wie im geteilten Bild der Web-App, denn auch hier
+ * ist das Diagramm Teil des Bildes von „Abend teilen“. Antippen oder Wischen zeigt ein Fadenkreuz mit den Ständen
+ * aller Spieler nach diesem Spiel; dieselben Werte gibt es als Tabelle. Die Farben folgen dem Spieler, nie seinem
+ * Platz.
  *
  * @param boundaries Punkte, an denen ein neuer Abend beginnt (feine gestrichelte senkrechte Linien).
  * @param pointLabel Beschriftung eines Punktes, zum Beispiel „nach Spiel 7“.
@@ -130,7 +140,8 @@ fun BalanceChart(
             }
             val right = with(density) {
                 val widest = endLabels.maxOf { measurer.measure(it, labelStyle).size.width }
-                (widest + 14.dp.toPx()).coerceIn(40.dp.toPx(), 104.dp.toPx())
+                val nameStart = Leader + EndDot * 2 + EndNameGap
+                (widest + nameStart.toPx() + 4.dp.toPx()).coerceIn(48.dp.toPx(), 118.dp.toPx())
             }
             val top = with(density) { MarginTop.toPx() }
             val bottom = height - with(density) { MarginBottom.toPx() }
@@ -139,8 +150,10 @@ fun BalanceChart(
             val yMax = ticks.last().toFloat()
             fun x(index: Int): Float = left + index.toFloat() / last * plotWidth
             fun y(value: Int): Float = top + (1f - (value - yMin) / (yMax - yMin).coerceAtLeast(1f)) * (bottom - top)
+            val paths = ChartMath.chartPaths(series.map { it.values }, { x(it) }, { y(it) }, with(density) { LineWidth.toPx() })
+            val ends = paths.map { it.lastOrNull() ?: (x(last) to y(0)) }
             val labelYs = ChartMath.spreadLabels(
-                positions = series.map { y(it.values.lastOrNull() ?: 0) },
+                positions = ends.map { it.second },
                 gap = with(density) { LabelGap.toPx() },
                 min = top + with(density) { 6.dp.toPx() },
                 max = bottom,
@@ -193,30 +206,41 @@ fun BalanceChart(
                 val end = measurer.measure(pointLabel(last), tickStyle)
                 drawText(end, topLeft = Offset(width - right - end.size.width, height - end.size.height - 4.dp.toPx()))
 
-                // Die Linien, dann Endpunkte mit einem Ring in Hintergrundfarbe und die Namen.
-                series.forEachIndexed { index, line ->
+                // Je Spieler eine Linie in seiner Farbe; was genau gleich verläuft, nebeneinander.
+                paths.forEachIndexed { index, points ->
+                    if (points.isEmpty()) return@forEachIndexed
                     val path = Path()
-                    line.values.forEachIndexed { point, value ->
-                        if (point == 0) path.moveTo(x(point), y(value)) else path.lineTo(x(point), y(value))
-                    }
+                    points.forEachIndexed { point, (px, py) -> if (point == 0) path.moveTo(px, py) else path.lineTo(px, py) }
                     drawPath(
                         path,
                         color = seriesColors[index],
-                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                        style = Stroke(width = LineWidth.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
                     )
                 }
-                series.forEachIndexed { index, line ->
-                    val lastPoint = line.values.lastIndex
-                    val center = Offset(x(lastPoint), y(line.values[lastPoint]))
-                    drawCircle(colors.background, radius = 6.dp.toPx(), center = center)
-                    drawCircle(seriesColors[index], radius = 4.dp.toPx(), center = center)
+                // Rechts daneben je Spieler ein Punkt in seiner Farbe (mit Ring in Hintergrundfarbe) und der Name,
+                // auseinandergeschoben, wo Linien nah beieinander enden; eine feine Linie in seiner Farbe führt vom
+                // Ende seiner Linie dorthin. So ist jeder Name eindeutig seiner Linie zugeordnet.
+                val dotX = x(last) + Leader.toPx() + EndDot.toPx()
+                ends.forEachIndexed { index, (endX, endY) ->
+                    drawLine(
+                        color = seriesColors[index],
+                        start = Offset(endX, endY),
+                        end = Offset(dotX - EndDot.toPx(), labelYs[index]),
+                        strokeWidth = hairline,
+                        cap = StrokeCap.Round,
+                    )
+                }
+                series.indices.forEach { index ->
+                    val center = Offset(dotX, labelYs[index])
+                    drawCircle(colors.background, radius = (EndDot + EndRing).toPx(), center = center)
+                    drawCircle(seriesColors[index], radius = EndDot.toPx(), center = center)
                     val text = measurer.measure(
                         endLabels[index],
                         labelStyle,
                         overflow = TextOverflow.Ellipsis,
                         maxLines = 1,
                     )
-                    drawText(text, topLeft = Offset(center.x + 8.dp.toPx(), labelYs[index] - text.size.height / 2f))
+                    drawText(text, topLeft = Offset(dotX + EndDot.toPx() + EndNameGap.toPx(), labelYs[index] - text.size.height / 2f))
                 }
 
                 // Fadenkreuz am gewählten Punkt.

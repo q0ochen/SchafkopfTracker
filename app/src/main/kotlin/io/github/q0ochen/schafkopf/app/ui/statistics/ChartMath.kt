@@ -2,6 +2,7 @@ package io.github.q0ochen.schafkopf.app.ui.statistics
 
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.pow
@@ -68,6 +69,48 @@ object ChartMath {
     fun nearestIndex(x: Float, plotLeft: Float, plotWidth: Float, last: Int): Int {
         if (plotWidth <= 0f || last <= 0) return 0
         return ((x - plotLeft) / plotWidth * last).roundToInt().coerceIn(0, last)
+    }
+
+    /**
+     * Die Linien des Diagramms als Punktfolgen, gerade von Punkt zu Punkt. Wo Linien auf einem Stück genau gleich
+     * verlaufen (etwa die Partner eines Rufspiels), liegen sie dort nebeneinander statt übereinander, jede um [width]
+     * quer zum Stück versetzt; so bleibt jede Farbe zu sehen. Die Reihenfolge nebeneinander folgt der Liste. Wie
+     * `chartPaths` im geteilten Bild der Web-App (`web/src/ui/shareImage.ts`).
+     *
+     * @param series Je Linie ein Wert je Punkt.
+     * @param x Waagerechte Position eines Punktes.
+     * @param y Senkrechte Position eines Wertes.
+     * @return Je Linie die Punkte als (x, y); zwei gleiche Punkte hintereinander stehen nur einmal da.
+     */
+    fun chartPaths(series: List<List<Int>>, x: (Int) -> Float, y: (Int) -> Float, width: Float): List<List<Pair<Float, Float>>> {
+        val paths = series.map { ArrayList<Pair<Float, Float>>() }
+        val segments = (series.maxOfOrNull { it.size } ?: 0) - 1
+        fun add(path: MutableList<Pair<Float, Float>>, point: Pair<Float, Float>) {
+            if (path.lastOrNull() != point) path += point
+        }
+        for (segment in 0 until segments) {
+            // Linien mit genau demselben Stück (gleicher Wert davor und danach) bilden ein Bündel.
+            val bundles = LinkedHashMap<Pair<Int, Int>, MutableList<Int>>()
+            series.forEachIndexed { index, values ->
+                if (segment + 1 < values.size) bundles.getOrPut(values[segment] to values[segment + 1]) { ArrayList() } += index
+            }
+            for (bundle in bundles.values) {
+                bundle.forEachIndexed { rank, index ->
+                    val values = series[index]
+                    val x0 = x(segment)
+                    val y0 = y(values[segment])
+                    val x1 = x(segment + 1)
+                    val y1 = y(values[segment + 1])
+                    val length = hypot(x1 - x0, y1 - y0).takeIf { it > 0f } ?: 1f
+                    val shift = (rank - (bundle.size - 1) / 2f) * width
+                    val dx = -(y1 - y0) / length * shift
+                    val dy = (x1 - x0) / length * shift
+                    add(paths[index], (x0 + dx) to (y0 + dy))
+                    add(paths[index], (x1 + dx) to (y1 + dy))
+                }
+            }
+        }
+        return paths
     }
 }
 

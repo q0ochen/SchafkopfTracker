@@ -47,13 +47,18 @@ import io.github.q0ochen.schafkopf.app.ui.common.rememberCapture
 import io.github.q0ochen.schafkopf.app.ui.common.rememberShareActions
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
 import io.github.q0ochen.schafkopf.app.ui.navigation.Screen
+import io.github.q0ochen.schafkopf.app.ui.statistics.BalanceChart
+import io.github.q0ochen.schafkopf.app.ui.statistics.ChartSeries
 import io.github.q0ochen.schafkopf.domain.evening.EveningState
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-/** Abschluss eines Abends: Endstand, wer wem wie viel zahlt, Teilen als Text oder Bild und der Weg zur Statistik. */
+/**
+ * „Abend teilen“ (bis 21.11.2026 „Abschluss“, docs/ARCHITEKTUR.md, Abschnitt 4.4): Endstand, Vermögensverlauf, wer wem
+ * wie viel zahlt, Teilen als Bild oder Text und der Weg zur Statistik.
+ */
 @Composable
 fun ClosingScreen(eveningId: String, navigator: Navigator) {
     val viewModel: ClosingViewModel = koinViewModel { parametersOf(eveningId) }
@@ -91,6 +96,7 @@ fun ClosingScreen(eveningId: String, navigator: Navigator) {
                 closing = closing,
                 names = state.names,
                 colorIndex = state.colorIndex,
+                balanceSeries = state.balanceSeries,
                 modifier = Modifier
                     .captureInto(capture, MaterialTheme.colorScheme.background)
                     .padding(16.dp),
@@ -104,7 +110,7 @@ fun ClosingScreen(eveningId: String, navigator: Navigator) {
                         subject = stringResource(R.string.share_closing_subject),
                         text = { closingShareText(resources, computed, closing, state.names) },
                         capture = capture,
-                        imageName = "schafkopf-abschluss.png",
+                        imageName = "schafkopf-abend.png",
                         onMessage = { message -> scope.launch { snackbar.showSnackbar(message) } },
                     ),
                 )
@@ -129,13 +135,14 @@ fun ClosingScreen(eveningId: String, navigator: Navigator) {
     }
 }
 
-/** Was auch im geteilten Bild steht: Datum, Endstand und „Wer zahlt wem“. */
+/** Was auch im geteilten Bild steht: Datum, Endstand, Vermögensverlauf und „Wer zahlt wem“. */
 @Composable
 private fun ClosingCard(
     computed: EveningState,
     closing: Closing,
     names: Map<PlayerId, String>,
     colorIndex: Map<PlayerId, Int>,
+    balanceSeries: List<Pair<PlayerId, List<Int>>>,
     modifier: Modifier = Modifier,
 ) {
     val evening = computed.evening
@@ -184,6 +191,8 @@ private fun ClosingCard(
             }
         }
 
+        BalanceSection(balanceSeries, names, colorIndex, asMoney)
+
         SectionHeading(stringResource(R.string.closing_transfers))
         if (closing.transfers.isEmpty()) {
             Text(
@@ -221,4 +230,35 @@ private fun ClosingCard(
             )
         }
     }
+}
+
+/**
+ * „Vermögensverlauf“ dieses Abends, dasselbe Diagramm wie in der Statistik: eine Linie je Spieler in seiner Farbe, Start
+ * und nach jedem Spiel, Legende mit den Namen. Ohne Spiele steht dort, dass der Verlauf noch kommt.
+ */
+@Composable
+private fun BalanceSection(
+    balanceSeries: List<Pair<PlayerId, List<Int>>>,
+    names: Map<PlayerId, String>,
+    colorIndex: Map<PlayerId, Int>,
+    asMoney: Boolean,
+) {
+    SectionHeading(stringResource(R.string.stats_history))
+    val series = balanceSeries.map { (player, values) ->
+        ChartSeries(id = player.value, name = names[player] ?: "?", colorIndex = colorIndex[player] ?: 0, values = values)
+    }
+    val resources = LocalContext.current.resources
+    val start = stringResource(R.string.stats_chart_start)
+    val finalValues = series
+        .sortedByDescending { it.values.lastOrNull() ?: 0 }
+        .joinToString(", ") { "${it.name} ${Money.format(it.values.lastOrNull() ?: 0, asMoney, signed = true)}" }
+    BalanceChart(
+        series = series,
+        asMoney = asMoney,
+        boundaries = emptyList(),
+        pointLabel = { index -> if (index == 0) start else resources.getString(R.string.stats_chart_after_game, index) },
+        description = stringResource(R.string.stats_chart_description, finalValues),
+        emptyText = stringResource(R.string.stats_chart_empty),
+        modifier = Modifier.padding(top = 4.dp),
+    )
 }

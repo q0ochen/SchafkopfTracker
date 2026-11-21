@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -37,7 +39,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** Teilen aus dem Abschluss: Das Teilen-Menü von Android bekommt den Text bzw. das Bild. */
+/** Teilen aus „Abend teilen“: Das Teilen-Menü von Android bekommt den Text bzw. das Bild. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36], application = TestSchafkopfApp::class)
@@ -77,7 +79,23 @@ class ShareTest {
     }
 
     @Test
-    fun `Als Text teilen gibt den Abschluss als Text weiter`() {
+    fun `Abend teilen zeigt den Vermoegensverlauf und bietet zuerst das Bild an`() {
+        showClosing()
+        compose.onNodeWithText("Abend teilen").assertExists()
+        compose.onNodeWithText("Vermögensverlauf").assertExists()
+        // Das Diagramm nennt jeden Spieler mit seinem Endstand; ein Screenreader liest das statt der Grafik vor.
+        val chart = compose.onNode(hasContentDescription("Vermögensverlauf: Kontostand je Spieler", substring = true))
+            .fetchSemanticsNode().config[SemanticsProperties.ContentDescription].joinToString()
+        for (name in listOf("Anna", "Bert", "Cilli", "Done")) assertTrue(chart, chart.contains(name))
+        // Einmal hinrollen, dann beide in derselben Lage messen.
+        compose.onNodeWithText("Als Text teilen").performScrollTo()
+        val image = compose.onNodeWithText("Als Bild teilen").fetchSemanticsNode().boundsInRoot
+        val text = compose.onNodeWithText("Als Text teilen").fetchSemanticsNode().boundsInRoot
+        assertTrue("„Als Bild teilen“ steht vor „Als Text teilen“", image.top < text.top)
+    }
+
+    @Test
+    fun `Als Text teilen gibt den Abend als Text weiter`() {
         showClosing()
         compose.onNodeWithText("Als Text teilen").performScrollTo().performClick()
         compose.waitForIdle()
@@ -114,7 +132,7 @@ class ShareTest {
         @Suppress("DEPRECATION")
         val uri: Uri = send.getParcelableExtra(Intent.EXTRA_STREAM)!!
         assertEquals("${app.packageName}.dateien", uri.authority)
-        val file = File(File(app.cacheDir, Sharing.SHARED_FOLDER), "schafkopf-abschluss.png")
+        val file = File(File(app.cacheDir, Sharing.SHARED_FOLDER), "schafkopf-abend.png")
         assertTrue("Bild fehlt", file.isFile)
         // PNG-Signatur und eine sinnvolle Größe (mehr als ein leeres Bild).
         val bytes = file.readBytes()
