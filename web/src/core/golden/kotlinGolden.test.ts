@@ -8,10 +8,11 @@
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { EntryIssue, Evening, GameFacts, PlayerId, RuleSet, RuleViolation } from "../index";
+import type { EntryIssue, Evening, EveningDetails, GameFacts, PlayerId, RuleSet, RuleViolation } from "../index";
 import {
   declarerSide,
   EveningCalculator,
+  EveningEdit,
   EveningStatistics,
   HistoryStatistics,
   losers,
@@ -102,6 +103,15 @@ interface InviteCase {
   readonly token: string | null;
 }
 
+/** „Abend bearbeiten“: der Abend, der Stand beim Öffnen, das Bearbeitete und das Ergebnis von `EveningEdit.apply`. */
+interface EditCase {
+  readonly id: string;
+  readonly current: EveningJson;
+  readonly original: EveningDetails;
+  readonly edited: EveningDetails;
+  readonly result: EveningJson;
+}
+
 interface GoldenFile {
   readonly rules: Readonly<Record<string, RuleSetJson>>;
   readonly score: readonly ScoreCase[];
@@ -112,6 +122,7 @@ interface GoldenFile {
   readonly merges: readonly MergeCase[];
   readonly duplicates: readonly DuplicateCase[];
   readonly invites: readonly InviteCase[];
+  readonly edits: readonly EditCase[];
 }
 
 const golden = JSON.parse(readFileSync(new URL("./kotlin-golden.json", import.meta.url), "utf8")) as GoldenFile;
@@ -284,6 +295,46 @@ describe("Rechenkern gegen den Kotlin-Kern (kotlin-golden.json)", () => {
     }
     expect(failures).toEqual([]);
     expect(golden.invites.length).toBe(22);
+  });
+
+  it("Abend bearbeiten: EveningEdit.apply liefert für jeden Fall denselben Abend", () => {
+    // Alle Abweichungen sammeln, nicht nur die ersten zehn: Hier muss wirklich jeder Fall stimmen.
+    const failures: string[] = [];
+    for (const c of golden.edits) {
+      const current = decodeEvening(c.current);
+      const original: EveningDetails = { ...c.original, seating: [...c.original.seating] };
+      const edited: EveningDetails = { ...c.edited, seating: [...c.edited.seating] };
+      const snapshot = (): string => JSON.stringify([encodeEvening(current), original, edited]);
+      const before = snapshot();
+      const result = EveningEdit.apply(current, original, edited);
+      const difference = firstDifference(c.result as unknown as Json, encodeEvening(result));
+      if (difference !== null) failures.push(`${c.id}: ${difference}`);
+      // Reine Funktion: Die Eingaben bleiben, wie sie waren.
+      if (snapshot() !== before) failures.push(`${c.id}: Die Eingaben wurden verändert.`);
+    }
+    expect(failures).toEqual([]);
+    expect(golden.edits.length).toBe(69);
+  });
+
+  it("die Golden-Daten für „Abend bearbeiten“ enthalten die gezielten Fallen", () => {
+    const byId = new Map(golden.edits.map((c) => [c.id, c]));
+    const finishedAt = (id: string): string | null | undefined => byId.get(id)?.result.finishedAt;
+    // Das Ende rückt über das Jahr 9999 hinaus (mit „+“) bzw. vor das Jahr 0 (mit „-“); Bruchteile in Dreiergruppen.
+    expect(finishedAt("datum-ende-im-jahr-10000")).toBe("+10000-01-02T23:00:00Z");
+    expect(finishedAt("datum-vor-dem-jahr-0")).toBe("-0001-12-30T12:00:00.250Z");
+    expect(finishedAt("datum-beendet")).toBe("2026-12-11T23:45:10.500Z");
+    expect(finishedAt("datum-beendet-nanosekunden")).toBe("2026-12-12T00:45:10.499543211Z");
+    expect(finishedAt("datum-beendet-mikrosekunden")).toBe("2026-12-13T23:00:00.000003Z");
+    // Am Rand des Zeitbereichs bleibt das Ende, der Beginn gilt trotzdem.
+    expect(finishedAt("datum-ende-am-rand")).toBe("+1000000000-12-31T23:59:59.999999999Z");
+    expect(finishedAt("datum-ende-am-anfang")).toBe("-1000000000-01-01T00:00:00Z");
+    expect(byId.get("datum-ende-am-rand")?.result.startedAt).toBe("2026-12-12T18:01:00Z");
+    // Nur Geändertes wird übernommen; was ein anderes Handy inzwischen geändert hat, bleibt.
+    expect(byId.get("ort-unverändert-inzwischen-geändert")?.result.location).toBe("Daheim");
+    expect(byId.get("ort-sonderzeichen")?.result.location).toBe("\uFEFFOrt");
+    expect(byId.get("sitzordnung-doppelt")?.result.seating).toEqual(["A", "B", "C", "D"]);
+    expect(byId.get("geber-nicht-am-tisch")?.result.firstDealer).toBe("A");
+    expect(golden.edits.filter((c) => c.id.startsWith("zufall-")).length).toBe(40);
   });
 
   it("die Golden-Daten der gemeinsamen Runde enthalten die gezielten Fallen", () => {

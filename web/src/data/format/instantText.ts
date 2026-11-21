@@ -1,23 +1,18 @@
 /*
  * Zeitpunkte genau wie die Android-App: lesen wie `Instant.parse` (java.time, JDK 21) mit der Bereichsprüfung von
- * `parseInstant` (Modul `data`) und schreiben wie `Instant.toString()`.
+ * `parseInstant` (Modul `data`) und schreiben wie `Instant.toString()` (mit `formatInstant` aus dem Rechenkern).
  *
  * `Instant.parse` nimmt mehr an als die Schreibweise, die die App selbst schreibt: Kleinbuchstaben („t“, „z“), einen
  * Versatz wie „+01:00“ (bis ±18 Stunden), einen Punkt ohne Ziffern, 24:00:00 (als Mitternacht des Folgetags) und die
  * Schaltsekunde 23:59:60 (als 23:59:59). Gelesen wird daraus immer die kanonische Schreibweise von `Instant.toString()`:
  * „…T19:00:00.000Z“ wird zu „…T19:00:00Z“, „…T20:00:00+01:00“ zu „…T19:00:00Z“.
  */
-import type { InstantParts } from "../../core/instant";
+import { formatInstant, INSTANT_MAX_EPOCH_SECOND, INSTANT_MIN_EPOCH_SECOND, type InstantParts } from "../../core/instant";
 import type { InstantText } from "../../core/model";
 import { InvalidInstantError } from "./errors";
 
 const SECONDS_PER_DAY = 86_400n;
 const SECONDS_PER_10000_YEARS = 146_097n * 25n * SECONDS_PER_DAY;
-const SECONDS_0000_TO_1970 = (146_097n * 5n - (30n * 365n + 7n)) * SECONDS_PER_DAY;
-
-/** Bereich von `java.time.Instant`. */
-const INSTANT_MIN_SECOND = -31_557_014_167_219_200n;
-const INSTANT_MAX_SECOND = 31_556_889_864_403_199n;
 
 /** Frühester und spätester Zeitpunkt, der sich in Millisekunden seit 1970 ausdrücken lässt (`Long.MIN_VALUE`/`MAX_VALUE`). */
 const EARLIEST: InstantParts = { epochSecond: -9_223_372_036_854_776n, nano: 192_000_000 };
@@ -26,15 +21,6 @@ const LATEST: InstantParts = { epochSecond: 9_223_372_036_854_775n, nano: 807_00
 function compareParts(a: InstantParts, b: InstantParts): number {
   if (a.epochSecond !== b.epochSecond) return a.epochSecond < b.epochSecond ? -1 : 1;
   return a.nano - b.nano;
-}
-
-function floorDiv(a: bigint, b: bigint): bigint {
-  const quotient = a / b;
-  return (a % b !== 0n && (a < 0n) !== (b < 0n)) ? quotient - 1n : quotient;
-}
-
-function floorMod(a: bigint, b: bigint): bigint {
-  return a - floorDiv(a, b) * b;
 }
 
 function isLeapYear(year: number): boolean {
@@ -63,19 +49,6 @@ function epochDay(year: number, month: number, day: number): number {
   const dayOfYear = Math.floor((153 * (month > 2 ? month - 3 : month + 9) + 2) / 5) + day - 1;
   const dayOfEra = yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
   return era * 146_097 + dayOfEra - 719_468;
-}
-
-/** Datum zu Tagen seit 1970 (Umkehrung von {@link epochDay}). */
-function civilFromDays(days: number): { year: number; month: number; day: number } {
-  const z = days + 719_468;
-  const era = Math.floor(z / 146_097);
-  const dayOfEra = z - era * 146_097;
-  const yearOfEra = Math.floor((dayOfEra - Math.floor(dayOfEra / 1460) + Math.floor(dayOfEra / 36_524) - Math.floor(dayOfEra / 146_096)) / 365);
-  const dayOfYear = dayOfEra - (365 * yearOfEra + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100));
-  const mp = Math.floor((5 * dayOfYear + 2) / 153);
-  const day = dayOfYear - Math.floor((153 * mp + 2) / 5) + 1;
-  const month = mp < 10 ? mp + 3 : mp - 9;
-  return { year: yearOfEra + era * 400 + (month <= 2 ? 1 : 0), month, day };
 }
 
 function invalid(text: string): never {
@@ -217,7 +190,7 @@ export function parseInstantValue(text: string): InstantParts {
   const days = BigInt(epochDay(year, month, day) + extraDays);
   const secondOfDay = BigInt(hour * 3600 + minute * 60 + second);
   const epochSecond = days * SECONDS_PER_DAY + secondOfDay - BigInt(offsetSeconds) + (yearBig / 10_000n) * SECONDS_PER_10000_YEARS;
-  if (epochSecond < INSTANT_MIN_SECOND || epochSecond > INSTANT_MAX_SECOND) invalid(text);
+  if (epochSecond < INSTANT_MIN_EPOCH_SECOND || epochSecond > INSTANT_MAX_EPOCH_SECOND) invalid(text);
   return { epochSecond, nano };
 }
 
@@ -252,59 +225,4 @@ export function tryParseInstant(text: string): InstantText | null {
  */
 export function canonicalInstant(text: InstantText): InstantText {
   return formatInstant(parseInstantValue(text));
-}
-
-function pad(value: number, width: number): string {
-  return String(value).padStart(width, "0");
-}
-
-/** `LocalDateTime.toString()` für eine Sekunde ohne Bruchteil, immer mit Sekunden („…:00“ wie in InstantPrinterParser). */
-function localDateTimeText(epochSecond: bigint): { text: string; year: number } {
-  const days = Number(floorDiv(epochSecond, SECONDS_PER_DAY));
-  const secondOfDay = Number(floorMod(epochSecond, SECONDS_PER_DAY));
-  const { year, month, day } = civilFromDays(days);
-  let yearText: string;
-  const absYear = Math.abs(year);
-  if (absYear < 1000) {
-    yearText = (year < 0 ? "-" : "") + pad(absYear, 4);
-  } else {
-    yearText = (year > 9999 ? "+" : "") + String(year);
-  }
-  const hour = Math.floor(secondOfDay / 3600);
-  const minute = Math.floor((secondOfDay % 3600) / 60);
-  const second = secondOfDay % 60;
-  return { text: `${yearText}-${pad(month, 2)}-${pad(day, 2)}T${pad(hour, 2)}:${pad(minute, 2)}:${pad(second, 2)}`, year };
-}
-
-/** Schreibt einen Zeitpunkt wie `Instant.toString()` (InstantPrinterParser.format von JDK 21). */
-export function formatInstant(parts: InstantParts): InstantText {
-  const inSecond = parts.epochSecond;
-  let text: string;
-  if (inSecond >= -SECONDS_0000_TO_1970) {
-    const zeroSeconds = inSecond - SECONDS_PER_10000_YEARS + SECONDS_0000_TO_1970;
-    const hi = floorDiv(zeroSeconds, SECONDS_PER_10000_YEARS) + 1n;
-    const lo = floorMod(zeroSeconds, SECONDS_PER_10000_YEARS);
-    text = (hi > 0n ? `+${hi}` : "") + localDateTimeText(lo - SECONDS_0000_TO_1970).text;
-  } else {
-    const zeroSeconds = inSecond + SECONDS_0000_TO_1970;
-    const hi = zeroSeconds / SECONDS_PER_10000_YEARS;
-    const lo = zeroSeconds % SECONDS_PER_10000_YEARS;
-    const local = localDateTimeText(lo - SECONDS_0000_TO_1970);
-    text = local.text;
-    if (hi < 0n) {
-      if (local.year === -10_000) {
-        text = String(hi - 1n) + text.substring(2);
-      } else if (lo === 0n) {
-        text = String(hi) + text;
-      } else {
-        text = text.substring(0, 1) + String(-hi) + text.substring(1);
-      }
-    }
-  }
-  const nano = parts.nano;
-  if (nano > 0) {
-    const digits = pad(nano, 9);
-    text += "." + (nano % 1_000_000 === 0 ? digits.substring(0, 3) : nano % 1000 === 0 ? digits.substring(0, 6) : digits);
-  }
-  return `${text}Z`;
 }
