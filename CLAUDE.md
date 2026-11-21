@@ -387,6 +387,10 @@ liest sie beim Bauen der Testversion, sonst `app/supabase.properties`; Web als `
 - Das Access Token des Nutzers hat nur Rechte für die Datenbank (`analytics_logs_read` und `auth_config_read` fehlen);
   die Diagnose liest deshalb über das Datenbank-Passwort aus `auth.flow_state` (siehe `supabase/README.md`).
 - Noch offen: der Test zu zweit aus der Anleitung (Runde anlegen, beitreten, gegenseitig eintragen).
+- Der Zustimmungsbildschirm bei Google steht offenbar noch auf „Testen“: Am 21.11.2026 wollte der Nutzer einen
+  weiteren Testnutzer anlegen (Google Auth Platform → Zielgruppe, `console.cloud.google.com/auth/audience`). Dann kann
+  sich nur anmelden, wer dort eingetragen ist; andere bekommen bei Google „Zugriff blockiert“ (`access_denied`).
+  Die Anleitung sieht „In Produktion“ vor (dem Nutzer am 21.11.2026 als Alternative genannt).
 
 **Nicht geprüft:** echte Android-Geräte mit dem echten Server, der Abgleich zwischen zwei echten Handys.
 
