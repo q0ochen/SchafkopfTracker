@@ -255,13 +255,19 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
         }
 
         override suspend fun myRounds(): List<RoundSummary> = call("myRounds") {
-            rounds.values.filter { userId in it.members }.map {
-                RoundSummary(it.id, it.name, it.rev, it.members.size, it.members[userId], it.createdBy == userId)
+            rounds.values.filter { userId in it.members }.map { round ->
+                // Wie member_names auf dem Server: die Namen der übernommenen Spieler, ohne Groß/Klein sortiert.
+                val names = round.members.values.filterNotNull()
+                    .mapNotNull { id -> round.players[id]?.takeUnless { it.deleted }?.name }
+                    .sortedWith(compareBy<String>({ it.lowercase() }, { it }))
+                RoundSummary(round.id, round.name, round.rev, round.members.size, round.members[userId], round.createdBy == userId, names)
             }
         }
 
         override suspend fun createRound(name: String): RoundId = call("createRound", write = true) {
-            val clean = name.trim().takeIf { it.length in 1..MAX_ROUND_NAME_LENGTH } ?: throw RoundException(RoundError.INVALID_NAME)
+            val clean = RoundNames.clean(name).takeIf { RoundNames.valid(it) } ?: throw RoundException(RoundError.INVALID_NAME)
+            // Wie auf dem Server: ein Name je Konto (docs/ARCHITEKTUR.md 8.7), geprüft vor der Obergrenze.
+            if (rounds.values.any { userId in it.members && RoundNames.same(it.name, clean) }) throw RoundException(RoundError.NAME_TAKEN)
             requireRoomForRound()
             val round = Round(RoundId("runde-${++created}"), clean, userId)
             // Das Anlegen mit dem ersten Mitglied ist die erste Änderung der Runde.
@@ -373,7 +379,7 @@ class InMemoryRoundServer(private val clock: Clock = Clock.systemUTC()) {
         const val MAX_PLAYERS = 40
         const val MAX_EVENINGS = 3000
         const val MAX_INVITES = 20
-        const val MAX_ROUND_NAME_LENGTH = 40
+        const val MAX_ROUND_NAME_LENGTH = RoundNames.MAX_LENGTH
         const val MAX_ID_LENGTH = 64
 
         /**

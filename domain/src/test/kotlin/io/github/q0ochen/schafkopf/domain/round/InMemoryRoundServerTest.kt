@@ -59,6 +59,41 @@ class InMemoryRoundServerTest {
     }
 
     @Test
+    fun `ein Konto hat keine zwei Runden desselben Namens`() = runTest {
+        val round = one.createRound("Stammtisch")
+
+        assertEquals(RoundError.NAME_TAKEN, errorOf { one.createRound(" stammTISCH\t") })
+        assertNull(errorOf { two.createRound("Stammtisch") })
+        // Durch Beitreten kann es trotzdem zwei geben; der Name bleibt dann vergeben, bis keine mehr so heißt.
+        val other = two.myRounds().single().id
+        one.joinRound(two.createInvite(other))
+        assertEquals(listOf("Stammtisch", "Stammtisch"), one.myRounds().map { it.name })
+        one.leaveRound(round)
+        assertEquals(RoundError.NAME_TAKEN, errorOf { one.createRound("Stammtisch") })
+        one.leaveRound(other)
+        assertNull(errorOf { one.createRound("Stammtisch") })
+        // Geprüft wird vor der Obergrenze.
+        repeat(InMemoryRoundServer.MAX_ROUNDS - 1) { one.createRound("Runde $it") }
+        assertEquals(RoundError.NAME_TAKEN, errorOf { one.createRound("runde 0") })
+        assertEquals(RoundError.LIMIT_REACHED, errorOf { one.createRound("Runde 9") })
+    }
+
+    @Test
+    fun `die Uebersicht nennt die Namen der Mitglieder, ohne Gaeste und ohne Mitglieder ohne Spieler`() = runTest {
+        val round = roundOfTwo()
+        assertEquals(emptyList<String>(), one.myRounds().single().memberNames)
+
+        one.claimPlayer(round, PlayerId("p1"), "Zora", 1)
+        one.savePlayer(round, guest)
+        two.claimPlayer(round, PlayerId("p2"), "anton", 2)
+
+        assertEquals(listOf("anton", "Zora"), one.myRounds().single().memberNames)
+        assertEquals(listOf("anton", "Zora"), two.myRounds().single().memberNames)
+        two.leaveRound(round)
+        assertEquals(listOf("Zora"), one.myRounds().single().memberNames)
+    }
+
+    @Test
     fun `ein Konto kann hoechstens fuenf Runden angehoeren`() = runTest {
         repeat(InMemoryRoundServer.MAX_ROUNDS) { one.createRound("Runde $it") }
         val other = two.createRound("Noch eine")

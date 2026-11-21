@@ -25,6 +25,9 @@ internal data class DuplicateCase(val id: String, val evening: Evening)
 /** Ein eingefügter Text für `InviteLinks.tokenFrom`. */
 internal data class InviteCase(val id: String, val text: String)
 
+/** Namen von Runden: die Runden eines Kontos ([names]) und ein Name, der neu dazukommen soll ([text]). */
+internal data class RoundNameCase(val id: String, val names: List<String>, val text: String)
+
 /**
  * Die Eingaben der Golden-Daten für die gemeinsame Runde (docs/ARCHITEKTUR.md, Abschnitt 8.5): gezielte Fälle und
  * Zufallsfälle mit festen Startwerten. Der Port in `web/src/core/round` muss dieselben Ergebnisse liefern.
@@ -284,5 +287,31 @@ internal object RoundGoldenCases {
             "nur-f" to other,
             "nur-ziffern" to "1".repeat(32),
         ).map { (id, text) -> InviteCase(id, text) }
+    }
+
+    /** Bereinigen, gültig, vergeben, Vorschlag und gleichnamige Runden (`RoundNames`, docs/ARCHITEKTUR.md 8.7). */
+    fun roundNameCases(): List<RoundNameCase> {
+        val joker = "\uD83C\uDCCF"
+        return listOf(
+            RoundNameCase("leer", emptyList(), ""),
+            RoundNameCase("nur-leerraum", listOf("Stammtisch"), " \t\r\n "),
+            RoundNameCase("raender-und-tabulator", listOf("Stammtisch Runde"), "  Stammtisch \t  Runde \n"),
+            RoundNameCase("gross-klein", listOf("Stammtisch"), "STAMMTISCH"),
+            RoundNameCase("umlaute", listOf("Ärger im Wirtshaus"), "ärger im WIRTSHAUS"),
+            RoundNameCase("steuerzeichen", emptyList(), "a\u0000\u001Fb\u007F"),
+            RoundNameCase("geschuetztes-leerzeichen", listOf("a b"), "a\u00A0b "),
+            RoundNameCase("zusammengezogen", listOf("Stamm tisch"), "Stamm  tisch"),
+            RoundNameCase("ohne-leerzeichen-anders", listOf("Stamm tisch"), "Stammtisch"),
+            RoundNameCase("40-zeichen", emptyList(), "  " + "x".repeat(40) + "  "),
+            RoundNameCase("41-zeichen", emptyList(), "x".repeat(41)),
+            RoundNameCase("40-umlaute", emptyList(), "Ä" + "ö".repeat(39)),
+            RoundNameCase("40-astrale-zeichen", emptyList(), joker.repeat(40)),
+            RoundNameCase("41-astrale-zeichen", emptyList(), joker.repeat(41)),
+            RoundNameCase("vorschlag-frei", listOf("Stammtisch"), "Klub"),
+            RoundNameCase("vorschlag-belegt", listOf("schafkopfrunde", "Schafkopfrunde 2"), "Schafkopfrunde"),
+            RoundNameCase("vorschlag-luecke", listOf("Schafkopfrunde", "Schafkopfrunde 3"), "Schafkopfrunde 3"),
+            RoundNameCase("doppelte", listOf("Stammtisch", "Klub", "STAMMTISCH ", "Freitag", "freitag"), "Samstag"),
+            RoundNameCase("eszett", listOf("Straße"), "STRASSE"),
+        )
     }
 }

@@ -464,7 +464,7 @@ Anmeldung ist das Schwesterprojekt DrinkWithMe (dort `docs/ARCHITEKTUR.md`, Absc
 | Server ist die gemeinsame Fassung | Je Abend liegt auf dem Server **ein** JSON-Dokument mit Versionsnummer. Geschrieben wird nur mit „erwartete Version“ (Vergleichen und Ersetzen). Wer zu spät kommt, führt zusammen (8.5) und versucht es erneut. Alle Geräte übernehmen am Ende die Fassung des Servers. |
 | Nur Tatsachen | Hochgeladen werden Abende im Dateiformat der Sicherung (`StorageCodec.encodeEvening`), Spieler und das Regelwerk für neue Abende. Stand, Geber, Bock-Zähler und Statistik rechnet jedes Gerät selbst. |
 | Anmeldung | Nur Google über Supabase Auth (PKCE im Browser, nie WebView). Zustimmungsbildschirm bei Google „In Produktion“, Bereiche nur `openid email profile`. Google fragt bei jeder Anmeldung, welches Konto (`prompt=select_account`), damit sich ein falsch gewähltes Konto korrigieren lässt. |
-| Eine Runde je Gerät | Ein Gerät hängt an höchstens einer Runde. Wer eine Runde anlegt, bringt die Daten seines Geräts mit; wer beitritt, übernimmt die Daten der Runde (die eigenen werden nach Rückfrage ersetzt). |
+| Eine Runde je Gerät | Ein Gerät hängt an höchstens einer Runde. Wer eine Runde anlegt, bringt die Daten seines Geräts mit; wer beitritt, übernimmt die Daten der Runde (die eigenen werden nach Rückfrage ersetzt). Ein Konto kann mehreren Runden angehören und auf dem Gerät zwischen ihnen wechseln (8.7, seit dem 21.11.2026): Das Gerät hält dann die Daten der gewählten Runde, die der anderen bleiben auf dem Server. |
 | Eigener Name | Jedes Mitglied legt seinen Namen selbst fest („Das bin ich“). Danach ist er fest; andere können ihn nicht ändern. Spieler ohne Konto (Gäste) kann jedes Mitglied anlegen und umbenennen. |
 | Jeder darf eintragen | Es gibt keine Sperre. Die App zeigt nur, wer gibt („Du gibst – trag dieses Spiel ein“), und weist auf vermutlich doppelt eingetragene Spiele hin. |
 | Kein Realtime | Im Vordergrund fragt die App alle 4 Sekunden die Versionsnummer der Runde ab (eine kleine Anfrage). |
@@ -473,7 +473,7 @@ Anmeldung ist das Schwesterprojekt DrinkWithMe (dort `docs/ARCHITEKTUR.md`, Absc
 Öffentliche Konfiguration (kein Geheimnis): Projekt-URL und Publishable Key. Android: `app/supabase.properties`
 (`supabaseUrl`, `supabasePublishableKey`) → `BuildConfig.SUPABASE_URL`, `BuildConfig.SUPABASE_PUBLISHABLE_KEY`. Web:
 `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (im Workflow aus den GitHub-Variablen `SUPABASE_URL` und
-`SUPABASE_PUBLISHABLE_KEY`). Fehlt die Konfiguration, zeigt „Gemeinsame Runde“ nur „Der Server ist noch nicht
+`SUPABASE_PUBLISHABLE_KEY`). Fehlt die Konfiguration, zeigt „Gemeinsame Runden“ nur „Der Server ist noch nicht
 eingerichtet“; alles andere funktioniert.
 
 Adressen: Rückkehr aus der Anmeldung Android `schafkopftracker://auth-callback`, Web die Start-Adresse der Web-App
@@ -523,8 +523,8 @@ Wer kein Mitglied der genannten Runde ist, bekommt immer `not_member`.
 
 | Funktion | Verhalten |
 |---|---|
-| `create_round(p_name text) → uuid` | Legt die Runde an (Name beschnitten, 1 bis 40 Zeichen, sonst `invalid_name`) und macht den Aufrufer zum Mitglied. Die neue Runde hat `rev = 1`. |
-| `my_rounds() → table(id uuid, name text, rev bigint, member_count int, my_player_id text, is_creator boolean)` | Alle Runden des Aufrufers, älteste Mitgliedschaft zuerst. |
+| `create_round(p_name text) → uuid` | Legt die Runde an (Name beschnitten, 1 bis 40 Zeichen, sonst `invalid_name`) und macht den Aufrufer zum Mitglied. Die neue Runde hat `rev = 1`. Gehört der Aufrufer schon einer Runde mit demselben Namen an (bereinigt, ohne Groß/Klein), `name_taken` (seit dem 21.11.2026). |
+| `my_rounds() → table(id uuid, name text, rev bigint, member_count int, my_player_id text, is_creator boolean, member_names text[])` | Alle Runden des Aufrufers, älteste Mitgliedschaft zuerst. `member_names` (seit dem 21.11.2026): die Namen der Spieler, die Mitglieder mit „Das bin ich“ übernommen haben (auch der eigene), nach Namen ohne Groß/Klein sortiert; Mitglieder ohne Spieler fehlen. Fehlt die Spalte (älterer Server), gilt sie als leer. |
 | `create_invite(p_round uuid) → text` | Neuer Token (32 Zeichen `0-9a-f`), gültig 14 Tage; abgelaufene Einladungen der Runde werden dabei gelöscht. |
 | `invite_info(p_token text) → table(round_id uuid, round_name text, member_count int, already_member boolean)` | Unbekannt oder abgelaufen → `invalid_invite`. |
 | `join_round(p_token text) → uuid` | Macht den Aufrufer zum Mitglied (schon Mitglied: nichts weiter). Gehört ihm in der Runde bereits ein Spieler (`owner`), wird er wieder verknüpft. |
@@ -669,13 +669,22 @@ und wenn die App wieder sichtbar wird.
 
 ### 8.7 Verbinden und Trennen
 
-Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disconnect`, `hasOwnData`).
+Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disconnect`, `hasOwnData`) und
+`RoundNames` (Vorgabe und Vergleich der Namen von Runden).
 
 - **Runde anlegen:** Vorbelegte Spieler (`spieler-1` bis `spieler-4`), die noch „Spieler N“ heißen und in keinem
   Abend vorkommen, werden lokal entfernt. `create_round`, `RoundLink` mit `cursor = 0` ohne Basen, dann Abgleich:
   Alles Lokale geht als neu hoch. Hat das Konto schon eine eigene, noch leere Runde dieses Namens (`my_rounds`:
   selbst angelegt, ein Mitglied, `rev = 1`), wird sie verwendet statt eine zweite anzulegen: Sie stammt von einem
-  Versuch, dessen Antwort verloren ging.
+  Versuch, dessen Antwort verloren ging. Ist das Gerät schon mit einer Runde verbunden, gilt stattdessen „Neue Runde
+  anlegen, während das Gerät verbunden ist“ (unten).
+- **Eindeutige Namen** (seit dem 21.11.2026): Ein Konto hat keine zwei Runden desselben Namens. Verglichen wird wie
+  auf dem Server: Folgen von Leer- und Steuerzeichen werden zu einem Leerzeichen, außen beschnitten, ohne Groß/Klein
+  (`RoundNames.same`). Vor `create_round` prüft `create` gegen `my_rounds` (nach der Suche nach der eigenen leeren
+  Runde oben) und meldet `name_taken`; der Server prüft dasselbe. Die Vorgabe im Feld „Name der Runde“ ist
+  „Schafkopfrunde“, ist der Name schon vergeben, die erste freie Fassung von „Schafkopfrunde 2“, „Schafkopfrunde 3“
+  … (`RoundNames.suggest`). Durch Beitreten kann ein Konto trotzdem zwei Runden desselben Namens haben (angelegt
+  haben sie verschiedene Leute); Listen nennen deshalb die Mitglieder (8.9).
 - **Einer Runde beitreten / eine Runde des Kontos auf diesem Gerät verwenden:** Hat das Gerät Abende oder
   umbenannte Spieler, wird nachgefragt („… werden durch die Daten der Runde ersetzt“). Dann zuerst den Kopf der
   Runde lesen: Antwortet der Server nicht, bleibt das Gerät, wie es ist (Fehler `offline` oder `server`); gibt es
@@ -686,21 +695,39 @@ Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disc
   neu“, dann den eigenen Namen eingeben und bestätigen („lässt sich danach nicht mehr ändern“) → `claim_player`.
 - **Abmelden / Runde verlassen:** `RoundLink` und Basen löschen, die Daten bleiben als örtliche Kopie auf dem Gerät.
   Wartende Änderungen gehen dabei verloren (Rückfrage, wenn `pendingCount() > 0`).
+- **Runde wechseln** (seit dem 21.11.2026; `use` mit einer anderen Runde, während das Gerät verbunden ist): Zuerst
+  ein vollständiger Abgleich der verbundenen Runde, damit alles von hier auf dem Server ist. Scheitert er, bleibt
+  alles, wie es ist (Fehler `offline`, `signed_out` oder der des Servers); meldet er `Detached` (oder ist das Gerät
+  inzwischen nicht mehr verbunden), wird nicht gewechselt, und `use` liefert dieses Ergebnis (die Daten bleiben als
+  Kopie). Danach wie „eine Runde des Kontos verwenden“: Kopf der Zielrunde lesen, dann leeren und verbinden, Abgleich.
+  Die Abende der bisherigen Runde bleiben auf dem Server; zurück geht es auf demselben Weg. Die Rückfrage
+  „Daten dieses Geräts ersetzen?“ entfällt dabei (die Daten sind ja in der bisherigen Runde). Was nach dem Abgleich
+  noch wartet (`pendingCount() > 0`, etwa ein Abend, den der Server nicht annimmt), geht beim Wechseln verloren:
+  Die Oberfläche gleicht deshalb schon vor ihrer Rückfrage vollständig ab und nennt dort die Zahl. Ist die Zielrunde
+  die verbundene, wird nur abgeglichen.
+- **Einer weiteren Runde beitreten** (`join`, während das Gerät verbunden ist): erst `invite_info`; gehört die
+  Einladung zur verbundenen Runde selbst, wird nur abgeglichen. Sonst wie „Runde wechseln“, mit `join_round` nach dem
+  Abgleich und vor dem Leeren.
+- **Neue Runde anlegen, während das Gerät verbunden ist** (`create`): Die neue Runde beginnt leer. Erst der Abgleich
+  wie bei „Runde wechseln“, dann die Prüfung des Namens und `create_round` (bzw. die eigene leere Runde dieses
+  Namens), dann leeren (Verbindung und Basen, dann Abende und Spieler) und mit der neuen Runde verbinden, Abgleich.
+  Die Abende der bisherigen Runde bleiben dort.
 - Mit verbundener Runde legt die App keine vorbelegten Spieler mehr an.
 
 ### 8.8 Kotlin und Web
 
 - `:domain`, Paket `domain.round`: Modelle, `RoundApi` und `RoundStore` (Ports), `EveningMerge`, `DuplicateCheck`,
-  `InviteLinks`, `RoundSync`, `RoundConnection`, dazu `InMemoryRoundStore` und `InMemoryRoundServer` (ein Server im
+  `InviteLinks`, `RoundSync`, `RoundConnection`, `RoundNames`, dazu `InMemoryRoundStore` und `InMemoryRoundServer` (ein Server im
   Speicher nach 8.2 und 8.3). Tests mit mehreren nachgestellten Geräten, Funklöchern, verlorenen Antworten und
   Zufallsläufen (`RoundSimulationTest`).
 - `:data`, Paket `data.round`: `SupabaseAuthApi` (wie DrinkWithMe `AuthApi`: `authorize`, `token?grant_type=pkce`,
   `token?grant_type=refresh_token`, `logout?scope=local`), `SupabaseRoundApi` (PostgREST und Funktionen aus 8.3).
 - `:database`: Room-Version 2 mit `round_link`, `evening_bases`, `player_bases` (`RoomRoundStore`), Migration 1 → 2.
 - `:app`: `app.round` (Sitzung verschlüsselt über `EncryptedValues`, Rückkehr aus dem Browser in `MainActivity`
-  mit `launchMode="singleTask"`, Abgleich im Vordergrund und per WorkManager), Bildschirm „Gemeinsame Runde“
-  (`Screen.Round`), Hinweise auf Start-Bildschirm und Abend.
-- Web: `web/src/core/round` (Port von `EveningMerge`, `DuplicateCheck`, `InviteLinks`, `RoundSync` mit Golden-Tests
+  mit `launchMode="singleTask"`, Abgleich im Vordergrund und per WorkManager), Bildschirm „Gemeinsame Runden“
+  (`Screen.Round`), Hinweise und Runden-Auswahl auf dem Start-Bildschirm, Hinweise im Abend.
+- Web: `web/src/core/round` (Port von `EveningMerge`, `DuplicateCheck`, `InviteLinks`, `RoundSync`, `RoundConnection`,
+  `RoundNames` mit Golden-Tests
   aus `WebGoldenTest`), `web/src/round` (Supabase-Zugriff, `RoundStore` in IndexedDB), Seiten `#/runde` und
   `#/einladung/<token>`; Anmeldung mit `signInWithOAuth` (PKCE), Rückkehr auf die Start-Adresse. Weil der Browser
   anders speichert als Room, gilt dort zusätzlich:
@@ -720,8 +747,41 @@ Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disc
 
 ### 8.9 Oberfläche (Android-App und Web-App gleich, Texte wörtlich)
 
-**Einstieg:** Auf dem Start-Bildschirm und in den Einstellungen eine Zeile „Gemeinsame Runde“. Ohne Runde mit dem
-Untertitel „Alle tragen vom eigenen Handy ein“, mit Runde „Runde: ‹Name›“ und der Statuszeile.
+**Einstieg:** Auf dem Start-Bildschirm und in den Einstellungen eine Zeile „Gemeinsame Runden“ (bis zum 21.11.2026
+„Gemeinsame Runde“); Tippen öffnet den Bildschirm „Gemeinsame Runden“. Ohne Runde mit dem Untertitel „Alle tragen vom
+eigenen Handy ein“, mit Runde darunter „Runde: ‹Name›“ und die Statuszeile. Steht auf dem Start-Bildschirm die
+Runden-Auswahl, entfällt dort „Runde: ‹Name›“ (die Auswahl zeigt den Namen).
+
+**Runden-Auswahl auf dem Start-Bildschirm** (seit dem 21.11.2026, Wunsch des Nutzers): In der Zeile „Gemeinsame
+Runden“, unter Überschrift und Statuszeile, eine Auswahlliste mit der Beschriftung „Runde“; nur die Überschrift mit der
+Statuszeile öffnet den Bildschirm. Die Auswahl steht da, wenn das Gerät mit einer Runde verbunden ist, keine neue
+Anmeldung nötig ist (`needsSignIn` gilt nicht), die Runden des Kontos gelesen sind und es außer der verbundenen
+mindestens eine weitere gibt. Einträge: die Runden aus `my_rounds` in deren Reihenfolge; fehlt die verbundene darin,
+steht sie vorn. Ausgewählt ist die verbundene. Jeder Eintrag heißt wie die Runde; haben zwei Einträge denselben Namen
+(`RoundNames.same`), steht bei beiden dahinter „ (‹Mitglieder›)“: die `member_names` mit „, “ getrennt, ohne Namen
+„‹n› Mitglieder“ (bei 1: „1 Mitglied“). Wer eine andere Runde wählt, bekommt die „Rückfrage vor dem Wechseln“
+(unten); bis zum Wechsel zeigt die Auswahl weiter die verbundene Runde. Solange die App vorher abgleicht oder wechselt,
+ist die Auswahl gesperrt und darunter steht „Einen Moment …“. Fehler (Texte wie auf dem Bildschirm) und Meldungen
+stehen unter der Auswahl, bis man sie mit „OK“ wegtippt. Gelesen werden die Runden, wenn der Start-Bildschirm
+erscheint und jemand angemeldet ist, sowie nach jedem Anlegen, Beitreten, Wechseln und Verlassen; scheitert das
+Lesen, fehlt die Auswahl (ohne Fehlertext).
+
+**Rückfrage vor dem Wechseln** (Start-Bildschirm und „Gemeinsame Runden“, nur mit verbundener Runde): Vorher gleicht
+die App vollständig ab (Knöpfe gesperrt, „Einen Moment …“). Scheitert das, kommt statt der Rückfrage der Fehlertext;
+gibt es die verbundene Runde nicht mehr, die Meldung nach `Detached`. Sonst je nach Anlass:
+
+| Anlass | Titel | Erster Satz | Knopf |
+|---|---|---|---|
+| eine andere Runde wählen | „Zur Runde ‹Ziel› wechseln?“ | „Auf diesem Gerät stehen dann die Abende und Spieler von ‹Ziel›.“ | „Wechseln“ |
+| einer weiteren Runde beitreten | „Der Runde ‹Ziel› beitreten?“ | „Auf diesem Gerät stehen dann die Abende und Spieler von ‹Ziel›.“ | „Beitreten“ |
+| neue Runde anlegen | „Neue Runde ‹Ziel› anlegen?“ | „Auf diesem Gerät beginnt dann die neue, leere Runde.“ | „Anlegen“ |
+
+Danach immer „Die Abende von ‹bisherige Runde› bleiben dort; du kannst jederzeit zurückwechseln.“ Wartet nach dem
+Abgleich noch etwas, zusätzlich: „‹n› Änderungen sind noch nicht hochgeladen und gehen dabei verloren.“ (bei 1:
+„1 Änderung ist noch nicht hochgeladen und geht dabei verloren.“) Zweiter Knopf „Abbrechen“. ‹Ziel› beim Beitreten
+ist der Name aus `invite_info`. Vor der Rückfrage zum Anlegen prüft die App den Namen (Fehlertexte unten), vor der
+zum Beitreten die Einladung (`invite_info`); gehört sie zur verbundenen Runde, kommt statt der Rückfrage die Meldung
+„Du bist schon in dieser Runde.“, und die Einladung wird vergessen.
 
 **Abende auf dem Start-Bildschirm:** Ist das Gerät mit einer Runde verbunden, trägt jede Karte eines Abends (auch
 „Abend läuft“) unter dem Titel die Marke „Runde: ‹Name›“ (eine Zeile, zu Lange endet mit „…“, umrandet, nicht nur
@@ -730,7 +790,7 @@ Gerät“); ohne Runde gibt es keine Marke. Seit dem 21.11.2026 (Wunsch des Nutz
 hatte).
 
 **Statuszeile** (auch als Beschreibung des Wolken-Symbols in der Kopfzeile eines Abends, dort mit „Gemeinsame
-Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutreffende Zeile:
+Runde: “ davor; Tippen öffnet „Gemeinsame Runden“). Es gilt die erste zutreffende Zeile:
 
 | Lage | Text |
 |---|---|
@@ -743,7 +803,7 @@ Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutr
 | es wartet etwas | „‹n› Änderungen warten“ (bei 1: „1 Änderung wartet“) |
 | sonst | „Abgeglichen“ |
 
-**Bildschirm „Gemeinsame Runde“**, je nach Lage:
+**Bildschirm „Gemeinsame Runden“**, je nach Lage:
 
 - *Kein Server eingerichtet:* „Der Server ist noch nicht eingerichtet.“ – „Sobald er eingerichtet ist, können alle
   vom eigenen Handy eintragen.“
@@ -754,13 +814,14 @@ Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutr
 - *Angemeldet, ohne Runde:* „Angemeldet als ‹E-Mail›“ (ohne bekannte Adresse nur „Angemeldet“). Wartet eine
   Einladung: Karte „Einladung in die Runde ‹Name›“ (‹n› Mitglieder; solange der Name noch geladen wird, „…“), Knopf
   „Beitreten“, darunter „Einladung verwerfen“. Hat das Konto Runden: „Deine Runden“, je Runde ‹Name› und
-  „‹n› Mitglieder“, Knöpfe „Auf diesem Gerät verwenden“ und „Verlassen“ (Rückfrage „‹Name› verlassen?“ – „Du gehörst
+  „‹n› Mitglieder“ (bei 1: „1 Mitglied“), dahinter „: ‹Namen›“, wenn `member_names` nicht leer ist (mit „, “
+  getrennt), Knöpfe „Auf diesem Gerät verwenden“ und „Verlassen“ (Rückfrage „‹Name› verlassen?“ – „Du gehörst
   danach nicht mehr zu dieser Runde. Auf diesem Gerät ändert sich nichts.“; ist das Konto das einzige Mitglied,
   zusätzlich „Du bist das letzte Mitglied: Die Runde wird mit allen Abenden auf dem Server gelöscht.“; Knöpfe
   „Verlassen“, „Abbrechen“). Ließen sich die Runden nicht laden: „Deine Runden ließen sich nicht laden.“ mit dem
   Knopf „Erneut versuchen“ (sonst sähe es auf einem neuen Handy aus, als gäbe es keine). „Neue Runde anlegen“: Feld
-  „Name der Runde“ (Vorgabe „Schafkopfrunde“), Hinweis „Alle Abende und Spieler dieses Geräts kommen mit in die
-  Runde.“, Knopf „Runde anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten „Abmelden“
+  „Name der Runde“ (Vorgabe nach 8.7, „Eindeutige Namen“), Hinweis „Alle Abende und Spieler dieses Geräts kommen mit
+  in die Runde.“, Knopf „Runde anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten „Abmelden“
   (Rückfrage „Abmelden?“ – „Dieses Gerät wird abgemeldet.“).
 - *Rückfrage vor dem Beitreten oder Verwenden*, wenn `hasOwnData`: „Daten dieses Geräts ersetzen?“ – „Auf diesem
   Gerät liegen ‹n› Abende. Sie werden durch die Daten der Runde ersetzt. Sichere sie vorher, wenn du sie behalten
@@ -775,7 +836,14 @@ Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutr
 - *Verbunden:* ‹Name der Runde›, Statuszeile, Knopf „Jetzt abgleichen“. „Mitglieder“: je Mitglied der Name seines
   Spielers, das eigene mit „(du)“, ohne Spieler „Noch ohne Namen“. Knopf „Einladen“: erzeugt den Link und gibt ihn
   weiter (Android: Teilen; Web: Teilen oder Kopieren) mit dem Text „Komm in unsere Schafkopfrunde ‹Name›: ‹Link›“;
-  darunter „Der Link gilt 14 Tage.“ (Ein Link, der jünger als 13 Tage ist, wird wieder angeboten, siehe 8.4.) Unten
+  darunter „Der Link gilt 14 Tage.“ (Ein Link, der jünger als 13 Tage ist, wird wieder angeboten, siehe 8.4.)
+  Seit dem 21.11.2026 außerdem (wie die Rückfragen in „Rückfrage vor dem Wechseln“ oben): Wartet eine Einladung
+  (geöffneter Link), steht ganz oben die Karte „Einladung in die Runde ‹Name›“ wie ohne Runde; „Beitreten“ führt zur
+  Rückfrage „Der Runde ‹Ziel› beitreten?“. Unter „Einladen“: „Deine anderen Runden“, sobald sie gelesen sind und es
+  welche gibt (je Runde wie bei „Deine Runden“, aber mit den Knöpfen „Wechseln“ und „Verlassen“); ließen sie sich nicht
+  laden, „Deine Runden ließen sich nicht laden.“ mit „Erneut versuchen“. „Neue Runde anlegen“: Feld „Name der Runde“
+  (Vorgabe nach 8.7), Hinweis „Die neue Runde beginnt leer. Die Abende von ‹Name der Runde› bleiben dort.“, Knopf
+  „Runde anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten
   „Runde verlassen“ (Rückfrage „Runde verlassen?“ – „Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt
   in der Runde.“; ist das Konto das einzige Mitglied, stattdessen „Du bist das letzte Mitglied: Die Runde wird mit
   allen Abenden auf dem Server gelöscht. Auf diesem Gerät bleiben sie als Kopie.“) und „Abmelden“ (Rückfrage
@@ -783,8 +851,9 @@ Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutr
   steht in beiden Rückfragen
   zusätzlich: „‹n› Änderungen sind noch nicht hochgeladen und kommen nicht mehr in der Runde an.“ (bei 1: „1
   Änderung ist noch nicht hochgeladen und kommt nicht mehr in der Runde an.“)
-- *Verbunden, Anmeldung abgelaufen:* statt „Jetzt abgleichen“, „Wer bist du?“, „Einladen“ und „Runde verlassen“
-  nur der Knopf „Mit Google anmelden“; Mitglieder und „Abmelden“ bleiben.
+- *Verbunden, Anmeldung abgelaufen:* statt „Jetzt abgleichen“, „Wer bist du?“, „Einladen“, der Einladungskarte,
+  „Deine anderen Runden“, „Neue Runde anlegen“, „Einladung einlösen“ und „Runde verlassen“ nur der Knopf „Mit Google
+  anmelden“; Mitglieder und „Abmelden“ bleiben.
 - Solange eine Aktion läuft, sind die Knöpfe gesperrt, und unten steht „Einen Moment …“. Das gilt auch, während die
   Anmeldung nach der Rückkehr aus dem Browser eingelöst wird.
 
@@ -799,14 +868,15 @@ nur Android, wenn kein Browser da ist: „Für die Anmeldung braucht es einen Br
 Anmeldung räumt ältere Meldungen zur Anmeldung weg.
 
 **Fehlertexte:** `invalid_invite` „Die Einladung ist abgelaufen oder ungültig.“; kein Code im eingefügten Text „Das
-ist kein gültiger Einladungslink.“; `name_taken` „Den Namen gibt es in der Runde schon.“; `invalid_name` „Bitte
+ist kein gültiger Einladungslink.“; `name_taken` „Den Namen gibt es in der Runde schon.“ (beim Anlegen einer Runde:
+„Du hast schon eine Runde mit diesem Namen.“); `invalid_name` „Bitte
 einen Namen mit 1 bis 24 Zeichen eingeben.“ (Runde: „… 1 bis 40 Zeichen …“); `player_taken` „Diesen Spieler hat
 gerade jemand anders gewählt.“; `already_claimed` „Du hast schon einen Namen in dieser Runde.“; `limit_reached`
 „Mehr geht nicht: Die Grenze für Runden, Mitglieder oder Einladungen ist erreicht.“; keine Verbindung „Keine
 Verbindung. Bitte später noch einmal versuchen.“; sonst „Das hat nicht geklappt. Bitte später noch einmal
 versuchen.“
 
-**Hinweise aus dem Abgleich** (`SyncNotice`, auf dem Bildschirm „Gemeinsame Runde“ unter der Überschrift
+**Hinweise aus dem Abgleich** (`SyncNotice`, auf dem Bildschirm „Gemeinsame Runden“ unter der Überschrift
 „Hinweise“, mit dem Knopf „Hinweise ausblenden“):
 `name_locked` „‹nowName› hat den Namen selbst festgelegt. Er bleibt.“; `name_taken` ohne `nowName` „Den Namen
 ‹name› gibt es in der Runde schon. Der neue Spieler wurde nicht angelegt.“; `name_taken` mit `nowName` „Den Namen
@@ -834,7 +904,8 @@ den Code von Hand kopieren.“). Hervorgehoben ist auf dem iPhone im Browser „
 Android-App öffnen“. Auf einem iPhone, das die Seite nicht als App vom Home-Bildschirm
 zeigt (Links aus Nachrichten öffnen sich in Safari, und die App vom Home-Bildschirm hat einen eigenen Speicher):
 „Benutzt du den Schafkopf Tracker vom Home-Bildschirm? Dann kopiere den Code, öffne die App über ihr Symbol und füge
-ihn unter „Gemeinsame Runde“ → „Einladung einlösen“ ein.“ Der Knopf „In der Android-App öffnen“ nur auf Android;
+ihn unter „Gemeinsame Runden“ → „Einladung einlösen“ ein.“ Der Knopf „In der Android-App öffnen“ nur auf Android;
 „Hier beitreten“ (weiter nach `#/runde`, der Code wird gemerkt) immer. Ist dieses Gerät schon mit einer Runde
-verbunden, wird der Code nicht gemerkt; statt „Hier beitreten“ steht „Dieses Gerät ist schon mit der Runde ‹Name›
-verbunden.“ mit dem Knopf „Zur gemeinsamen Runde“. Ohne gültigen Code: „Das ist kein gültiger Einladungslink.“
+verbunden, steht darüber „Dieses Gerät ist schon mit der Runde ‹Name› verbunden. Du kannst trotzdem beitreten und dann
+zwischen den Runden wechseln.“ (bis zum 21.11.2026 gab es dann nur „Zur gemeinsamen Runde“). Ohne gültigen Code: „Das
+ist kein gültiger Einladungslink.“

@@ -163,6 +163,17 @@ pruefe "Danach gibt es die Runde nicht mehr (auch keine Abende und Spieler)" "0 
                    (select count(*) from public.round_evenings where round_id = '$runde') || ' ' ||
                    (select count(*) from public.round_players where round_id = '$runde')")"
 
+# Seit dem 21.11.2026 hat ein Konto keine zwei Runden desselben Namens (docs/ARCHITEKTUR.md, 8.7); lock_user reiht
+# zwei Geräte desselben Kontos hintereinander, so sieht das zweite die Runde des ersten.
+echo "7. Dasselbe Konto legt auf zwei Geräten gleichzeitig zwei Runden desselben Namens an"
+starte_a 13 "select public.create_round('Doppelt') is not null" || fehler=1
+laufe_b 13 "select public.create_round('doppelt') is not null"
+pruefe "Die erste Runde entsteht" "true" "$(von A a)"
+pruefe "Die zweite wartet und wird abgewiesen" "name_taken" "$(von B b)"
+pruefe "Das Konto hat genau eine Runde dieses Namens" "1" \
+  "$(admin "select count(*) from public.round_members m join public.rounds r on r.id = m.round_id
+             where m.user_id = '$(konto 13)' and lower(r.name) = 'doppelt'")"
+
 # Die Konten löschen: Der Trigger auf auth.users entfernt dabei ihre Mitgliedschaften und die leeren Runden.
 runden="$(admin "select coalesce(string_agg(distinct quote_literal(round_id), ', '), 'null')
                    from public.round_members where user_id::text like '99999999-9999-4999-8999-%'")"

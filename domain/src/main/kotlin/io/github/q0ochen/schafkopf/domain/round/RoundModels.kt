@@ -86,7 +86,13 @@ data class RoundHead(
     val rulesUnreadable: Boolean = false,
 )
 
-/** Eine Runde des angemeldeten Kontos in der Übersicht. */
+/**
+ * Eine Runde des angemeldeten Kontos in der Übersicht.
+ *
+ * @property memberNames Die Namen der Spieler, die Mitglieder mit „Das bin ich“ übernommen haben (auch der eigene),
+ *   sortiert; damit lassen sich Runden desselben Namens unterscheiden. Leer, wenn noch niemand einen Namen hat oder
+ *   der Server die Angabe nicht kennt (vor dem 21.11.2026).
+ */
 data class RoundSummary(
     val id: RoundId,
     val name: String,
@@ -94,6 +100,7 @@ data class RoundSummary(
     val memberCount: Int,
     val myPlayerId: PlayerId?,
     val isCreator: Boolean,
+    val memberNames: List<String> = emptyList(),
 )
 
 /** Was eine Einladung verrät, bevor man beitritt. */

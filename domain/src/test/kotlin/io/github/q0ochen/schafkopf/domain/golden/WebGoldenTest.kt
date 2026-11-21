@@ -9,6 +9,9 @@ import io.github.q0ochen.schafkopf.domain.evening.SettleUp
 import io.github.q0ochen.schafkopf.domain.round.DuplicateCheck
 import io.github.q0ochen.schafkopf.domain.round.EveningMerge
 import io.github.q0ochen.schafkopf.domain.round.InviteLinks
+import io.github.q0ochen.schafkopf.domain.round.RoundId
+import io.github.q0ochen.schafkopf.domain.round.RoundNames
+import io.github.q0ochen.schafkopf.domain.round.RoundSummary
 import io.github.q0ochen.schafkopf.domain.rules.PayoutCalculator
 import io.github.q0ochen.schafkopf.domain.rules.PayoutRule
 import io.github.q0ochen.schafkopf.domain.rules.ScoreCalculator
@@ -113,6 +116,7 @@ internal object WebGolden {
             "duplicates" to RoundGoldenCases.duplicateCases().map(::duplicateCase),
             "invites" to RoundGoldenCases.inviteCases().map(::inviteCase),
             "edits" to EditGoldenCases.cases().map(::editCase),
+            "roundNames" to RoundGoldenCases.roundNameCases().map(::roundNameCase),
         )
         return buildString {
             append("{\n")
@@ -252,6 +256,26 @@ internal object WebGolden {
         put("id", case.id)
         put("text", case.text)
         put("token", InviteLinks.tokenFrom(case.text)?.let(::JsonPrimitive) ?: JsonNull)
+    }
+
+    /**
+     * Namen von Runden (`RoundNames`): [RoundNameCase.text] bereinigt, gültig und unter den Runden [RoundNameCase.names]
+     * schon vergeben; dazu der Vorschlag für ein neues Feld und welche der Runden gleich heißen (als Stellen in `names`).
+     */
+    private fun roundNameCase(case: RoundNameCase): Pair<String, JsonObject> {
+        val rounds = case.names.mapIndexed { index, name ->
+            RoundSummary(RoundId("$index"), name, rev = 1, memberCount = 1, myPlayerId = null, isCreator = true)
+        }
+        return case.id to buildJsonObject {
+            put("id", case.id)
+            put("names", JsonArray(case.names.map(::JsonPrimitive)))
+            put("text", case.text)
+            put("clean", RoundNames.clean(case.text))
+            put("valid", RoundNames.valid(case.text))
+            put("taken", RoundNames.taken(case.text, rounds))
+            put("suggest", RoundNames.suggest(rounds))
+            put("duplicates", JsonArray(RoundNames.duplicates(rounds).map { JsonPrimitive(it.value.toInt()) }))
+        }
     }
 
     /**

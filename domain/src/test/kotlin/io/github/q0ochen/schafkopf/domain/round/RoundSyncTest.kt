@@ -109,16 +109,20 @@ class RoundSyncTest {
 
         assertNull(one.link())
         assertEquals(1, one.api.myRounds().size)
-        // Der zweite Versuch nimmt die leere Runde vom ersten.
-        assertTrue(one.connection.create("  Stammtisch ", one.userId, PLACEHOLDERS) is SyncOutcome.Synced)
+        // Der zweite Versuch nimmt die leere Runde vom ersten, auch mit anderer Groß- und Kleinschreibung.
+        assertTrue(one.connection.create("  STAMMTISCH ", one.userId, PLACEHOLDERS) is SyncOutcome.Synced)
         assertEquals(listOf(one.roundId()), one.api.myRounds().map { it.id })
-        // Eine Runde, in der schon etwas liegt, oder eine mit anderem Namen wird nie wiederverwendet.
+        assertEquals("Stammtisch", one.link()?.roundName)
+        // Eine Runde, in der schon etwas liegt, wird nie wiederverwendet; ihren Namen gibt es dann kein zweites Mal.
         one.connection.disconnect()
-        assertTrue(one.connection.create("Stammtisch", one.userId, PLACEHOLDERS) is SyncOutcome.Synced)
-        assertEquals(2, one.api.myRounds().size)
-        one.connection.disconnect()
+        assertEquals(RoundError.NAME_TAKEN, errorOf { one.connection.create("Stammtisch", one.userId, PLACEHOLDERS) })
+        assertNull(one.link())
+        assertEquals(1, one.api.myRounds().size)
+        // Eine leere Runde mit anderem Namen wird ebenso wenig wiederverwendet.
+        one.session.loseNextAnswer = true
+        assertEquals(RoundError.OFFLINE, errorOf { one.connection.create("Leer", one.userId, PLACEHOLDERS) })
         assertTrue(one.connection.create("Zweite Runde", one.userId, PLACEHOLDERS) is SyncOutcome.Synced)
-        assertEquals(3, one.api.myRounds().size)
+        assertEquals(listOf("Stammtisch", "Leer", "Zweite Runde"), one.api.myRounds().map { it.name })
     }
 
     @Test
