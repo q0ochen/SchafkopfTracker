@@ -106,6 +106,11 @@ test("anmelden, Runde anlegen, „Das bin ich“ und einladen", async ({ page })
   await page.getByRole("button", { name: "Zurück" }).click();
   await expect(roundRow(page)).toContainText("Runde: Stammtisch");
   await expect(roundRow(page)).toContainText("Abgeglichen");
+  // Jeder Abend sagt, zu welcher Runde er gehört (docs/ARCHITEKTUR.md 8.9).
+  const evenings = page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem");
+  await expect(evenings).toHaveCount(1);
+  await expect(evenings.first().locator(".round-label")).toHaveText("Runde: Stammtisch");
+  await expectAccessible(page);
 });
 
 test("zwei Handys: einladen, beitreten, beide tragen ein und sehen dasselbe", async ({ page, browser }) => {

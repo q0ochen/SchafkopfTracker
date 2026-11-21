@@ -723,6 +723,12 @@ Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disc
 **Einstieg:** Auf dem Start-Bildschirm und in den Einstellungen eine Zeile „Gemeinsame Runde“. Ohne Runde mit dem
 Untertitel „Alle tragen vom eigenen Handy ein“, mit Runde „Runde: ‹Name›“ und der Statuszeile.
 
+**Abende auf dem Start-Bildschirm:** Ist das Gerät mit einer Runde verbunden, trägt jede Karte eines Abends (auch
+„Abend läuft“) unter dem Titel die Marke „Runde: ‹Name›“ (eine Zeile, zu Lange endet mit „…“, umrandet, nicht nur
+über Farbe). Ein Gerät hängt an höchstens einer Runde, und alle Abende darauf gehören zu ihr (8.1, „Eine Runde je
+Gerät“); ohne Runde gibt es keine Marke. Seit dem 21.11.2026 (Wunsch des Nutzers, nachdem er die Runde gewechselt
+hatte).
+
 **Statuszeile** (auch als Beschreibung des Wolken-Symbols in der Kopfzeile eines Abends, dort mit „Gemeinsame
 Runde: “ davor; Tippen öffnet „Gemeinsame Runde“). Es gilt die erste zutreffende Zeile:
 

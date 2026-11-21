@@ -572,6 +572,25 @@ Aussagekräftiges Diagramm mit den Spielernamen enthalten ist“.
   um 20:27 zusammengeführt (`8a49ea4`). Läufe auf `main` grün (Android 61, Web-App 36): Web-App neu auf GitHub Pages,
   Testversion 61 (`0.1.0-test.61`) im Release `testversion` und in der F-Droid-Paketquelle.
 
+## Stand am 21.11.2026 (spätabends): Runde an den Abenden, Wunsch „Runden wechseln“
+
+Meldung des Nutzers (21.11.2026, Bildschirmfoto der Startseite der Web-App): Er hatte sich aus einer Runde abgemeldet
+und eine neue angelegt; auf der Startseite „sieht man nicht, zu welcher Runde der Abend gehört“, das solle „als Label
+irgendwo auftauchen“.
+
+- Umgesetzt in beiden Apps (Vertrag `docs/ARCHITEKTUR.md`, 8.9, „Abende auf dem Start-Bildschirm“): Ist das Gerät mit
+  einer Runde verbunden, trägt jede Abend-Karte (auch „Abend läuft“) unter dem Titel die umrandete Marke
+  „Runde: ‹Name›“ (eine Zeile, zu Lange enden mit „…“). Ohne Runde keine Marke. Android: `StartScreen.kt`
+  (`RoundLabel`, Text `start_evening_round`); Web: `StartScreen.tsx`, Klasse `.round-label`. Tests:
+  `RoundScreenshotTest` (Bildschirmfoto 54), `ScreenshotTest.start_mit_laufendem_abend` (ohne Runde keine Marke),
+  `e2e/round.spec.ts` und `e2e/app.spec.ts`. Die Zahl der Tests bleibt gleich (nur neue Prüfungen in alten Tests).
+- Gut zu wissen: Wer eine Runde verlässt oder sich abmeldet, behält die Abende als Kopie; legt er danach eine neue
+  Runde an, kommen diese Kopien mit in die neue Runde (8.9, „Alle Abende und Spieler dieses Geräts kommen mit“). Das
+  ist vermutlich beim Nutzer passiert.
+- Zweiter Wunsch des Nutzers am selben Abend: Auf der Startseite „Gemeinsame Runden“ mit einer Auswahlliste der
+  Runden, in denen man schon war, um zwischen ihnen zu wechseln; die Namen sollen sich nicht doppeln. Noch nicht
+  gebaut; die Rückfrage dazu steht beim Nutzer.
+
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
 Dem Nutzer am 15.11.2026 als Fragen gestellt; Antworten hier nachtragen:

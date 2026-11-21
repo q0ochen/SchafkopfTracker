@@ -785,6 +785,22 @@ button.card {
   vertical-align: middle;
 }
 
+/* Runde eines Abends auf der Startseite (docs/ARCHITEKTUR.md 8.9): umrandet in der Farbe des Textes, damit sie neben
+   „geplant“ und „läuft“ nicht auffällt und in der hervorgehobenen Karte „Abend läuft“ ebenso gut zu lesen ist. */
+.round-label {
+  display: inline-block;
+  max-width: 100%;
+  margin: 2px 0 6px;
+  padding: 1px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .standing-line {
   display: flex;
   justify-content: space-between;

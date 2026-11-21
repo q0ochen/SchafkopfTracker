@@ -45,6 +45,8 @@
     <string name="start_settings">Einstellungen</string>
     <string name="start_evening_running_badge">läuft</string>
     <string name="start_evening_planned_badge">geplant</string>
+    <!-- Runde des Abends auf der Startseite (docs/ARCHITEKTUR.md 8.9). -->
+    <string name="start_evening_round">Runde: %1$s</string>
     <plurals name="games_count">
         <item quantity="one">%1$d Spiel</item>
         <item quantity="other">%1$d Spiele</item>

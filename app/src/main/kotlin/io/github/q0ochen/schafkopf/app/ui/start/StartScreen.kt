@@ -1,5 +1,8 @@
 package io.github.q0ochen.schafkopf.app.ui.start
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -64,7 +67,7 @@ fun StartScreen(navigator: Navigator) {
                     ) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(stringResource(R.string.start_running_title), style = MaterialTheme.typography.titleLarge)
-                            EveningSummary(running)
+                            EveningSummary(running, round.link?.roundName)
                             Button(
                                 onClick = { navigator.open(Screen.Board(running.id)) },
                                 modifier = Modifier
@@ -105,7 +108,7 @@ fun StartScreen(navigator: Navigator) {
 
             items(state.evenings, key = { it.id }) { evening ->
                 Card(onClick = { navigator.open(Screen.Board(evening.id)) }, modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) { EveningSummary(evening) }
+                    Column(modifier = Modifier.padding(16.dp)) { EveningSummary(evening, round.link?.roundName) }
                 }
             }
         }
@@ -154,9 +157,14 @@ private fun RoundRow(round: RoundState, onClick: () -> Unit) {
     }
 }
 
-/** Datum, Zahl der Spiele und die Rangliste eines Abends. */
+/**
+ * Datum, Zahl der Spiele und die Rangliste eines Abends.
+ *
+ * @param roundName Die verbundene Runde. Ein Gerät hängt an höchstens einer Runde, und dann gehören alle Abende darauf
+ *   zu ihr (docs/ARCHITEKTUR.md 8.7 und 8.9); `null` ohne Runde, dann gibt es keine Marke.
+ */
 @Composable
-private fun EveningSummary(evening: EveningCard) {
+private fun EveningSummary(evening: EveningCard, roundName: String?) {
     val date = formatDate(evening.startedAt)
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -176,6 +184,7 @@ private fun EveningSummary(evening: EveningCard) {
                 )
             }
         }
+        roundName?.let { RoundLabel(it) }
         Text(
             text = pluralStringResource(R.plurals.games_count, evening.games, evening.games),
             style = MaterialTheme.typography.bodyMedium,
@@ -194,4 +203,22 @@ private fun EveningSummary(evening: EveningCard) {
             }
         }
     }
+}
+
+/**
+ * Die Marke „Runde: ‹Name›“ in der Karte eines Abends: umrandet in der Farbe des Textes, damit sie neben „geplant“ und
+ * „läuft“ nicht auffällt und in der hervorgehobenen Karte „Abend läuft“ ebenso gut zu lesen ist.
+ */
+@Composable
+private fun RoundLabel(roundName: String) {
+    Text(
+        text = stringResource(R.string.start_evening_round, roundName),
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .padding(vertical = 2.dp)
+            .border(1.dp, LocalContentColor.current.copy(alpha = 0.7f), RoundedCornerShape(percent = 50))
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+    )
 }

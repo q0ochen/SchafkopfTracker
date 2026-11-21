@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -489,8 +490,12 @@ class RoundScreenshotTest {
         linkedApp(meDeals = true)
         show { StartScreen(Navigator()) }
         compose.waitForText("Runde: Schafkopfrunde")
+        compose.waitForText("Wirtshaus zur Post")
 
         compose.onNodeWithText("Abgeglichen").assertExists()
+        // Jeder Abend sagt, zu welcher Runde er gehört (docs/ARCHITEKTUR.md 8.9): die Zeile der Runde und die Karte.
+        compose.onAllNodesWithText("Runde: Schafkopfrunde").assertCountEquals(2)
+        compose.onNode(hasText("Wirtshaus zur Post", substring = true) and hasText("Runde: Schafkopfrunde")).assertExists()
         capture("54_start_mit_runde")
     }
 

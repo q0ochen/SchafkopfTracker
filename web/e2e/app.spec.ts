@@ -396,6 +396,8 @@ test("Neuer Abend an einem späteren Tag: geplant, nicht in „Abend läuft“",
   await expect(items.first()).toContainText("Schützenhaus");
   await expect(items.first().locator(".badge")).toHaveText("geplant");
   await expect(items.nth(1).locator(".badge")).toHaveText("läuft");
+  // Ohne gemeinsame Runde trägt kein Abend die Marke „Runde: …“ (docs/ARCHITEKTUR.md 8.9).
+  await expect(page.locator(".round-label")).toHaveCount(0);
   await expectAccessible(page);
 
   // Ist der Abend von heute beendet, gibt es keine Karte „Abend läuft“ (der geplante zählt nicht).
