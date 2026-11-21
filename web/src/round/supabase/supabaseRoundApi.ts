@@ -104,6 +104,13 @@ function flag(value: unknown): boolean {
   return value;
 }
 
+/** Eine Liste von Texten; fehlt sie oder ist sie `null` (zum Beispiel bei einem älteren Server), ist sie leer. */
+function texts(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) throw unreadable();
+  return value.map(text);
+}
+
 function codeOf(answer: Answer): string {
   return typeof answer.error?.code === "string" ? answer.error.code : "";
 }
@@ -309,6 +316,8 @@ export class SupabaseRoundApi implements RoundApi {
       memberCount: whole(row.member_count),
       myPlayerId: textOrNull(row.my_player_id),
       isCreator: flag(row.is_creator),
+      // Seit dem 21.11.2026; ein älterer Server liefert die Spalte nicht (docs/ARCHITEKTUR.md 8.3).
+      memberNames: texts(row.member_names),
     }));
   }
 

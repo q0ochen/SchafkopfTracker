@@ -7,11 +7,14 @@ import type { DeviceOs } from "../platform/platform";
 
 /** Der Hinweis fürs iPhone, wenn die Seite nicht als App vom Home-Bildschirm läuft. */
 export const IPHONE_HINT =
-  "Benutzt du den Schafkopf Tracker vom Home-Bildschirm? Dann kopiere den Code, öffne die App über ihr Symbol und füge ihn unter „Gemeinsame Runde“ → „Einladung einlösen“ ein.";
+  "Benutzt du den Schafkopf Tracker vom Home-Bildschirm? Dann kopiere den Code, öffne die App über ihr Symbol und füge ihn unter „Gemeinsame Runden“ → „Einladung einlösen“ ein.";
 
-/** Der Satz, wenn dieses Gerät schon mit einer Runde verbunden ist. */
+/**
+ * Der Satz über „Hier beitreten“, wenn dieses Gerät schon mit einer Runde verbunden ist (seit dem 21.11.2026 geht
+ * Beitreten trotzdem; danach lässt sich zwischen den Runden wechseln).
+ */
 export function alreadyLinkedText(roundName: string): string {
-  return `Dieses Gerät ist schon mit der Runde ${roundName} verbunden.`;
+  return `Dieses Gerät ist schon mit der Runde ${roundName} verbunden. Du kannst trotzdem beitreten und dann zwischen den Runden wechseln.`;
 }
 
 export interface InvitePageInput {
@@ -23,24 +26,25 @@ export interface InvitePageInput {
 }
 
 /**
+ * „Hier beitreten“ (weiter zu „Gemeinsame Runden“, der Code wird gemerkt) gibt es immer.
+ *
  * @property iphoneHint Der Hinweis fürs iPhone (nur auf iOS außerhalb der App vom Home-Bildschirm).
  * @property androidApp Der Knopf „In der Android-App öffnen“ (nur auf Android).
- * @property joinHere „Hier beitreten“; ist das Gerät schon verbunden, stattdessen der Satz dazu mit „Zur gemeinsamen
- *   Runde“ (der Code wird dann nicht gemerkt).
- * @property primary Der hervorgehobene Knopf: Am iPhone im Browser ist es „Code kopieren“, auf Android die App,
- *   sonst „Hier beitreten“ bzw. „Zur gemeinsamen Runde“.
+ * @property alreadyLinked Das Gerät ist schon mit einer Runde verbunden: Über „Hier beitreten“ steht der Satz dazu
+ *   ({@link alreadyLinkedText}).
+ * @property primary Der hervorgehobene Knopf: Am iPhone im Browser ist es „Code kopieren“, auf Android die App, sonst
+ *   „Hier beitreten“.
  */
 export interface InvitePage {
   readonly iphoneHint: boolean;
   readonly androidApp: boolean;
-  readonly joinHere: boolean;
-  readonly primary: "copy" | "android" | "join" | "round";
+  readonly alreadyLinked: boolean;
+  readonly primary: "copy" | "android" | "join";
 }
 
 export function invitePage({ os, standalone, linkedRound }: InvitePageInput): InvitePage {
   const iphoneHint = os === "ios" && !standalone;
   const androidApp = os === "android";
-  const joinHere = linkedRound === null;
-  const primary = iphoneHint ? "copy" : androidApp ? "android" : joinHere ? "join" : "round";
-  return { iphoneHint, androidApp, joinHere, primary };
+  const primary = iphoneHint ? "copy" : androidApp ? "android" : "join";
+  return { iphoneHint, androidApp, alreadyLinked: linkedRound !== null, primary };
 }

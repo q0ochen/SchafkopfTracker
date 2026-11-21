@@ -379,6 +379,8 @@ export class FakeSupabase {
     try {
       switch (name) {
         case "create_round":
+          // Wie der echte Server (seit dem 21.11.2026): Ein Name, den das Konto schon für eine seiner Runden hat
+          // (bereinigt, ohne Groß/Klein), ergibt `name_taken`, geprüft vor der Obergrenze `limit_reached`.
           return { status: 200, body: await caller.createRound(text("p_name")) };
         case "my_rounds":
           return {
@@ -390,6 +392,8 @@ export class FakeSupabase {
               member_count: round.memberCount,
               my_player_id: round.myPlayerId,
               is_creator: round.isCreator,
+              // Seit dem 21.11.2026: die Namen der Spieler, die Mitglieder übernommen haben, ohne Groß/Klein sortiert.
+              member_names: [...round.memberNames],
             })),
           };
         case "create_invite":

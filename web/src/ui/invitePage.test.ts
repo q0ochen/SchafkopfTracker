@@ -44,7 +44,7 @@ describe("Einladungsseite", () => {
     expect(invitePage({ os: "ios", standalone: false, linkedRound: null })).toEqual({
       iphoneHint: true,
       androidApp: false,
-      joinHere: true,
+      alreadyLinked: false,
       primary: "copy",
     });
   });
@@ -53,7 +53,7 @@ describe("Einladungsseite", () => {
     expect(invitePage({ os: "ios", standalone: true, linkedRound: null })).toEqual({
       iphoneHint: false,
       androidApp: false,
-      joinHere: true,
+      alreadyLinked: false,
       primary: "join",
     });
   });
@@ -62,7 +62,7 @@ describe("Einladungsseite", () => {
     expect(invitePage({ os: "android", standalone: false, linkedRound: null })).toEqual({
       iphoneHint: false,
       androidApp: true,
-      joinHere: true,
+      alreadyLinked: false,
       primary: "android",
     });
   });
@@ -71,20 +71,28 @@ describe("Einladungsseite", () => {
     expect(invitePage({ os: "other", standalone: false, linkedRound: null })).toEqual({
       iphoneHint: false,
       androidApp: false,
-      joinHere: true,
+      alreadyLinked: false,
       primary: "join",
     });
   });
 
-  it("ist das Gerät schon verbunden, kein „Hier beitreten“, sondern der Weg zur Runde", () => {
-    expect(invitePage({ os: "other", standalone: false, linkedRound: "Stammtisch" })).toMatchObject({ joinHere: false, primary: "round" });
-    expect(invitePage({ os: "ios", standalone: false, linkedRound: "Stammtisch" })).toMatchObject({ joinHere: false, iphoneHint: true, primary: "copy" });
-    expect(alreadyLinkedText("Stammtisch")).toBe("Dieses Gerät ist schon mit der Runde Stammtisch verbunden.");
+  it("ist das Gerät schon verbunden, steht der Satz dazu über „Hier beitreten“; beitreten geht trotzdem", () => {
+    expect(invitePage({ os: "other", standalone: false, linkedRound: "Stammtisch" })).toEqual({
+      iphoneHint: false,
+      androidApp: false,
+      alreadyLinked: true,
+      primary: "join",
+    });
+    expect(invitePage({ os: "ios", standalone: false, linkedRound: "Stammtisch" })).toMatchObject({ alreadyLinked: true, iphoneHint: true, primary: "copy" });
+    expect(invitePage({ os: "android", standalone: false, linkedRound: "Stammtisch" })).toMatchObject({ alreadyLinked: true, primary: "android" });
+    expect(alreadyLinkedText("Stammtisch")).toBe(
+      "Dieses Gerät ist schon mit der Runde Stammtisch verbunden. Du kannst trotzdem beitreten und dann zwischen den Runden wechseln.",
+    );
   });
 
   it("der Hinweis fürs iPhone wörtlich", () => {
     expect(IPHONE_HINT).toBe(
-      "Benutzt du den Schafkopf Tracker vom Home-Bildschirm? Dann kopiere den Code, öffne die App über ihr Symbol und füge ihn unter „Gemeinsame Runde“ → „Einladung einlösen“ ein.",
+      "Benutzt du den Schafkopf Tracker vom Home-Bildschirm? Dann kopiere den Code, öffne die App über ihr Symbol und füge ihn unter „Gemeinsame Runden“ → „Einladung einlösen“ ein.",
     );
   });
 });

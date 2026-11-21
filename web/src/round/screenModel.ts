@@ -1,36 +1,35 @@
 /*
- * Was der Bildschirm „Gemeinsame Runde“ über den Stand der Runde hinaus braucht (in der Android-App `RoundViewModel`):
- * die Runden des Kontos, die wartende Einladung, Rückfragen, Fehler und ob gerade eine Aktion läuft. Reine Logik
- * ohne Oberfläche, damit sie sich prüfen lässt.
+ * Was der Bildschirm „Gemeinsame Runden“ über den Stand der Runde hinaus braucht (in der Android-App `RoundViewModel`):
+ * die wartende Einladung, Rückfragen, Fehler, Meldungen und ob gerade eine Aktion läuft. Die Runden des Kontos stehen
+ * im Zustand der Steuerung (`RoundState.rounds`), damit der Start-Bildschirm dieselbe Liste sieht; solange der
+ * Bildschirm offen ist, hält er sie aktuell. Reine Logik ohne Oberfläche, damit sie sich prüfen lässt.
+ *
+ * Ohne verbundene Runde fragt Beitreten und Verwenden „Daten dieses Geräts ersetzen?“, wenn auf dem Gerät etwas liegt.
+ * Mit verbundener Runde gleichen Wechseln, Beitreten und Anlegen sie vorher vollständig ab und fragen dann „Zur Runde
+ * ‹Ziel› wechseln?“ bzw. „Der Runde ‹Ziel› beitreten?“ und „Neue Runde ‹Ziel› anlegen?“ (docs/ARCHITEKTUR.md 8.9).
  */
-import { DeviceStorageError } from "../app/store";
 import type { PlayerId } from "../core/model";
 import { InviteLinks } from "../core/round/InviteLinks";
-import { RoundException, type InviteInfo, type RoundError, type RoundSummary } from "../core/round/RoundModels";
+import { RoundException, type InviteInfo, type RoundSummary } from "../core/round/RoundModels";
+import { RoundNames } from "../core/round/RoundNames";
+import { prepareSwitch, roundNameProblem, runSwitch, stillValid, uiErrorOf, type RoundUiError, type SwitchConfirm, type SwitchTarget } from "./actions";
 import type { RoundController } from "./controller";
+import type { RoundMessage } from "./texts";
 
-/** Was beim Beitreten oder Verwenden einer Runde noch bestätigt werden muss. */
+export type { RoundUiError } from "./actions";
+
+/** Was beim Beitreten oder Verwenden einer Runde ohne verbundene Runde noch bestätigt werden muss. */
 export type PendingAttach = { readonly kind: "join"; readonly token: string } | { readonly kind: "use"; readonly round: RoundSummary };
 
 /** Eine Rückfrage, bevor das Gerät von der Runde getrennt wird. */
 export type Farewell = "LEAVE" | "SIGN_OUT";
 
-/** Ein Fehler, den der Bildschirm in Worten zeigt. */
-export type RoundUiError =
-  /** Im eingefügten Text steht kein Einladungscode. */
-  | { readonly kind: "NoCode" }
-  /** Der Speicher des Browsers lässt sich gerade nicht verlässlich benutzen (wie in der Statuszeile). */
-  | { readonly kind: "Storage" }
-  /** `roundName`: Es ging um den Namen einer Runde. */
-  | { readonly kind: "Server"; readonly error: RoundError; readonly roundName: boolean };
-
 /**
- * @property rounds Die Runden des Kontos; `null`, solange sie nicht gelesen sind.
- * @property roundsFailed Die Runden ließen sich nicht lesen (kein Netz, Server gestört). Sonst sähe es auf einem neuen
- *   Handy aus, als gäbe es keine.
+ * @property message Eine Meldung dieses Bildschirms („Du bist schon in dieser Runde.“); bleibt, bis man sie wegtippt.
  * @property invite Was die wartende Einladung verrät; `null`, solange unbekannt.
- * @property replace Wartet auf die Rückfrage „Daten dieses Geräts ersetzen?“.
+ * @property replace Wartet auf die Rückfrage „Daten dieses Geräts ersetzen?“ (ohne verbundene Runde).
  * @property eveningCount So viele Abende lägen beim Ersetzen auf dem Gerät.
+ * @property switching Wartet auf die Rückfrage vor dem Wechseln, Beitreten oder Anlegen mit verbundener Runde.
  * @property farewell Wartet auf die Rückfrage vor dem Verlassen oder Abmelden; `farewellPending` Änderungen warten noch.
  * @property leaving Wartet auf die Rückfrage vor dem Verlassen dieser Runde aus „Deine Runden“ (nicht verbunden).
  * @property shareLink Dieser Einladungslink ist erzeugt und kann weitergegeben werden.
@@ -38,11 +37,11 @@ export type RoundUiError =
 export interface RoundUi {
   readonly busy: boolean;
   readonly error: RoundUiError | null;
-  readonly rounds: readonly RoundSummary[] | null;
-  readonly roundsFailed: boolean;
+  readonly message: RoundMessage | null;
   readonly invite: InviteInfo | null;
   readonly replace: PendingAttach | null;
   readonly eveningCount: number;
+  readonly switching: SwitchConfirm | null;
   readonly farewell: Farewell | null;
   readonly farewellPending: number;
   readonly leaving: RoundSummary | null;
@@ -52,11 +51,11 @@ export interface RoundUi {
 const INITIAL: RoundUi = {
   busy: false,
   error: null,
-  rounds: null,
-  roundsFailed: false,
+  message: null,
   invite: null,
   replace: null,
   eveningCount: 0,
+  switching: null,
   farewell: null,
   farewellPending: 0,
   leaving: null,
@@ -67,9 +66,12 @@ export class RoundScreenModel {
   private ui: RoundUi = INITIAL;
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
-  /** Konto, „ohne Runde“ und wartende Einladung als ein Text: Ändert er sich, wird neu nachgesehen. */
-  private watched: string | null = null;
-  /** Zählt die Wechsel von {@link watched}: Eine Antwort, die nach einem Wechsel kommt, gilt nicht mehr. */
+  private readonly unwatchRounds: () => void;
+  /** Konto und verbundene Runde als ein Text: Ändert er sich, gelten offene Rückfragen nicht mehr. */
+  private situation: string | null = null;
+  /** Konto und wartende Einladung als ein Text: Ändert er sich, wird die Einladung neu nachgesehen. */
+  private watchedInvite: string | null = null;
+  /** Zählt die Wechsel von {@link watchedInvite}: Eine Antwort, die nach einem Wechsel kommt, gilt nicht mehr. */
   private generation = 0;
   private disposed = false;
 
@@ -82,12 +84,15 @@ export class RoundScreenModel {
   ) {
     this.unsubscribe = controller.subscribe(() => this.watch());
     this.watch();
+    // Solange der Bildschirm offen ist, braucht er die Runden des Kontos („Deine Runden“, „Deine anderen Runden“).
+    this.unwatchRounds = controller.watchRounds();
   }
 
   /** Der Bildschirm ist zu: nichts mehr beobachten. */
   dispose(): void {
     this.disposed = true;
     this.unsubscribe();
+    this.unwatchRounds();
   }
 
   getUi(): RoundUi {
@@ -107,36 +112,32 @@ export class RoundScreenModel {
     for (const listener of [...this.listeners]) listener();
   }
 
-  /** Sobald jemand angemeldet ist und noch keine Runde verbunden hat: seine Runden und die Einladung nachsehen. */
+  /** Behält Konto, verbundene Runde und wartende Einladung im Blick. */
   private watch(): void {
     const state = this.controller.getState();
     const userId = state.loaded ? (state.account?.userId ?? null) : null;
-    const unlinked = state.link === null;
-    const now = JSON.stringify([userId, unlinked, state.pendingInvite]);
-    if (now === this.watched) return;
-    this.watched = now;
+    const situation = JSON.stringify([userId, state.link?.roundId ?? null]);
+    if (situation !== this.situation) {
+      this.situation = situation;
+      // Rückfragen und ein erzeugter Link gelten nur für die Lage, in der sie entstanden sind.
+      if (this.ui.switching !== null || this.ui.replace !== null || this.ui.leaving !== null || this.ui.shareLink !== null) {
+        this.update({ switching: null, replace: null, leaving: null, shareLink: null });
+      }
+    }
+    const invite = JSON.stringify([userId, state.pendingInvite]);
+    if (invite === this.watchedInvite) return;
+    this.watchedInvite = invite;
     this.generation++;
-    if (userId !== null && unlinked) void this.refresh();
-    else this.update({ rounds: null, roundsFailed: false, invite: null, leaving: null });
+    // Was eine frühere Einladung verriet, gilt nicht für eine andere; solange die neue gelesen wird, steht „…“ da.
+    if (this.ui.invite !== null) this.update({ invite: null });
+    if (userId !== null && state.pendingInvite !== null) void this.readInvite();
   }
 
-  /** Liest die Runden des Kontos und die wartende Einladung. Scheitert das, bleibt der Bildschirm benutzbar. */
-  async refresh(): Promise<void> {
+  /** Liest, was die wartende Einladung verrät. Scheitert das ohne Netz, bleibt sie einfach stehen. */
+  private async readInvite(): Promise<void> {
     const generation = this.generation;
-    let rounds: readonly RoundSummary[] | null = null;
-    try {
-      rounds = await this.controller.myRounds();
-    } catch {
-      // Ohne Netz bleibt die Liste, wie sie war; der Bildschirm sagt, dass sie sich nicht laden ließ.
-    }
-    // Inzwischen abgemeldet, verbunden oder ein anderes Konto: Dann gilt die Antwort nicht mehr.
-    if (generation !== this.generation) return;
-    this.update({ rounds: rounds ?? this.ui.rounds, roundsFailed: rounds === null });
     const token = this.controller.getState().pendingInvite;
-    if (token === null) {
-      this.update({ invite: null });
-      return;
-    }
+    if (token === null) return;
     try {
       const invite = await this.controller.inviteInfo(token);
       // Inzwischen verworfen oder eine andere: Dann gilt die Antwort nicht mehr.
@@ -154,7 +155,10 @@ export class RoundScreenModel {
 
   /** „Erneut versuchen“, wenn sich die Runden nicht laden ließen; solange ruhen die Knöpfe. */
   retry(): Promise<void> {
-    return this.busy(() => this.refresh());
+    return this.busy(async () => {
+      await this.controller.refreshRounds();
+      await this.readInvite();
+    });
   }
 
   // --- Anmelden und Abmelden ---
@@ -193,26 +197,31 @@ export class RoundScreenModel {
     this.update({ leaving: null });
   }
 
-  /** Verlässt die Runde; danach wird die Liste neu geladen. Auf diesem Gerät ändert sich nichts. */
+  /** Verlässt die Runde; danach liest die Steuerung die Runden neu. Auf diesem Gerät ändert sich nichts. */
   confirmLeave(): Promise<void> {
     const round = this.ui.leaving;
     if (round === null) return Promise.resolve();
     this.update({ leaving: null });
-    return this.busy(async () => {
-      try {
-        await this.controller.leaveRound(round.id);
-      } finally {
-        // Auch wenn es scheiterte: Vielleicht hat der Server es doch angenommen (Antwort verloren).
-        await this.refresh();
-      }
-    });
+    return this.busy(() => this.controller.leaveRound(round.id));
   }
 
-  // --- Runde anlegen, beitreten, verwenden ---
+  // --- Runde anlegen, beitreten, verwenden, wechseln ---
 
+  /**
+   * „Runde anlegen“. Erst wird der Name geprüft (1 bis 40 Zeichen, keine Runde des Kontos heißt schon so). Ohne
+   * verbundene Runde wird gleich angelegt; mit verbundener erst abgeglichen und gefragt.
+   */
   create(name: string): Promise<void> {
+    if (this.ui.busy) return Promise.resolve();
+    const problem = roundNameProblem(name, this.controller.getState().rounds ?? []);
+    if (problem !== null) {
+      this.update({ error: { kind: "Server", error: problem, roundName: true } });
+      return Promise.resolve();
+    }
+    const clean = RoundNames.clean(name);
+    if (this.controller.getState().link !== null) return this.busy(() => this.askSwitch({ kind: "create", name: clean }), true);
     return this.busy(async () => {
-      await this.controller.create(name);
+      await this.controller.create(clean);
     }, true);
   }
 
@@ -223,16 +232,21 @@ export class RoundScreenModel {
       this.update({ error: { kind: "NoCode" } });
       return Promise.resolve();
     }
-    return this.requestAttach({ kind: "join", token });
+    return this.join(token);
   }
 
   /** Tritt der Runde der wartenden Einladung bei. */
   joinInvited(): Promise<void> {
     const token = this.controller.getState().pendingInvite;
-    return token === null ? Promise.resolve() : this.requestAttach({ kind: "join", token });
+    return token === null ? Promise.resolve() : this.join(token);
   }
 
+  /**
+   * „Auf diesem Gerät verwenden“ (ohne verbundene Runde) bzw. „Wechseln“ (mit verbundener Runde, „Deine anderen
+   * Runden“).
+   */
   use(round: RoundSummary): Promise<void> {
+    if (this.controller.getState().link !== null) return this.busy(() => this.askSwitch({ kind: "use", round }));
     return this.requestAttach({ kind: "use", round });
   }
 
@@ -240,7 +254,60 @@ export class RoundScreenModel {
     this.controller.rememberInvite(null);
   }
 
-  /** Liegt auf dem Gerät etwas, das ersetzt würde, kommt erst die Rückfrage. */
+  /**
+   * Beitreten über einen Code. Mit verbundener Runde wird erst die Einladung nachgesehen: Gehört sie zur verbundenen
+   * Runde selbst, gibt es nichts zu tun („Du bist schon in dieser Runde.“), und die Einladung wird vergessen; sonst
+   * folgt die Rückfrage „Der Runde ‹Ziel› beitreten?“.
+   */
+  private join(token: string): Promise<void> {
+    if (this.controller.getState().link === null) return this.requestAttach({ kind: "join", token });
+    return this.busy(async () => {
+      let info: InviteInfo;
+      try {
+        info = await this.controller.inviteInfo(token);
+      } catch (error) {
+        // Abgelaufen oder ungültig: Eine gemerkte Einladung wird dann vergessen (wie beim Nachsehen).
+        if (error instanceof RoundException && error.error === "INVALID_INVITE") this.forgetInvite(token);
+        throw error;
+      }
+      const link = this.controller.getState().link;
+      if (link !== null && link.roundId === info.roundId) {
+        this.forgetInvite(token);
+        this.update({ message: "ALREADY_IN_ROUND" });
+        return;
+      }
+      await this.askSwitch({ kind: "join", token, roundName: info.roundName });
+    });
+  }
+
+  /** Vergisst die wartende Einladung, wenn es diese ist. */
+  private forgetInvite(token: string): void {
+    if (this.controller.getState().pendingInvite === token) this.controller.rememberInvite(null);
+  }
+
+  /**
+   * Mit verbundener Runde: vollständig abgleichen, dann fragen. Gibt es die verbundene Runde nicht mehr, steht die
+   * Meldung nach `Detached` da, und es kommt keine Rückfrage. Nur innerhalb von {@link busy}.
+   */
+  private async askSwitch(target: SwitchTarget): Promise<void> {
+    const confirm = await prepareSwitch(this.controller, target);
+    if (confirm !== null) this.update({ switching: confirm });
+  }
+
+  cancelSwitch(): void {
+    this.update({ switching: null });
+  }
+
+  /** Wechseln, Beitreten oder Anlegen ist bestätigt. Ist das Gerät inzwischen anders verbunden, gilt es nicht mehr. */
+  confirmSwitch(): Promise<void> {
+    const confirm = this.ui.switching;
+    if (confirm === null) return Promise.resolve();
+    this.update({ switching: null });
+    if (!stillValid(this.controller, confirm)) return Promise.resolve();
+    return this.busy(() => runSwitch(this.controller, confirm.target), confirm.target.kind === "create");
+  }
+
+  /** Liegt auf dem Gerät etwas, das ersetzt würde, kommt erst die Rückfrage (ohne verbundene Runde). */
   private requestAttach(target: PendingAttach): Promise<void> {
     return this.busy(async () => {
       if (await this.controller.hasOwnData()) this.update({ replace: target, eveningCount: this.eveningCount() });
@@ -256,6 +323,8 @@ export class RoundScreenModel {
     const target = this.ui.replace;
     if (target === null) return Promise.resolve();
     this.update({ replace: null });
+    // Inzwischen mit einer Runde verbunden: Dann gilt die Rückfrage nicht mehr (dort ginge es nur nach Abgleich).
+    if (this.controller.getState().link !== null) return Promise.resolve();
     return this.busy(() => this.attach(target));
   }
 
@@ -287,6 +356,10 @@ export class RoundScreenModel {
     this.update({ error: null });
   }
 
+  clearMessage(): void {
+    this.update({ message: null });
+  }
+
   // --- Gemeinsames ---
 
   /*
@@ -306,12 +379,7 @@ export class RoundScreenModel {
     try {
       await block();
     } catch (error) {
-      if (error instanceof RoundException) this.update({ error: { kind: "Server", error: error.error, roundName } });
-      else if (error instanceof DeviceStorageError) this.update({ error: { kind: "Storage" } });
-      else {
-        console.warn("Schafkopf Tracker: Aktion der gemeinsamen Runde gescheitert", error);
-        this.update({ error: { kind: "Server", error: "SERVER", roundName: false } });
-      }
+      this.update({ error: uiErrorOf(error, roundName) });
     } finally {
       this.update({ busy: false });
     }

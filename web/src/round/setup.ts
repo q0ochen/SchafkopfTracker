@@ -114,7 +114,7 @@ function catchingUp(controller: RoundController, store: AppStore): () => void {
 
 /**
  * Liest die Rückkehr aus der Anmeldung aus der Adresse und nimmt sie sofort heraus: Der Code soll weder im Verlauf
- * noch in einem Lesezeichen landen. Danach zeigt die Adresse auf „Gemeinsame Runde“.
+ * noch in einem Lesezeichen landen. Danach zeigt die Adresse auf „Gemeinsame Runden“.
  */
 export function takeSignInReturn(win: Window): SignInReturn | null {
   const back = parseSignInReturn(win.location.search, win.location.hash);

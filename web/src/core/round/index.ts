@@ -1,19 +1,22 @@
 /*
  * Die gemeinsame Runde im Rechenkern der Web-App (docs/ARCHITEKTUR.md, Abschnitt 8): Zusammenführen, Hinweis auf
- * doppelt eingetragene Spiele, Einladungslinks, der Abgleich und das Verbinden mit einer Runde. Port des Pakets
- * `domain.round` der Android-App, mit denselben Namen; reines TypeScript ohne Browser-Funktionen.
+ * doppelt eingetragene Spiele, Einladungslinks, der Abgleich, das Verbinden mit einer Runde und das Wechseln zwischen
+ * Runden, die Namen von Runden. Port des Pakets `domain.round` der Android-App, mit denselben Namen; reines
+ * TypeScript ohne Browser-Funktionen.
  */
 export { DuplicateCheck } from "./DuplicateCheck";
 export { sameEntry, sameEvening, sameEveningOrNull, sameInstant, samePlayer, sameRules, sameRulesOrNull } from "./equality";
 export { EveningMerge } from "./EveningMerge";
 export { InviteLinks } from "./InviteLinks";
 export { RoundConnection } from "./RoundConnection";
+export { RoundNames } from "./RoundNames";
 export {
   remotePlayer,
   ROUND_ERRORS,
   RoundError,
   RoundException,
   roundLink,
+  roundSummary,
   sameContent,
   toPlayer,
 } from "./RoundModels";

@@ -1,7 +1,9 @@
 /*
- * Startseite: laufender Abend, „Neuer Abend“, Statistik, Spieler, Einstellungen und alle Abende. Ein geplanter Abend
- * (docs/ARCHITEKTUR.md 4.2) steht nur in der Liste, mit der Marke „geplant“. Mit gemeinsamer Runde trägt jeder Abend
- * die Marke „Runde: ‹Name›“ (8.9): Ein Gerät hängt an höchstens einer Runde, und dann gehören alle Abende darauf zu ihr.
+ * Startseite: laufender Abend, „Neuer Abend“, Statistik, Spieler, Einstellungen, die Zeile „Gemeinsame Runden“ und alle
+ * Abende. Ein geplanter Abend (docs/ARCHITEKTUR.md 4.2) steht nur in der Liste, mit der Marke „geplant“. Mit
+ * gemeinsamer Runde trägt jeder Abend die Marke „Runde: ‹Name›“ (8.9): Ein Gerät hängt an höchstens einer Runde, und
+ * dann gehören alle Abende darauf zu ihr. Hat das Konto mehrere Runden, lässt sich in der Zeile „Gemeinsame Runden“
+ * zwischen ihnen wechseln (Runden-Auswahl, 8.9).
  */
 import { useMemo } from "preact/hooks";
 import { isRunning } from "../../core/evening/Evening";
@@ -130,7 +132,7 @@ export function StartScreen() {
             Einstellungen
           </button>
         </nav>
-        <RoundRow />
+        <RoundRow picker />
 
         <h2 class="section-heading">Abende</h2>
         {unreadableEvenings.length > 0 ? (

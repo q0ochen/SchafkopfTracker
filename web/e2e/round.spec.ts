@@ -1,6 +1,7 @@
 /*
  * Die gemeinsame Runde in der Oberfläche (docs/ARCHITEKTUR.md, Abschnitt 8.9), gegen die gebaute App mit einem
- * nachgestellten Supabase-Projekt: anmelden, Runde anlegen, „Das bin ich“, einladen, beitreten, Statuszeile.
+ * nachgestellten Supabase-Projekt: anmelden, Runde anlegen, „Das bin ich“, einladen, beitreten, Statuszeile, zwischen
+ * den Runden des Kontos wechseln.
  */
 import { FAKE_SUPABASE_URL, ROUND_APP_URL } from "./roundConfig";
 import type { Evening, Player } from "../src/core/model";
@@ -20,11 +21,14 @@ import {
   IPHONE_SAFARI,
   KONTO_1,
   KONTO_2,
+  KONTO_3,
   nameRound,
   openRound,
   openRunningEvening,
+  otherRound,
   recordClipboard,
   renamePlayer,
+  roundPicker,
   roundRow,
   routeSupabase,
   signIn,
@@ -46,8 +50,10 @@ test("anmelden, Runde anlegen, „Das bin ich“ und einladen", async ({ page })
   await renamePlayer(page, "Spieler 2", "Ost");
   await startEvening(page);
   await openApp(page);
-  await expect(roundRow(page)).toContainText("Gemeinsame Runde");
+  await expect(roundRow(page)).toContainText("Gemeinsame Runden");
   await expect(roundRow(page)).toContainText("Alle tragen vom eigenen Handy ein");
+  // Ohne Runde gibt es nichts zu wählen.
+  await expect(roundPicker(page)).toBeHidden();
   await roundRow(page).click();
 
   await expect(page.getByRole("heading", { level: 2, name: "Gemeinsam eintragen" })).toBeVisible();
@@ -102,10 +108,11 @@ test("anmelden, Runde anlegen, „Das bin ich“ und einladen", async ({ page })
   ]);
   expect(fake.server.evenings(round.id)).toHaveLength(1);
 
-  // Start-Bildschirm und Einstellungen zeigen die Runde und ihren Stand.
+  // Start-Bildschirm und Einstellungen zeigen die Runde und ihren Stand. Mit nur einer Runde gibt es keine Auswahl.
   await page.getByRole("button", { name: "Zurück" }).click();
   await expect(roundRow(page)).toContainText("Runde: Stammtisch");
   await expect(roundRow(page)).toContainText("Abgeglichen");
+  await expect(roundPicker(page)).toBeHidden();
   // Jeder Abend sagt, zu welcher Runde er gehört (docs/ARCHITEKTUR.md 8.9).
   const evenings = page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem");
   await expect(evenings).toHaveCount(1);
@@ -267,7 +274,10 @@ test("ohne Netz wartet die Änderung, und die Statuszeile sagt es", async ({ pag
 });
 
 test("ist die Anmeldung abgelaufen, bleibt nur „Mit Google anmelden“; danach geht es weiter", async ({ page }) => {
+  // Das Konto gehört noch einer zweiten Runde an: Mit gültiger Anmeldung steht sie unter „Deine anderen Runden“.
+  await otherRound(fake, "Klub");
   await foundRound(page, fake);
+  await expect(page.getByRole("list", { name: "Deine anderen Runden" }).getByRole("listitem")).toContainText(["Klub"]);
   fake.revokeSessions();
 
   await expect(page.getByRole("status").filter({ hasText: "Anmeldung abgelaufen – bitte neu anmelden" })).toBeVisible(SYNC);
@@ -275,6 +285,10 @@ test("ist die Anmeldung abgelaufen, bleibt nur „Mit Google anmelden“; danach
   await expect(page.getByRole("button", { name: "Jetzt abgleichen" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Einladen" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Runde verlassen" })).toBeHidden();
+  // Auch alles, was zu einer anderen Runde führt, braucht die Anmeldung.
+  await expect(page.getByRole("form", { name: "Neue Runde anlegen" })).toBeHidden();
+  await expect(page.getByRole("form", { name: "Einladung einlösen" })).toBeHidden();
+  await expect(page.getByRole("heading", { level: 2, name: "Deine anderen Runden" })).toBeHidden();
   // Mitglieder und „Abmelden“ bleiben.
   await expect(page.getByRole("list", { name: "Mitglieder" }).getByRole("listitem")).toHaveText(["Nord (du)"]);
   await expect(page.getByRole("button", { name: "Abmelden" })).toBeVisible();
@@ -289,9 +303,10 @@ test("ist die Anmeldung abgelaufen, bleibt nur „Mit Google anmelden“; danach
   await page.getByRole("button", { name: "Mit Google anmelden" }).click();
   await expect(page.getByRole("button", { name: "Jetzt abgleichen" })).toBeVisible(SYNC);
   // Was während der abgelaufenen Anmeldung eingetragen wurde, geht jetzt hoch.
-  const [round] = await fake.session(KONTO_1.userId).myRounds();
-  await expect.poll(() => fake.server.evenings(round.id)[0].entries.length, SYNC).toBe(2);
+  const round = (await fake.session(KONTO_1.userId).myRounds()).find((it) => it.name === "Stammtisch");
+  await expect.poll(() => fake.server.evenings(round?.id ?? "")[0].entries.length, SYNC).toBe(2);
   await expect(page.getByRole("status").filter({ hasText: "Abgeglichen" })).toBeVisible(SYNC);
+  await expect(page.getByRole("list", { name: "Deine anderen Runden" }).getByRole("listitem")).toContainText(["Klub"]);
 });
 
 test("wer sich mit einem anderen Konto anmeldet, wird gleich wieder abgemeldet; die Runde bleibt verbunden, nichts geht verloren", async ({
@@ -766,13 +781,28 @@ test("auch im hellen Erscheinungsbild ist die gemeinsame Runde barrierefrei", as
   await openApp(page);
   await expect(roundRow(page)).toContainText("Kein Netz", SYNC);
   await expectAccessible(page);
+
+  // Mit einer zweiten Runde: die Runden-Auswahl (gelesen wird mit Netz) und ohne Netz ein Fehler darunter; dann
+  // „Deine anderen Runden“.
+  await otherRound(fake, "Klub");
+  fake.offline = false;
+  await openApp(page);
+  await expect(roundPicker(page).locator("option")).toHaveText(["Stammtisch", "Klub"]);
+  fake.offline = true;
+  await roundPicker(page).selectOption({ label: "Klub" });
+  await expect(page.getByRole("alert")).toHaveText(/Keine Verbindung/);
+  await expectAccessible(page);
+  fake.offline = false;
+  await roundRow(page).click();
+  await expect(page.getByRole("list", { name: "Deine anderen Runden" }).getByRole("listitem")).toContainText(["Klub"]);
+  await expectAccessible(page);
 });
 
 // --- Einladungsseite (Links aus WhatsApp oder iMessage öffnen sich im Browser, nicht in der App vom Home-Bildschirm) ---
 
 const CODE = "0123456789abcdef0123456789abcdef";
 const IPHONE_HINT =
-  /^Benutzt du den Schafkopf Tracker vom Home-Bildschirm\? Dann kopiere den Code, öffne die App über ihr Symbol und füge ihn unter „Gemeinsame Runde“ → „Einladung einlösen“ ein\.$/;
+  /^Benutzt du den Schafkopf Tracker vom Home-Bildschirm\? Dann kopiere den Code, öffne die App über ihr Symbol und füge ihn unter „Gemeinsame Runden“ → „Einladung einlösen“ ein\.$/;
 
 test.describe("Einladungsseite am iPhone im Browser", () => {
   test.use({ userAgent: IPHONE_SAFARI });
@@ -821,17 +851,23 @@ test.describe("Einladungsseite auf Android", () => {
   });
 });
 
-test("Einladungsseite auf einem Gerät, das schon mit einer Runde verbunden ist: Der Code wird nicht gemerkt", async ({ page }) => {
+test("Einladungsseite auf einem Gerät, das schon mit einer Runde verbunden ist: beitreten geht trotzdem, der Code wird gemerkt", async ({
+  page,
+}) => {
   await foundRound(page, fake);
   await page.goto(`./#/einladung/${CODE}`);
 
   await expect(page.getByText(CODE, { exact: true })).toBeVisible();
-  await expect(page.getByText("Dieses Gerät ist schon mit der Runde Stammtisch verbunden.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Hier beitreten" })).toBeHidden();
+  await expect(
+    page.getByText("Dieses Gerät ist schon mit der Runde Stammtisch verbunden. Du kannst trotzdem beitreten und dann zwischen den Runden wechseln."),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Zur gemeinsamen Runde" })).toBeHidden();
   await expectAccessible(page);
-  await page.getByRole("button", { name: "Zur gemeinsamen Runde" }).click();
+  await page.getByRole("button", { name: "Hier beitreten" }).click();
 
+  // Der Code ist gemerkt; die Runde sieht ihn nach (abgelaufen: Fehlertext, und er ist wieder vergessen).
   await expect(page.getByRole("heading", { level: 2, name: "Stammtisch" })).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveText(/Die Einladung ist abgelaufen oder ungültig\./);
   expect(await page.evaluate(() => localStorage.getItem("schafkopf-tracker-einladung"))).toBeNull();
 });
 
@@ -881,4 +917,273 @@ test("eine Runde aus „Deine Runden“ verlassen: mit Rückfrage, beim letzten 
   await expect(page.getByRole("heading", { level: 2, name: "Gemeinsam eintragen" })).toBeVisible();
   await openApp(page);
   await expect(page.getByText("Abend läuft")).toBeVisible();
+});
+
+// --- Zwischen Runden wechseln (docs/ARCHITEKTUR.md 8.7 und 8.9, seit dem 21.11.2026) ---
+
+test("die Runde über die Auswahl auf dem Start-Bildschirm wechseln: Rückfrage, andere Abende mit ihrer Marke, zurück", async ({ page }) => {
+  await foundRound(page, fake);
+  await otherRound(fake, "Klub", { location: "Klubheim" });
+  const [stammtisch, klub] = await fake.session(KONTO_1.userId).myRounds();
+
+  await openApp(page);
+  const picker = roundPicker(page);
+  await expect(picker.locator("option")).toHaveText(["Stammtisch", "Klub"]);
+  await expect(picker).toHaveValue(stammtisch.id);
+  // Die Auswahl zeigt den Namen; die Zeile darüber nur noch Überschrift und Statuszeile.
+  await expect(roundRow(page)).toContainText("Abgeglichen", SYNC);
+  await expect(roundRow(page)).not.toContainText("Runde: Stammtisch");
+  const evenings = page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem");
+  await expect(evenings).toHaveCount(1);
+  await expect(evenings.first().locator(".round-label")).toHaveText("Runde: Stammtisch");
+  await expectAccessible(page);
+
+  await picker.selectOption({ label: "Klub" });
+  const dialog = page.getByRole("dialog", { name: "Zur Runde Klub wechseln?" });
+  await expect(dialog.getByText("Auf diesem Gerät stehen dann die Abende und Spieler von Klub.")).toBeVisible();
+  await expect(dialog.getByText("Die Abende von Stammtisch bleiben dort; du kannst jederzeit zurückwechseln.")).toBeVisible();
+  await expect(dialog.getByText(/noch nicht hochgeladen/)).toBeHidden();
+  // Bis zum Wechsel zeigt die Auswahl die verbundene Runde.
+  await expect(picker).toHaveValue(stammtisch.id);
+  await expectAccessible(page);
+
+  // „Abbrechen“ lässt alles, wie es ist.
+  await dialog.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(picker).toHaveValue(stammtisch.id);
+  await expect(page.getByText("Abend läuft")).toBeVisible();
+
+  await picker.selectOption({ label: "Klub" });
+  await dialog.getByRole("button", { name: "Wechseln" }).click();
+  await expect(picker).toHaveValue(klub.id, SYNC);
+  await expect(page.getByText("Einen Moment …")).toBeHidden();
+  await expect(evenings).toHaveCount(1);
+  await expect(evenings.first()).toContainText("Klubheim");
+  await expect(evenings.first().locator(".round-label")).toHaveText("Runde: Klub");
+  await expect(page.getByText("Abend läuft")).toBeHidden();
+  await expect(roundRow(page)).toContainText("Abgeglichen", SYNC);
+  await expectAccessible(page);
+  // Die Abende des Stammtischs bleiben auf dem Server.
+  expect(fake.server.evenings(stammtisch.id)).toHaveLength(1);
+
+  // Zurück: Alles ist wieder da, auch der laufende Abend und die Namen.
+  await picker.selectOption({ label: "Stammtisch" });
+  await page.getByRole("dialog", { name: "Zur Runde Stammtisch wechseln?" }).getByRole("button", { name: "Wechseln" }).click();
+  await expect(picker).toHaveValue(stammtisch.id, SYNC);
+  await expect(page.getByText("Abend läuft")).toBeVisible();
+  await expect(evenings.first().locator(".round-label")).toHaveText("Runde: Stammtisch");
+  await openApp(page, "/spieler");
+  await expect(page.getByRole("list", { name: "Alle Spieler" }).getByRole("listitem")).toHaveText(["Nord", "Ost", "Süd", "West"]);
+});
+
+test("ohne Netz lässt sich nicht wechseln: Fehlertext unter der Auswahl, alles bleibt, wie es ist", async ({ page }) => {
+  await foundRound(page, fake);
+  await otherRound(fake, "Klub");
+  const [stammtisch] = await fake.session(KONTO_1.userId).myRounds();
+  await openApp(page);
+  const picker = roundPicker(page);
+  await expect(picker.locator("option")).toHaveText(["Stammtisch", "Klub"]);
+  fake.offline = true;
+
+  await picker.selectOption({ label: "Klub" });
+
+  const alert = page.getByRole("alert");
+  await expect(alert).toHaveText(/Keine Verbindung\. Bitte später noch einmal versuchen\./);
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(picker).toHaveValue(stammtisch.id);
+  await expect(picker).toBeEnabled();
+  await expect(roundRow(page)).toContainText("Kein Netz");
+  const evenings = page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem");
+  await expect(evenings.first().locator(".round-label")).toHaveText("Runde: Stammtisch");
+  await expect(page.getByText("Abend läuft")).toBeVisible();
+  await expectAccessible(page);
+  // Der Fehler bleibt, bis man ihn wegtippt.
+  await alert.getByRole("button", { name: "OK" }).click();
+  await expect(alert).toBeHidden();
+  expect(fake.calls("POST", "/rest/v1/rpc/join_round")).toEqual([]);
+});
+
+test("mit verbundener Runde eine neue anlegen: Name geprüft, Rückfrage, sie beginnt leer, die bisherige behält ihre Abende", async ({
+  page,
+}) => {
+  await foundRound(page, fake);
+  const form = page.getByRole("form", { name: "Neue Runde anlegen" });
+  await expect(form.getByLabel("Name der Runde")).toHaveValue("Schafkopfrunde");
+  await expect(form.getByText("Die neue Runde beginnt leer. Die Abende von Stammtisch bleiben dort.")).toBeVisible();
+  await expect(page.getByRole("form", { name: "Einladung einlösen" }).getByLabel("Link oder Code")).toBeVisible();
+
+  // Einen Namen, den das Konto schon hat, gibt es kein zweites Mal (bereinigt, ohne Groß und Klein).
+  await form.getByLabel("Name der Runde").fill(" stammTISCH ");
+  await form.getByRole("button", { name: "Runde anlegen" }).click();
+  await expect(page.getByRole("alert")).toHaveText(/Du hast schon eine Runde mit diesem Namen\./);
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expectAccessible(page);
+  await page.getByRole("alert").getByRole("button", { name: "OK" }).click();
+
+  await form.getByLabel("Name der Runde").fill("Dienstagsrunde");
+  await form.getByRole("button", { name: "Runde anlegen" }).click();
+  const dialog = page.getByRole("dialog", { name: "Neue Runde Dienstagsrunde anlegen?" });
+  await expect(dialog.getByText("Auf diesem Gerät beginnt dann die neue, leere Runde.")).toBeVisible();
+  await expect(dialog.getByText("Die Abende von Stammtisch bleiben dort; du kannst jederzeit zurückwechseln.")).toBeVisible();
+  await expectAccessible(page);
+  await dialog.getByRole("button", { name: "Anlegen" }).click();
+
+  await expect(page.getByRole("heading", { level: 2, name: "Dienstagsrunde" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Abgeglichen" })).toBeVisible(SYNC);
+  // Die neue Runde ist leer: Zur Wahl steht nur „Ich bin neu“.
+  await expect(page.getByRole("region", { name: "Wer bist du?" }).getByRole("button")).toHaveText(["Ich bin neu", "Das bin ich"]);
+  const others = page.getByRole("list", { name: "Deine anderen Runden" });
+  await expect(others.getByRole("listitem")).toHaveCount(1);
+  await expect(others.getByRole("listitem")).toContainText("Stammtisch");
+  await expect(others.getByText("1 Mitglied: Nord")).toBeVisible();
+  await expect(others.getByRole("button", { name: "Stammtisch verlassen" })).toBeVisible();
+  await expect(form.getByText("Die neue Runde beginnt leer. Die Abende von Dienstagsrunde bleiben dort.")).toBeVisible();
+  await expectAccessible(page);
+
+  // Auf dem Server: Der Stammtisch hat seinen Abend und seine Spieler, die neue Runde nichts.
+  const [stammtisch, dienstag] = await fake.session(KONTO_1.userId).myRounds();
+  expect([stammtisch.name, dienstag.name]).toEqual(["Stammtisch", "Dienstagsrunde"]);
+  expect(fake.server.evenings(stammtisch.id)).toHaveLength(1);
+  expect(fake.server.players(stammtisch.id).map((it) => it.name)).toEqual(["Nord", "Ost", "Süd", "West"]);
+  expect(fake.server.evenings(dienstag.id)).toEqual([]);
+  expect(fake.server.players(dienstag.id)).toEqual([]);
+
+  // Der Start-Bildschirm: keine Abende; die Auswahl zeigt die neue Runde.
+  await openApp(page);
+  await expect(page.getByText("Noch kein Abend eingetragen. Mit „Neuer Abend“ geht es los.")).toBeVisible();
+  await expect(roundPicker(page).locator("option")).toHaveText(["Stammtisch", "Dienstagsrunde"]);
+  await expect(roundPicker(page)).toHaveValue(dienstag.id);
+
+  // Zurück über „Deine anderen Runden“.
+  await roundRow(page).click();
+  await others.getByRole("button", { name: "Zu Stammtisch wechseln" }).click();
+  await page.getByRole("dialog", { name: "Zur Runde Stammtisch wechseln?" }).getByRole("button", { name: "Wechseln" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Stammtisch" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Mitglieder" }).getByRole("listitem")).toHaveText(["Nord (du)"], SYNC);
+  await expect(others.getByRole("listitem")).toContainText(["Dienstagsrunde"]);
+});
+
+test("einer weiteren Runde beitreten, während das Gerät verbunden ist: Einladungsseite, Karte ganz oben, Rückfrage", async ({ page }) => {
+  await foundRound(page, fake);
+  const klub = await otherRound(fake, "Klub", { location: "Klubheim", member: null });
+  const link = InviteLinks.webLink(ROUND_APP_URL, await fake.session(KONTO_2.userId).createInvite(klub));
+
+  await page.goto(link);
+  await expect(
+    page.getByText("Dieses Gerät ist schon mit der Runde Stammtisch verbunden. Du kannst trotzdem beitreten und dann zwischen den Runden wechseln."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Hier beitreten" }).click();
+
+  // Die Einladung steht ganz oben, über der verbundenen Runde.
+  const invitation = page.getByRole("region", { name: "Einladung in die Runde Klub" });
+  await expect(invitation.getByText("1 Mitglied")).toBeVisible();
+  const card = await invitation.boundingBox();
+  const heading = await page.getByRole("heading", { level: 2, name: "Stammtisch" }).boundingBox();
+  expect((card?.y ?? 0) < (heading?.y ?? 0)).toBe(true);
+  await expect(invitation.getByRole("button", { name: "Einladung verwerfen" })).toBeVisible();
+  await expectAccessible(page);
+  await invitation.getByRole("button", { name: "Beitreten" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Der Runde Klub beitreten?" });
+  await expect(dialog.getByText("Auf diesem Gerät stehen dann die Abende und Spieler von Klub.")).toBeVisible();
+  await expect(dialog.getByText("Die Abende von Stammtisch bleiben dort; du kannst jederzeit zurückwechseln.")).toBeVisible();
+  await expectAccessible(page);
+  await dialog.getByRole("button", { name: "Beitreten" }).click();
+
+  await expect(page.getByRole("heading", { level: 2, name: "Klub" })).toBeVisible();
+  await expect(invitation).toBeHidden();
+  await expect(page.getByRole("region", { name: "Wer bist du?" }).getByRole("button")).toHaveText(["Bert", "Cilli", "Sepp", "Ich bin neu", "Das bin ich"]);
+  await expect(page.getByRole("list", { name: "Deine anderen Runden" }).getByRole("listitem")).toContainText(["Stammtisch"]);
+  expect(await page.evaluate(() => localStorage.getItem("schafkopf-tracker-einladung"))).toBeNull();
+  await expectAccessible(page);
+
+  await openApp(page);
+  const evenings = page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem");
+  await expect(evenings).toHaveCount(1);
+  await expect(evenings.first()).toContainText("Klubheim");
+  await expect(evenings.first().locator(".round-label")).toHaveText("Runde: Klub");
+  const [stammtisch] = await fake.session(KONTO_1.userId).myRounds();
+  expect(fake.server.evenings(stammtisch.id)).toHaveLength(1);
+});
+
+test("eine Einladung in die verbundene Runde: „Du bist schon in dieser Runde.“, und die Einladung ist vergessen", async ({ page }) => {
+  await foundRound(page, fake);
+  const link = await inviteLink(page);
+  await page.goto(link);
+  await page.getByRole("button", { name: "Hier beitreten" }).click();
+  const invitation = page.getByRole("region", { name: "Einladung in die Runde Stammtisch" });
+  await invitation.getByRole("button", { name: "Beitreten" }).click();
+
+  const message = page.getByRole("status").filter({ hasText: "Du bist schon in dieser Runde." });
+  await expect(message).toBeVisible();
+  await expect(invitation).toBeHidden();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  expect(await page.evaluate(() => localStorage.getItem("schafkopf-tracker-einladung"))).toBeNull();
+  await expectAccessible(page);
+  // Die Meldung bleibt stehen, bis man sie wegtippt.
+  await message.getByRole("button", { name: "OK" }).click();
+  await expect(message).toBeHidden();
+
+  // Ebenso mit dem eingefügten Link.
+  const redeem = page.getByRole("form", { name: "Einladung einlösen" });
+  await redeem.getByLabel("Link oder Code").fill(`Komm in unsere Schafkopfrunde Stammtisch: ${link}`);
+  await redeem.getByRole("button", { name: "Beitreten" }).click();
+  await expect(message).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Stammtisch" })).toBeVisible();
+  expect(fake.calls("POST", "/rest/v1/rpc/join_round")).toEqual([]);
+});
+
+test("Namen von Runden: Die Vorgabe ist frei, einen vergebenen Namen gibt es kein zweites Mal", async ({ page }) => {
+  // Das Konto hat schon eine „Schafkopfrunde“, in der schon etwas liegt.
+  const owner = fake.session(KONTO_1.userId);
+  const round = await owner.createRound("Schafkopfrunde");
+  await owner.savePlayer(round, { id: "wirt", name: "Wirt", colorIndex: 0, archived: false });
+
+  await openRound(page);
+  await signIn(page, fake, KONTO_1);
+  const rounds = page.getByRole("list", { name: "Deine Runden" });
+  await expect(rounds.getByText("1 Mitglied", { exact: true })).toBeVisible();
+  const form = page.getByRole("form", { name: "Neue Runde anlegen" });
+  await expect(form.getByLabel("Name der Runde")).toHaveValue("Schafkopfrunde 2");
+
+  await form.getByLabel("Name der Runde").fill("SCHAFKOPFRUNDE");
+  await form.getByRole("button", { name: "Runde anlegen" }).click();
+
+  await expect(page.getByRole("alert")).toHaveText(/Du hast schon eine Runde mit diesem Namen\./);
+  await expect(page.getByRole("heading", { level: 2, name: "Deine Runden" })).toBeVisible();
+  await expectAccessible(page);
+  expect(fake.calls("POST", "/rest/v1/rpc/create_round")).toEqual([]);
+  expect(await owner.myRounds()).toHaveLength(1);
+});
+
+test("gleichnamige Runden tragen in der Auswahl und in „Deine anderen Runden“ die Namen ihrer Mitglieder", async ({ page }) => {
+  await foundRound(page, fake);
+  await otherRound(fake, "Stammtisch", { ownerName: "Wirt" });
+  // Eine dritte, in der noch niemand einen Namen hat: Dann nennt die Auswahl die Zahl der Mitglieder.
+  await otherRound(fake, "STAMMTISCH", { owner: KONTO_3, ownerName: null });
+
+  await openApp(page);
+  const picker = roundPicker(page);
+  await expect(picker.locator("option")).toHaveText(["Stammtisch (Nord)", "Stammtisch (Wirt)", "STAMMTISCH (2 Mitglieder)"]);
+  await expectAccessible(page);
+
+  await roundRow(page).click();
+  const others = page.getByRole("list", { name: "Deine anderen Runden" });
+  await expect(others.getByRole("listitem")).toHaveCount(2);
+  await expect(others.getByText("2 Mitglieder: Wirt")).toBeVisible();
+  await expect(others.getByText("2 Mitglieder", { exact: true })).toBeVisible();
+  await expect(others.getByRole("button", { name: "Zu Stammtisch (Wirt) wechseln" })).toBeVisible();
+  await expect(others.getByRole("button", { name: "STAMMTISCH (2 Mitglieder) verlassen" })).toBeVisible();
+  await expectAccessible(page);
+
+  // Gewählt wird über den Eintrag mit den Mitgliedern; die Rückfrage nennt die Runde beim Namen.
+  await openApp(page);
+  await picker.selectOption({ label: "Stammtisch (Wirt)" });
+  await page.getByRole("dialog", { name: "Zur Runde Stammtisch wechseln?" }).getByRole("button", { name: "Wechseln" }).click();
+  await expect(page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem").first().locator(".round-label")).toHaveText(
+    "Runde: Stammtisch",
+    SYNC,
+  );
+  const mine = await fake.session(KONTO_1.userId).myRounds();
+  await expect(picker).toHaveValue(mine[1].id);
 });

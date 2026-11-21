@@ -29,8 +29,9 @@ Adresse: **https://q0ochen.github.io/SchafkopfTracker/** (GitHub Pages, kostenlo
   weitere Zahlen und Rekorde. Auswahl, Kontostand und Vermögensverlauf lassen sich als Bild teilen.
 - **Einstellungen**: dunkel/hell/wie System, Bildschirm anlassen, Regeln für neue Abende, **Sicherung speichern
   und einlesen**.
-- **Gemeinsame Runde** (nur, wenn die App mit einem Server gebaut wurde, siehe unten): Alle tragen vom eigenen
-  Handy in dieselben Abende ein.
+- **Gemeinsame Runden** (nur, wenn die App mit einem Server gebaut wurde, siehe unten): Alle tragen vom eigenen
+  Handy in dieselben Abende ein. Wer mehreren Runden angehört, wechselt auf dem Start-Bildschirm über die Auswahl
+  „Runde“ zwischen ihnen.
 - **Ortsvorschläge** beim Feld „Ort“ (Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 4.3): ab drei getippten Zeichen Orte
   aus OpenStreetMap über Photon von komoot (`photon.komoot.io`, kostenlos, ohne Schlüssel). Gesendet wird nur der
   eingetippte Text, ohne Kennung von App, Gerät oder Nutzer; ohne Netz steht nur „Ortsvorschläge gibt es nur mit
@@ -94,7 +95,7 @@ Supabase-Server ab. Der Vertrag steht in `docs/ARCHITEKTUR.md`, Abschnitt 8; wie
   (öffentlicher Schlüssel) gesetzt sein, zum Beispiel in einer Datei `web/.env.local` (wird nicht eingecheckt). Beides
   ist kein Geheimnis. Auf GitHub reicht der Workflow „Web-App“ die Repository-Variablen `SUPABASE_URL` und
   `SUPABASE_PUBLISHABLE_KEY` an den Build weiter. **Fehlt eines davon, gibt es keine gemeinsame Runde:** Die Zeile
-  „Gemeinsame Runde“ zeigt dann nur „Der Server ist noch nicht eingerichtet.“, die Bibliothek für den Server ist
+  „Gemeinsame Runden“ zeigt dann nur „Der Server ist noch nicht eingerichtet.“, die Bibliothek für den Server ist
   nicht im Build, und die App spricht mit keinem Server.
 - **Anmeldung:** nur mit Google, über Supabase (PKCE). Die Seite wird dafür verlassen und kehrt auf die
   Start-Adresse zurück (`…/SchafkopfTracker/?code=…`); die App löst den Code ein und nimmt ihn sofort aus der
@@ -104,11 +105,17 @@ Supabase-Server ab. Der Vertrag steht in `docs/ARCHITEKTUR.md`, Abschnitt 8; wie
 - **Lokal zuerst:** Das Gerät bleibt vollständig benutzbar. Abgeglichen wird beim Öffnen, eine halbe Sekunde nach
   jeder Änderung und alle vier Sekunden, solange die App zu sehen ist; nach Fehlern mit wachsendem Abstand. Was
   nicht hochgeladen werden konnte, wartet.
+- **Runden wechseln** (Vertrag: `docs/ARCHITEKTUR.md`, 8.7 und 8.9): Ein Gerät hält immer nur die Daten einer
+  Runde. Vor einem Wechsel (auch vor „Neue Runde anlegen“ und dem Beitreten mit verbundener Runde) wird die verbundene
+  Runde vollständig abgeglichen, dann kommt die Rückfrage, die nennt, was dabei verloren ginge; die Abende der
+  bisherigen Runde bleiben auf dem Server. Die Runden des Kontos stehen im Zustand der Steuerung (`RoundState.rounds`),
+  damit Start-Bildschirm (`src/round/picker.ts`) und „Gemeinsame Runden“ dieselbe Liste sehen. Ein Konto hat keine
+  zwei Runden desselben Namens (`RoundNames`); gleichnamige Runden durch Beitreten nennen in Listen ihre Mitglieder.
 - **Wo was liegt:** `src/core/round` ist die Übertragung von `domain.round` (mit Golden-Tests für Zusammenführen,
-  Dubletten und Einladungslinks). `src/round/controller.ts` und `scheduler.ts` entsprechen dem `RoundCoordinator`
-  der Android-App, `screenModel.ts` dem `RoundViewModel`. Was sich das Gerät zur Runde merkt, steht in drei neuen
-  Ablagen derselben IndexedDB (Version 2; vorhandene Daten bleiben beim Übergang erhalten). Die Sitzung liegt im
-  `localStorage` des Browsers.
+  Dubletten, Einladungslinks und Namen von Runden). `src/round/controller.ts` und `scheduler.ts` entsprechen dem
+  `RoundCoordinator` der Android-App, `screenModel.ts` dem `RoundViewModel`. Was sich das Gerät zur Runde merkt,
+  steht in drei neuen Ablagen derselben IndexedDB (Version 2; vorhandene Daten bleiben beim Übergang erhalten). Die
+  Sitzung liegt im `localStorage` des Browsers.
 - **Speicher des Browsers:** Der Abgleich arbeitet nur mit dem, was wirklich in IndexedDB liegt: Er wartet vor jedem
   Lesen, bis alles gespeichert ist, und bricht ab, wenn das Speichern scheitert (Statuszeile „Speichern auf diesem
   Gerät gescheitert – bitte die App neu laden“). Was sich auf dem Gerät nicht lesen lässt, gilt nie als gelöscht:
@@ -119,8 +126,9 @@ Supabase-Server ab. Der Vertrag steht in `docs/ARCHITEKTUR.md`, Abschnitt 8; wie
   Speichern meldet sich bei den anderen Fenstern (`BroadcastChannel`), die dann neu lesen (`src/round/windows.ts`).
   Wer denselben Abend in zwei Fenstern gleichzeitig bearbeitet, kann trotzdem eine Eingabe verlieren.
 - **Einladungen:** Die Einladungsseite zeigt den Code zum Kopieren; am iPhone im Browser steht dabei, dass er in der
-  App vom Home-Bildschirm unter „Einladung einlösen“ einzufügen ist (sie hat einen eigenen Speicher). „Einladen“ bietet
-  die zuletzt erzeugte Einladung wieder an, solange sie jünger als 13 Tage ist.
+  App vom Home-Bildschirm unter „Einladung einlösen“ einzufügen ist (sie hat einen eigenen Speicher). „Hier beitreten“
+  geht auch auf einem Gerät, das schon mit einer Runde verbunden ist. „Einladen“ bietet die zuletzt erzeugte Einladung
+  wieder an, solange sie jünger als 13 Tage ist.
 - **Tests:** Die Unit-Tests stellen Server und Anmeldung nach (`src/round/testing`); die Oberflächen-Tests bauen die
   App ein zweites Mal mit der Adresse eines Servers, den es nicht gibt, und beantworten dessen Anfragen selbst.
   Gegen ein echtes Supabase prüft `npm run test:live` (siehe unten).

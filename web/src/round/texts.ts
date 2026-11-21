@@ -1,9 +1,13 @@
 /*
  * Die Texte der gemeinsamen Runde, wie docs/ARCHITEKTUR.md, Abschnitt 8.9 sie festlegt (wörtlich, in der Android-App
- * dieselben): Statuszeile, Fehler und Hinweise aus dem Abgleich. Reine Funktionen, damit sie sich einfach prüfen lassen.
+ * dieselben): Statuszeile, Fehler, Hinweise aus dem Abgleich, Runden-Auswahl und Rückfragen. Reine Funktionen, damit
+ * sie sich einfach prüfen lassen.
  */
-import type { RoundError } from "../core/round/RoundModels";
+import type { RoundError, RoundSummary } from "../core/round/RoundModels";
 import type { SyncNotice } from "../core/round/RoundSync";
+
+/** Der Bildschirm und die Zeile, die zu ihm führt (bis zum 21.11.2026 „Gemeinsame Runde“). */
+export const ROUNDS_TITLE = "Gemeinsame Runden";
 
 /**
  * Warum der letzte Abgleich nicht geklappt hat. `STORAGE` gibt es nur in der Web-App: Der Browser speichert nicht
@@ -70,14 +74,15 @@ export function statusIconLabel(status: RoundStatus): string {
 /**
  * Der Text zu einem gescheiterten Aufruf.
  *
- * @param roundName `true`, wenn es um den Namen einer Runde ging (1 bis 40 Zeichen statt 1 bis 24).
+ * @param roundName `true`, wenn es um den Namen einer Runde ging: 1 bis 40 Zeichen statt 1 bis 24, und ein vergebener
+ *   Name ist einer, den das Konto schon für eine seiner Runden hat.
  */
 export function roundErrorText(error: RoundError, roundName = false): string {
   switch (error) {
     case "INVALID_INVITE":
       return "Die Einladung ist abgelaufen oder ungültig.";
     case "NAME_TAKEN":
-      return "Den Namen gibt es in der Runde schon.";
+      return roundName ? "Du hast schon eine Runde mit diesem Namen." : "Den Namen gibt es in der Runde schon.";
     case "INVALID_NAME":
       return roundName ? "Bitte einen Namen mit 1 bis 40 Zeichen eingeben." : "Bitte einen Namen mit 1 bis 24 Zeichen eingeben.";
     case "PLAYER_TAKEN":
@@ -120,14 +125,15 @@ export function noticeText(notice: SyncNotice): string {
 }
 
 /**
- * Eine einmalige Meldung für den Bildschirm „Gemeinsame Runde“:
+ * Eine einmalige Meldung für die Bildschirme der gemeinsamen Runde (bleibt stehen, bis man sie mit „OK“ wegtippt):
  * - `SIGN_IN_FAILED`: Die Anmeldung ist gescheitert.
  * - `SIGN_IN_CANCELLED`: Die Anmeldung wurde im Browser abgebrochen.
  * - `OTHER_ACCOUNT`: Angemeldet wurde ein anderes Konto als das der verbundenen Runde. Es wurde gleich wieder
  *   abgemeldet; die Runde bleibt verbunden.
  * - `DETACHED`: Die Runde gibt es nicht mehr, oder das Konto gehört nicht mehr dazu.
+ * - `ALREADY_IN_ROUND`: Eine Einladung, die eingelöst werden sollte, gehört zur verbundenen Runde selbst.
  */
-export type RoundMessage = "SIGN_IN_FAILED" | "SIGN_IN_CANCELLED" | "OTHER_ACCOUNT" | "DETACHED";
+export type RoundMessage = "SIGN_IN_FAILED" | "SIGN_IN_CANCELLED" | "OTHER_ACCOUNT" | "DETACHED" | "ALREADY_IN_ROUND";
 
 /** Meldungen, die eine geglückte Anmeldung erledigt. */
 export const SIGN_IN_MESSAGES: ReadonlySet<RoundMessage> = new Set<RoundMessage>(["SIGN_IN_FAILED", "SIGN_IN_CANCELLED", "OTHER_ACCOUNT"]);
@@ -142,12 +148,77 @@ export function messageText(message: RoundMessage): string {
       return "Diese Runde gehört zu einem anderen Google-Konto. Melde dich mit dem Konto an, mit dem du der Runde beigetreten bist.";
     case "DETACHED":
       return "Die Runde gibt es nicht mehr, oder du gehörst nicht mehr dazu. Die Daten bleiben als Kopie auf diesem Gerät.";
+    case "ALREADY_IN_ROUND":
+      return "Du bist schon in dieser Runde.";
   }
 }
 
 /** „1 Mitglied“ oder „3 Mitglieder“. */
 export function memberCountText(count: number): string {
   return count === 1 ? "1 Mitglied" : `${count} Mitglieder`;
+}
+
+/** Die Zeile unter einer Runde in „Deine Runden“: „‹n› Mitglieder“, dahinter „: ‹Namen›“, wenn welche bekannt sind. */
+export function membersText(round: Pick<RoundSummary, "memberCount" | "memberNames">): string {
+  const count = memberCountText(round.memberCount);
+  return round.memberNames.length === 0 ? count : `${count}: ${round.memberNames.join(", ")}`;
+}
+
+/**
+ * Der Eintrag einer Runde in der Runden-Auswahl: ihr Name; heißt eine andere Runde der Auswahl genauso
+ * (`RoundNames.same`), dahinter „ (‹Mitglieder›)“ – die Namen der Mitglieder oder, ohne Namen, „‹n› Mitglieder“.
+ */
+export function roundChoiceLabel(round: Pick<RoundSummary, "name" | "memberCount" | "memberNames">, duplicate: boolean): string {
+  if (!duplicate) return round.name;
+  const members = round.memberNames.length === 0 ? memberCountText(round.memberCount) : round.memberNames.join(", ");
+  return `${round.name} (${members})`;
+}
+
+/** Der Hinweis unter „Name der Runde“: ohne verbundene Runde kommen die Daten mit, mit verbundener beginnt sie leer. */
+export function newRoundHint(linkedRoundName: string | null): string {
+  return linkedRoundName === null
+    ? "Alle Abende und Spieler dieses Geräts kommen mit in die Runde."
+    : `Die neue Runde beginnt leer. Die Abende von ${linkedRoundName} bleiben dort.`;
+}
+
+/** Wozu die „Rückfrage vor dem Wechseln“ kommt: eine andere Runde wählen, einer weiteren beitreten, eine neue anlegen. */
+export type SwitchKind = "use" | "join" | "create";
+
+/**
+ * Die Texte der „Rückfrage vor dem Wechseln“ (Tabelle in docs/ARCHITEKTUR.md 8.9).
+ *
+ * @property loss Der Zusatz, wenn nach dem Abgleich noch etwas wartet; sonst `null`.
+ * @property confirm Die Beschriftung des Knopfs, der bestätigt (der andere heißt „Abbrechen“).
+ */
+export interface SwitchTexts {
+  readonly title: string;
+  readonly lead: string;
+  readonly keeps: string;
+  readonly loss: string | null;
+  readonly confirm: string;
+}
+
+/**
+ * @param target Der Name des Ziels: der Runde, des Namens aus der Einladung oder der neuen Runde.
+ * @param from Der Name der bisherigen Runde.
+ * @param pending So viele Änderungen warten nach dem Abgleich noch.
+ */
+export function switchTexts(kind: SwitchKind, target: string, from: string, pending: number): SwitchTexts {
+  const keeps = `Die Abende von ${from} bleiben dort; du kannst jederzeit zurückwechseln.`;
+  const loss =
+    pending <= 0
+      ? null
+      : pending === 1
+        ? "1 Änderung ist noch nicht hochgeladen und geht dabei verloren."
+        : `${pending} Änderungen sind noch nicht hochgeladen und gehen dabei verloren.`;
+  switch (kind) {
+    case "use":
+      return { title: `Zur Runde ${target} wechseln?`, lead: `Auf diesem Gerät stehen dann die Abende und Spieler von ${target}.`, keeps, loss, confirm: "Wechseln" };
+    case "join":
+      return { title: `Der Runde ${target} beitreten?`, lead: `Auf diesem Gerät stehen dann die Abende und Spieler von ${target}.`, keeps, loss, confirm: "Beitreten" };
+    case "create":
+      return { title: `Neue Runde ${target} anlegen?`, lead: "Auf diesem Gerät beginnt dann die neue, leere Runde.", keeps, loss, confirm: "Anlegen" };
+  }
 }
 
 /** Der Text der Rückfrage „Daten dieses Geräts ersetzen?“. */

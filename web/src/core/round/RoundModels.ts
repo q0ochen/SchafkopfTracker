@@ -101,7 +101,13 @@ export interface RoundHead {
   readonly rulesUnreadable: boolean;
 }
 
-/** Eine Runde des angemeldeten Kontos in der Übersicht. */
+/**
+ * Eine Runde des angemeldeten Kontos in der Übersicht.
+ *
+ * @property memberNames Die Namen der Spieler, die Mitglieder mit „Das bin ich“ übernommen haben (auch der eigene),
+ *   sortiert; damit lassen sich Runden desselben Namens unterscheiden. Leer, wenn noch niemand einen Namen hat oder
+ *   der Server die Angabe nicht kennt (vor dem 21.11.2026).
+ */
 export interface RoundSummary {
   readonly id: RoundId;
   readonly name: string;
@@ -109,6 +115,14 @@ export interface RoundSummary {
   readonly memberCount: number;
   readonly myPlayerId: PlayerId | null;
   readonly isCreator: boolean;
+  readonly memberNames: readonly string[];
+}
+
+/** Eine `RoundSummary` mit den Standardwerten der Kotlin-Klasse für alles, was nicht angegeben ist. */
+export function roundSummary(
+  fields: Pick<RoundSummary, "id" | "name" | "rev" | "memberCount" | "myPlayerId" | "isCreator"> & Partial<RoundSummary>,
+): RoundSummary {
+  return { memberNames: [], ...fields };
 }
 
 /** Was eine Einladung verrät, bevor man beitritt. */

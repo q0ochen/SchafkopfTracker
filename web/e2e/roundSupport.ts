@@ -5,12 +5,16 @@
  * zur App zurückkehrt.
  */
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from "@playwright/test";
+import type { Evening } from "../src/core/model";
+import type { RoundId } from "../src/core/round/RoundModels";
+import { RuleSets } from "../src/core/rules/RuleSet";
 import { FakeSupabase, NETWORK_FAILURE, type FakeAccount } from "../src/round/testing/fakeSupabase";
 import { FAKE_SUPABASE_URL, ROUND_APP_URL } from "./roundConfig";
 import { blockPlaceSearch, enterGame, expect, openApp, startEvening } from "./support";
 
 export const KONTO_1: FakeAccount = { userId: "konto-1", email: "konto-1@example.org" };
 export const KONTO_2: FakeAccount = { userId: "konto-2", email: "konto-2@example.org" };
+export const KONTO_3: FakeAccount = { userId: "konto-3", email: "konto-3@example.org" };
 
 /** Lässt alle Anfragen dieses Browsers an das nachgestellte Projekt von `fake` beantworten. */
 export async function routeSupabase(context: BrowserContext, fake: FakeSupabase): Promise<void> {
@@ -91,7 +95,7 @@ export async function nameRound(page: Page): Promise<void> {
 
 /**
  * Ein Handy mit benannten Spielern, einem laufenden Abend mit einem Spiel und einer Runde „Stammtisch“, in der das
- * Konto der Spieler „Nord“ ist. Am Ende steht der Bildschirm „Gemeinsame Runde“.
+ * Konto der Spieler „Nord“ ist. Am Ende steht der Bildschirm „Gemeinsame Runden“.
  */
 export async function foundRound(page: Page, fake: FakeSupabase, account: FakeAccount = KONTO_1): Promise<void> {
   await nameRound(page);
@@ -120,10 +124,10 @@ export async function renamePlayer(page: Page, from: string, to: string): Promis
   await expect(dialog).toBeHidden();
 }
 
-/** Öffnet „Gemeinsame Runde“. */
+/** Öffnet „Gemeinsame Runden“. */
 export async function openRound(page: Page): Promise<void> {
   await openApp(page, "/runde");
-  await expect(page.getByRole("heading", { level: 1, name: "Gemeinsame Runde" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Gemeinsame Runden", exact: true })).toBeVisible();
 }
 
 /** Meldet das Konto an: „Mit Google anmelden“ antippen; die nachgestellte Anmeldung kehrt sofort zurück. */
@@ -168,9 +172,57 @@ export async function inviteLink(page: Page): Promise<string> {
   return link;
 }
 
-/** Die Statuszeile der Runde, wie sie auf dem Start-Bildschirm steht. */
+/**
+ * Die Zeile „Gemeinsame Runden“ (Start-Bildschirm und Einstellungen): Überschrift, „Runde: ‹Name›“ und die
+ * Statuszeile. Antippen öffnet den Bildschirm; die Runden-Auswahl darunter gehört nicht dazu.
+ */
 export function roundRow(page: Page) {
-  return page.getByRole("button", { name: /^(Gemeinsame Runde|Runde: )/ });
+  return page.getByRole("button", { name: /^Gemeinsame Runden/ });
+}
+
+/** Die Runden-Auswahl auf dem Start-Bildschirm (eine native Auswahlliste mit der Beschriftung „Runde“). */
+export function roundPicker(page: Page) {
+  return page.getByRole("combobox", { name: "Runde", exact: true });
+}
+
+/**
+ * Eine weitere Runde, die ein anderes Konto (`owner`, ohne Angabe Konto 2) angelegt hat: vier Spieler, von denen der
+ * erste dem Konto gehört („Das bin ich“ als `ownerName`, ohne Angabe „Anna“; `null`: noch niemand) und die anderen
+ * Gäste sind (Bert, Cilli, Sepp – diese Namen sind deshalb für `ownerName` vergeben), und ein beendeter Abend am Ort
+ * `location`. `member` (ohne Angabe Konto 1) ist ihr über den Server beigetreten, wie von einem anderen Gerät aus;
+ * `null`: niemand.
+ *
+ * @returns Die Kennung der Runde.
+ */
+export async function otherRound(
+  fake: FakeSupabase,
+  name: string,
+  options: { owner?: FakeAccount; ownerName?: string | null; member?: FakeAccount | null; location?: string } = {},
+): Promise<RoundId> {
+  const owner = fake.session((options.owner ?? KONTO_2).userId);
+  const round = await owner.createRound(name);
+  const ids = ["gast-1", "gast-2", "gast-3", "gast-4"];
+  const ownerName = options.ownerName === undefined ? "Anna" : options.ownerName;
+  if (ownerName !== null) await owner.claimPlayer(round, ids[0], ownerName, 0);
+  else await owner.savePlayer(round, { id: ids[0], name: "Anna", colorIndex: 0, archived: false });
+  const guests = ["Bert", "Cilli", "Sepp"];
+  for (let index = 0; index < guests.length; index++) {
+    await owner.savePlayer(round, { id: ids[index + 1], name: guests[index], colorIndex: index + 1, archived: false });
+  }
+  const evening: Evening = {
+    id: "abend-vom-klub",
+    startedAt: "2026-11-20T18:00:00Z",
+    finishedAt: "2026-11-20T22:00:00Z",
+    location: options.location ?? "",
+    seating: ids,
+    firstDealer: ids[0],
+    rules: RuleSets.standard(),
+    entries: [{ kind: "thrown_in", id: "wurf-1", recordedAt: "2026-11-20T18:05:00Z" }],
+  };
+  await owner.saveEvening(round, evening, 0);
+  const member = options.member === undefined ? KONTO_1 : options.member;
+  if (member !== null) await fake.session(member.userId).joinRound(await owner.createInvite(round));
+  return round;
 }
 
 // --- Geräte nachstellen (die App erkennt sie an der Kennung des Browsers, siehe `src/platform/platform.ts`) ---

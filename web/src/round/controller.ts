@@ -1,7 +1,8 @@
 /*
  * Hält die gemeinsame Runde in der Web-App am Laufen (docs/ARCHITEKTUR.md, Abschnitt 8.6 und 8.7) und sagt der
- * Oberfläche, wie es um sie steht. Entspricht dem `RoundCoordinator` der Android-App: Anmeldung, Verbinden, „Das bin
- * ich“, Abgleich mit Planer, Statuszeile, Hinweise und Meldungen.
+ * Oberfläche, wie es um sie steht. Entspricht dem `RoundCoordinator` der Android-App: Anmeldung, Verbinden, Wechseln
+ * zwischen Runden, „Das bin ich“, Abgleich mit Planer, Statuszeile, Hinweise und Meldungen. Auch die Runden des Kontos
+ * stehen hier, damit Start-Bildschirm und „Gemeinsame Runden“ dieselbe Liste sehen.
  *
  * Die Anbindung an den Server (supabase-js) wird erst hier und erst bei Bedarf geladen. Solange sie nicht da ist,
  * weiß die Oberfläche noch nicht, wer angemeldet ist (`loaded` ist `false`).
@@ -56,6 +57,11 @@ import { SIGN_IN_EXCHANGE_MILLIS, TimeoutError, within } from "./within";
  * @property refused So viele Abende hat der Server in dieser Sitzung nicht angenommen.
  * @property players Der Stand der Spieler auf dem Server (Besitzer, fester Name), solange eine Runde verbunden ist.
  * @property signingIn Die Anmeldung wird nach der Rückkehr aus dem Browser gerade eingelöst; solange ruhen die Knöpfe.
+ * @property rounds Die Runden des angemeldeten Kontos (`my_rounds`) in ihrer Reihenfolge; `null`, solange sie für
+ *   dieses Konto noch nicht gelesen sind (und ohne Anmeldung). Gelesen werden sie, wenn ein Bildschirm sie braucht
+ *   ({@link RoundController.watchRounds}), auf Wunsch und nach jedem Anlegen, Beitreten, Wechseln und Verlassen.
+ * @property roundsFailed Das letzte Lesen der Runden ist gescheitert (kein Netz, Server gestört). `rounds` ist dann die
+ *   zuletzt gelesene Liste; gab es noch keine, bleibt es `null`.
  */
 export interface RoundState {
   readonly configured: boolean;
@@ -72,6 +78,8 @@ export interface RoundState {
   readonly pendingInvite: string | null;
   readonly message: RoundMessage | null;
   readonly signingIn: boolean;
+  readonly rounds: readonly RoundSummary[] | null;
+  readonly roundsFailed: boolean;
 }
 
 /** Der Stand einer App, die ohne Server gebaut wurde. */
@@ -90,6 +98,8 @@ export const NOT_CONFIGURED: RoundState = {
   pendingInvite: null,
   message: null,
   signingIn: false,
+  rounds: null,
+  roundsFailed: false,
 };
 
 /**
@@ -225,6 +235,13 @@ export class RoundController {
   /** Wer beim letzten Auffrischen nach dem Laden angemeldet war; `undefined` vor dem ersten Mal. */
   private lastAccount: string | null | undefined = undefined;
   private refreshing: Promise<void> = Promise.resolve();
+
+  /** Für dieses Konto gelten die Runden in `rounds`; `null` ohne Anmeldung (oder bevor sie gelesen ist). */
+  private roundsOwner: string | null = null;
+  /** Zählt das Lesen der Runden: Eine Antwort, nach der schon neu gelesen wurde, gilt nicht mehr. */
+  private roundsReads = 0;
+  /** So viele Bildschirme brauchen gerade die Runden des Kontos (siehe {@link watchRounds}). */
+  private roundsWatchers = 0;
 
   constructor(private readonly options: RoundControllerOptions) {
     this.api = deferredApi(async () => {
@@ -465,6 +482,9 @@ export class RoundController {
         players,
       });
     } else {
+      // Eine andere Runde (gewechselt, beigetreten, neu angelegt): Hinweise und nicht angenommene Abende der bisherigen
+      // gelten hier nicht; was die neue Runde dazu sagt, bringt ihr erster Abgleich.
+      const otherRound = current.link?.roundId !== link.roundId;
       this.setState({
         account,
         link,
@@ -472,7 +492,16 @@ export class RoundController {
         unreadable: link.unreadable.length,
         // Nach einer neuen Anmeldung gilt die alte Meldung nicht mehr.
         problem: current.problem === "SIGNED_OUT" && !sameAccount(account, current.account) ? null : current.problem,
+        ...(otherRound ? { notices: [], refused: 0 } : {}),
       });
+    }
+    // Die Runden gehören zum Konto: Ein anderes (oder keines) sieht die Liste des vorigen nicht.
+    const owner = account?.userId ?? null;
+    if (owner !== this.roundsOwner) {
+      this.roundsOwner = owner;
+      this.roundsReads++;
+      this.setState({ rounds: null, roundsFailed: false });
+      if (owner !== null && this.roundsWatchers > 0) void this.refreshRounds();
     }
     const now = `${account?.userId ?? ""}|${link?.roundId ?? ""}`;
     if (now !== this.known) {
@@ -500,9 +529,58 @@ export class RoundController {
 
   // --- Runden ---
 
-  /** Die Runden des angemeldeten Kontos. */
+  /** Die Runden des angemeldeten Kontos, frisch vom Server (ohne sie in den Zustand zu übernehmen). */
   myRounds(): Promise<RoundSummary[]> {
     return this.api.myRounds();
+  }
+
+  /**
+   * Ein Bildschirm braucht die Runden des Kontos (Start-Bildschirm, „Gemeinsame Runden“): Sie werden gleich gelesen,
+   * sobald jemand angemeldet ist, und wieder, wenn sich jemand anderes anmeldet. Der Bildschirm ruft das, wenn er
+   * erscheint (docs/ARCHITEKTUR.md 8.9, „Runden-Auswahl auf dem Start-Bildschirm“).
+   *
+   * @returns Zum Abbestellen, wenn der Bildschirm verschwindet.
+   */
+  watchRounds(): () => void {
+    this.roundsWatchers++;
+    void this.refreshRounds();
+    let watching = true;
+    return () => {
+      if (!watching) return;
+      watching = false;
+      this.roundsWatchers--;
+    };
+  }
+
+  /**
+   * Liest die Runden des angemeldeten Kontos neu (`my_rounds`) und übernimmt sie in den Zustand. Scheitert das, bleibt
+   * die zuletzt gelesene Liste stehen, und `roundsFailed` sagt es. Ohne Anmeldung passiert nichts. Scheitert nie.
+   */
+  async refreshRounds(): Promise<void> {
+    const owner = this.roundsOwner;
+    if (owner === null) return;
+    const read = ++this.roundsReads;
+    let rounds: RoundSummary[] | null = null;
+    try {
+      rounds = await this.api.myRounds();
+    } catch (error) {
+      console.warn("Schafkopf Tracker: Runden des Kontos nicht gelesen", error);
+    }
+    // Inzwischen ein anderes Konto, abgemeldet oder schon neu gelesen: Dann gilt diese Antwort nicht mehr.
+    if (read !== this.roundsReads || owner !== this.roundsOwner) return;
+    this.setState(rounds === null ? { roundsFailed: true } : { rounds, roundsFailed: false });
+  }
+
+  /**
+   * Nach einer Aktion, die die Runden des Kontos ändern kann (Anlegen, Beitreten, Wechseln, Verlassen): neu lesen –
+   * auch wenn die Aktion scheiterte, denn ein Versuch kann auf dem Server angekommen sein (Antwort verloren).
+   */
+  private async afterRoundsChange<T>(action: () => Promise<T>): Promise<T> {
+    try {
+      return await action();
+    } finally {
+      await this.refreshRounds();
+    }
   }
 
   inviteInfo(token: string): Promise<InviteInfo> {
@@ -525,27 +603,74 @@ export class RoundController {
 
   /**
    * Legt eine Runde an. Geschafft ist das, sobald der Server sie angenommen hat; scheitert nur der Abgleich danach,
-   * sagt es die Statuszeile, und die App holt ihn von selbst nach.
+   * sagt es die Statuszeile, und die App holt ihn von selbst nach. Ist das Gerät schon verbunden, wird die bisherige
+   * Runde vorher vollständig abgeglichen, und die neue beginnt leer (docs/ARCHITEKTUR.md 8.7).
    */
   async create(name: string): Promise<SyncOutcome> {
     this.requireReadableDevice();
+    const userId = this.userId();
     const seen = this.scheduler.seen();
-    return this.applied(await this.connection.create(name, this.userId(), this.options.placeholders), seen);
+    return this.afterRoundsChange(async () => this.applied(await this.connection.create(name, userId, this.options.placeholders), seen));
   }
 
-  /** Tritt bei und übernimmt die Daten der Runde; die Daten dieses Geräts werden dabei ersetzt. */
+  /**
+   * Tritt bei und übernimmt die Daten der Runde; die Daten dieses Geräts werden dabei ersetzt (mit verbundener Runde
+   * nach vollständigem Abgleich; gehört die Einladung zur verbundenen Runde, wird nur abgeglichen).
+   */
   async join(token: string): Promise<SyncOutcome> {
     this.requireReadableDevice();
+    const userId = this.userId();
     const seen = this.scheduler.seen();
-    const outcome = await this.connection.join(token, this.userId());
-    this.rememberInvite(null);
-    return this.applied(outcome, seen);
+    return this.afterRoundsChange(async () => {
+      const outcome = await this.connection.join(token, userId);
+      this.rememberInvite(null);
+      return this.applied(outcome, seen);
+    });
   }
 
+  /**
+   * Verwendet eine Runde des Kontos auf diesem Gerät oder wechselt zu ihr (docs/ARCHITEKTUR.md 8.7, „Runde wechseln“):
+   * Mit verbundener Runde wird diese vorher vollständig abgeglichen; ihre Abende bleiben auf dem Server.
+   */
   async use(round: RoundSummary): Promise<SyncOutcome> {
     this.requireReadableDevice();
+    const userId = this.userId();
     const seen = this.scheduler.seen();
-    return this.applied(await this.connection.use(round, this.userId()), seen);
+    return this.afterRoundsChange(async () => this.applied(await this.connection.use(round, userId), seen));
+  }
+
+  /**
+   * Vor der Rückfrage zum Wechseln, Beitreten oder Anlegen mit verbundener Runde (docs/ARCHITEKTUR.md 8.9, „Rückfrage
+   * vor dem Wechseln“): gleicht die verbundene Runde vollständig ab, damit alles von hier auf dem Server ist.
+   *
+   * @returns Wie viele Änderungen danach noch warten; sie gingen beim Wechseln verloren (etwa ein Abend, den der Server
+   *   nicht annimmt). `null`, wenn es nichts zu fragen gibt: Das Gerät ist nicht (mehr) verbunden, oder es gibt die
+   *   verbundene Runde nicht mehr – dann steht die Meldung nach `Detached` da, und die Daten bleiben als Kopie.
+   * @throws RoundException ohne Netz (`OFFLINE`), mit abgelaufener Anmeldung (`SIGNED_OUT`) oder bei einem Fehler des
+   *   Servers; `DeviceStorageError`, wenn der Speicher des Geräts den Abgleich nicht zulässt. Dann bleibt alles, wie es
+   *   ist.
+   */
+  async beforeSwitch(): Promise<number | null> {
+    this.requireReadableDevice();
+    const seen = this.scheduler.seen();
+    const outcome = await this.applied(await this.sync.sync(), seen);
+    switch (outcome.kind) {
+      case "Synced":
+        return outcome.pending;
+      case "Unchanged":
+        // Kommt bei einem vollständigen Abgleich nicht vor; dann zählt, was auf dem Gerät wartet.
+        return this.sync.pendingCount();
+      case "NotLinked":
+      case "Detached":
+        return null;
+      case "Offline":
+        throw new RoundException("OFFLINE");
+      case "SignedOut":
+        throw new RoundException("SIGNED_OUT");
+      case "Failed":
+        if (outcome === STORAGE_FAILURE) throw new DeviceStorageError("Abgleich vor dem Wechseln am Speicher des Geräts gescheitert");
+        throw new RoundException(outcome.error);
+    }
   }
 
   /** „Das bin ich“; `player === null` heißt „Ich bin neu“. */
@@ -557,22 +682,26 @@ export class RoundController {
 
   /** Verlässt die verbundene Runde und löst die Verbindung; die Daten bleiben als Kopie hier. */
   async leave(): Promise<void> {
-    await this.connection.leave();
-    this.options.issuedInvites.set(null);
-    await this.refresh();
+    await this.afterRoundsChange(async () => {
+      await this.connection.leave();
+      this.options.issuedInvites.set(null);
+      await this.refresh();
+    });
   }
 
   /**
-   * Verlässt eine Runde des Kontos, die nicht mit diesem Gerät verbunden ist („Deine Runden“). Auf diesem Gerät ändert
-   * sich nichts; ist das Konto das letzte Mitglied, löscht der Server die Runde.
+   * Verlässt eine Runde des Kontos, die nicht mit diesem Gerät verbunden ist („Deine Runden“, „Deine anderen
+   * Runden“). Auf diesem Gerät ändert sich nichts; ist das Konto das letzte Mitglied, löscht der Server die Runde.
    */
   async leaveRound(round: RoundId): Promise<void> {
     if (this.state.link?.roundId === round) {
       await this.leave();
       return;
     }
-    await this.api.leaveRound(round);
-    if (this.options.issuedInvites.get()?.roundId === round) this.options.issuedInvites.set(null);
+    await this.afterRoundsChange(async () => {
+      await this.api.leaveRound(round);
+      if (this.options.issuedInvites.get()?.roundId === round) this.options.issuedInvites.set(null);
+    });
   }
 
   /**

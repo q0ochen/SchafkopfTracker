@@ -9,16 +9,21 @@ import {
   LAST_MEMBER_TEXT,
   LEAVE_ROUND_TEXT,
   memberCountText,
+  membersText,
   messageText,
+  newRoundHint,
   NO_CODE_ERROR,
   noticeText,
   pendingWarning,
   replaceText,
+  roundChoiceLabel,
   roundErrorText,
+  ROUNDS_TITLE,
   roundStatus,
   SIGN_IN_MESSAGES,
   statusIconLabel,
   STORAGE_FAILED_TEXT,
+  switchTexts,
   type RoundStatusInput,
 } from "./texts";
 
@@ -78,6 +83,8 @@ describe("Fehlertexte", () => {
   it("jeder Fehler hat seinen Text aus dem Vertrag; alles andere den allgemeinen", () => {
     expect(roundErrorText("INVALID_INVITE")).toBe("Die Einladung ist abgelaufen oder ungültig.");
     expect(roundErrorText("NAME_TAKEN")).toBe("Den Namen gibt es in der Runde schon.");
+    // Beim Anlegen einer Runde (seit dem 21.11.2026): ein Name, den das Konto schon für eine seiner Runden hat.
+    expect(roundErrorText("NAME_TAKEN", true)).toBe("Du hast schon eine Runde mit diesem Namen.");
     expect(roundErrorText("INVALID_NAME")).toBe("Bitte einen Namen mit 1 bis 24 Zeichen eingeben.");
     expect(roundErrorText("INVALID_NAME", true)).toBe("Bitte einen Namen mit 1 bis 40 Zeichen eingeben.");
     expect(roundErrorText("PLAYER_TAKEN")).toBe("Diesen Spieler hat gerade jemand anders gewählt.");
@@ -123,6 +130,7 @@ describe("Meldungen und Rückfragen", () => {
     expect(messageText("DETACHED")).toBe(
       "Die Runde gibt es nicht mehr, oder du gehörst nicht mehr dazu. Die Daten bleiben als Kopie auf diesem Gerät.",
     );
+    expect(messageText("ALREADY_IN_ROUND")).toBe("Du bist schon in dieser Runde.");
     // Eine geglückte Anmeldung erledigt die Meldungen zur Anmeldung, nicht aber die über eine aufgelöste Runde.
     expect([...SIGN_IN_MESSAGES].sort()).toEqual(["OTHER_ACCOUNT", "SIGN_IN_CANCELLED", "SIGN_IN_FAILED"]);
   });
@@ -160,5 +168,61 @@ describe("Meldungen und Rückfragen", () => {
     );
     expect(dealerHint(true, "Nord")).toBe("Du gibst – trag dieses Spiel ein.");
     expect(dealerHint(false, "Nord")).toBe("Nord gibt und trägt ein.");
+  });
+});
+
+describe("Runden des Kontos und Wechseln", () => {
+  it("der Bildschirm heißt seit dem 21.11.2026 „Gemeinsame Runden“", () => {
+    expect(ROUNDS_TITLE).toBe("Gemeinsame Runden");
+  });
+
+  it("„Deine Runden“: die Zahl der Mitglieder und, wenn bekannt, ihre Namen", () => {
+    expect(membersText({ memberCount: 1, memberNames: [] })).toBe("1 Mitglied");
+    expect(membersText({ memberCount: 3, memberNames: [] })).toBe("3 Mitglieder");
+    expect(membersText({ memberCount: 1, memberNames: ["Anna"] })).toBe("1 Mitglied: Anna");
+    // Mitglieder ohne Spieler fehlen in den Namen; die Zahl zählt sie trotzdem.
+    expect(membersText({ memberCount: 3, memberNames: ["Anna", "Bert"] })).toBe("3 Mitglieder: Anna, Bert");
+  });
+
+  it("die Einträge der Runden-Auswahl: der Name, bei gleichnamigen Runden mit den Mitgliedern", () => {
+    expect(roundChoiceLabel({ name: "Stammtisch", memberCount: 2, memberNames: ["Anna", "Bert"] }, false)).toBe("Stammtisch");
+    expect(roundChoiceLabel({ name: "Stammtisch", memberCount: 2, memberNames: ["Anna", "Bert"] }, true)).toBe("Stammtisch (Anna, Bert)");
+    expect(roundChoiceLabel({ name: "Stammtisch", memberCount: 2, memberNames: [] }, true)).toBe("Stammtisch (2 Mitglieder)");
+    expect(roundChoiceLabel({ name: "stammtisch", memberCount: 1, memberNames: [] }, true)).toBe("stammtisch (1 Mitglied)");
+  });
+
+  it("der Hinweis unter „Name der Runde“: ohne Runde kommen die Daten mit, mit Runde beginnt die neue leer", () => {
+    expect(newRoundHint(null)).toBe("Alle Abende und Spieler dieses Geräts kommen mit in die Runde.");
+    expect(newRoundHint("Stammtisch")).toBe("Die neue Runde beginnt leer. Die Abende von Stammtisch bleiben dort.");
+  });
+
+  it("die Rückfrage vor dem Wechseln: Titel, erster Satz und Knopf je nach Anlass", () => {
+    expect(switchTexts("use", "Klub", "Stammtisch", 0)).toEqual({
+      title: "Zur Runde Klub wechseln?",
+      lead: "Auf diesem Gerät stehen dann die Abende und Spieler von Klub.",
+      keeps: "Die Abende von Stammtisch bleiben dort; du kannst jederzeit zurückwechseln.",
+      loss: null,
+      confirm: "Wechseln",
+    });
+    expect(switchTexts("join", "Klub", "Stammtisch", 0)).toEqual({
+      title: "Der Runde Klub beitreten?",
+      lead: "Auf diesem Gerät stehen dann die Abende und Spieler von Klub.",
+      keeps: "Die Abende von Stammtisch bleiben dort; du kannst jederzeit zurückwechseln.",
+      loss: null,
+      confirm: "Beitreten",
+    });
+    expect(switchTexts("create", "Dienstag", "Stammtisch", 0)).toEqual({
+      title: "Neue Runde Dienstag anlegen?",
+      lead: "Auf diesem Gerät beginnt dann die neue, leere Runde.",
+      keeps: "Die Abende von Stammtisch bleiben dort; du kannst jederzeit zurückwechseln.",
+      loss: null,
+      confirm: "Anlegen",
+    });
+  });
+
+  it("wartet nach dem Abgleich noch etwas, sagt die Rückfrage, dass es verloren geht", () => {
+    expect(switchTexts("use", "Klub", "Stammtisch", 1).loss).toBe("1 Änderung ist noch nicht hochgeladen und geht dabei verloren.");
+    expect(switchTexts("join", "Klub", "Stammtisch", 3).loss).toBe("3 Änderungen sind noch nicht hochgeladen und gehen dabei verloren.");
+    expect(switchTexts("create", "Neu", "Stammtisch", 2).loss).toBe("2 Änderungen sind noch nicht hochgeladen und gehen dabei verloren.");
   });
 });

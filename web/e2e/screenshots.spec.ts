@@ -20,6 +20,8 @@ import {
   nameRound,
   openRound,
   openRunningEvening,
+  otherRound,
+  roundPicker,
   roundRow,
   routeSupabase,
   signIn,
@@ -246,10 +248,10 @@ test("Bilder zum Teilen: alle Abende, helles Design, lange Namen", async ({ page
   await shareImage(page, "52b-bild-abend-lange-namen");
 });
 
-test("Gemeinsame Runde ohne Server", async ({ page }) => {
+test("Gemeinsame Runden ohne Server", async ({ page }) => {
   await openApp(page);
   await shot(page, "20-start-ohne-runde");
-  await page.getByRole("button", { name: /^Gemeinsame Runde/ }).click();
+  await page.getByRole("button", { name: /^Gemeinsame Runden/ }).click();
   await expect(page.getByText("Der Server ist noch nicht eingerichtet.")).toBeVisible();
   await shot(page, "21-runde-ohne-server");
 });
@@ -292,7 +294,7 @@ test.describe("mit Server", () => {
     await shot(safari, "27b-einladungsseite-iphone-safari", true);
     await safari.context().close();
     await page.goto(link);
-    await expect(page.getByText("Dieses Gerät ist schon mit der Runde Stammtisch verbunden.")).toBeVisible();
+    await expect(page.getByText(/^Dieses Gerät ist schon mit der Runde Stammtisch verbunden\. Du kannst trotzdem beitreten/)).toBeVisible();
     await shot(page, "27c-einladungsseite-verbunden", true);
 
     // Handy zwei: Einladungsseite, anmelden, Einladung, Rückfrage (es hat einen eigenen Abend), beitreten.
@@ -455,5 +457,37 @@ test.describe("mit Server", () => {
     await shot(other, "47-runde-runden-nicht-geladen", true);
     fake.override = null;
     await other.context().close();
+  });
+
+  test("Runden wechseln", async ({ page, context }) => {
+    const fake = new FakeSupabase();
+    await routeSupabase(context, fake);
+    await foundRound(page, fake);
+    await otherRound(fake, "Klub", { location: "Klubheim", ownerName: "Wirt" });
+    // Eine gleichnamige Runde: In der Auswahl stehen dann die Mitglieder dahinter.
+    await otherRound(fake, "Stammtisch", { owner: KONTO_2, ownerName: "Vroni" });
+
+    // Der Start-Bildschirm mit der Runden-Auswahl und die Rückfrage vor dem Wechsel.
+    await openApp(page);
+    await expect(roundPicker(page).locator("option")).toHaveText(["Stammtisch (Nord)", "Klub", "Stammtisch (Vroni)"]);
+    await expect(roundRow(page)).toContainText("Abgeglichen", SYNC);
+    await shot(page, "48-start-runden-auswahl", true);
+    await roundPicker(page).selectOption({ label: "Klub" });
+    await expect(page.getByRole("dialog", { name: "Zur Runde Klub wechseln?" })).toBeVisible();
+    await shot(page, "49-runde-wechseln-rueckfrage");
+    await page.getByRole("dialog").getByRole("button", { name: "Abbrechen" }).click();
+
+    // „Gemeinsame Runden“, verbunden, mit den anderen Runden des Kontos und dem Feld für eine neue.
+    await roundRow(page).click();
+    await expect(page.getByRole("list", { name: "Deine anderen Runden" }).getByRole("listitem")).toHaveCount(2);
+    await shot(page, "49b-runde-verbunden-andere-runden", true);
+
+    // Eine neue Runde anlegen, während das Gerät verbunden ist: die Rückfrage.
+    const form = page.getByRole("form", { name: "Neue Runde anlegen" });
+    await form.getByLabel("Name der Runde").fill("Dienstagsrunde");
+    await form.getByRole("button", { name: "Runde anlegen" }).click();
+    await expect(page.getByRole("dialog", { name: "Neue Runde Dienstagsrunde anlegen?" })).toBeVisible();
+    await shot(page, "49c-runde-anlegen-rueckfrage");
+    await page.getByRole("dialog").getByRole("button", { name: "Abbrechen" }).click();
   });
 });

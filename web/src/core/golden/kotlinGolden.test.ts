@@ -27,6 +27,8 @@ import {
 import { DuplicateCheck } from "../round/DuplicateCheck";
 import { EveningMerge } from "../round/EveningMerge";
 import { InviteLinks } from "../round/InviteLinks";
+import { roundSummary } from "../round/RoundModels";
+import { RoundNames } from "../round/RoundNames";
 import type { EveningJson, Json, JsonObject, RuleSetJson } from "./goldenCodec";
 import {
   decodeEvening,
@@ -103,6 +105,21 @@ interface InviteCase {
   readonly token: string | null;
 }
 
+/**
+ * Namen von Runden: die Runden eines Kontos (`names`) und ein Name, der neu dazukommen soll (`text`), mit den
+ * Ergebnissen von `RoundNames` im Kotlin-Kern; `duplicates` sind Stellen in `names`.
+ */
+interface RoundNameCase {
+  readonly id: string;
+  readonly names: readonly string[];
+  readonly text: string;
+  readonly clean: string;
+  readonly valid: boolean;
+  readonly taken: boolean;
+  readonly suggest: string;
+  readonly duplicates: readonly number[];
+}
+
 /** „Abend bearbeiten“: der Abend, der Stand beim Öffnen, das Bearbeitete und das Ergebnis von `EveningEdit.apply`. */
 interface EditCase {
   readonly id: string;
@@ -123,6 +140,7 @@ interface GoldenFile {
   readonly duplicates: readonly DuplicateCase[];
   readonly invites: readonly InviteCase[];
   readonly edits: readonly EditCase[];
+  readonly roundNames: readonly RoundNameCase[];
 }
 
 const golden = JSON.parse(readFileSync(new URL("./kotlin-golden.json", import.meta.url), "utf8")) as GoldenFile;
@@ -295,6 +313,43 @@ describe("Rechenkern gegen den Kotlin-Kern (kotlin-golden.json)", () => {
     }
     expect(failures).toEqual([]);
     expect(golden.invites.length).toBe(22);
+  });
+
+  it("Gemeinsame Runde: RoundNames bereinigt, prüft, schlägt vor und erkennt gleichnamige Runden wie Kotlin", () => {
+    // Alle Abweichungen sammeln, nicht nur die ersten zehn: Hier muss wirklich jeder Fall stimmen.
+    const failures: string[] = [];
+    for (const c of golden.roundNames) {
+      // Wie im Kotlin-Test: je Name eine Runde mit der Stelle als Kennung.
+      const rounds = c.names.map((name, index) =>
+        roundSummary({ id: `${index}`, name, rev: 1, memberCount: 1, myPlayerId: null, isCreator: true }),
+      );
+      const actual = {
+        clean: RoundNames.clean(c.text),
+        valid: RoundNames.valid(c.text),
+        taken: RoundNames.taken(c.text, rounds),
+        suggest: RoundNames.suggest(rounds),
+        duplicates: [...RoundNames.duplicates(rounds)].map(Number),
+      };
+      const difference = firstDifference(pick(c, ["clean", "valid", "taken", "suggest", "duplicates"]), actual);
+      if (difference !== null) failures.push(`${c.id}: ${difference}`);
+    }
+    expect(failures).toEqual([]);
+    expect(golden.roundNames.length).toBe(19);
+  });
+
+  it("die Golden-Daten der Namen von Runden enthalten die gezielten Fallen", () => {
+    const byId = new Map(golden.roundNames.map((c) => [c.id, c]));
+    // Nur ASCII ist Leerraum: Ein geschütztes Leerzeichen bleibt, und „a b“ ist dann ein anderer Name.
+    expect(byId.get("geschuetztes-leerzeichen")).toMatchObject({ clean: "a\u00A0b", taken: false });
+    expect(byId.get("steuerzeichen")?.clean).toBe("a b");
+    // Gezählt werden Zeichen, nicht UTF-16-Einheiten.
+    expect(byId.get("40-astrale-zeichen")?.valid).toBe(true);
+    expect(byId.get("41-astrale-zeichen")?.valid).toBe(false);
+    // „ß“ wird beim Vergleich nicht zu „ss“; Groß und Klein zählen nicht, auch bei Umlauten.
+    expect(byId.get("eszett")?.taken).toBe(false);
+    expect(byId.get("umlaute")?.taken).toBe(true);
+    expect(byId.get("vorschlag-luecke")?.suggest).toBe("Schafkopfrunde 2");
+    expect(byId.get("doppelte")?.duplicates).toEqual([0, 2, 3, 4]);
   });
 
   it("Abend bearbeiten: EveningEdit.apply liefert für jeden Fall denselben Abend", () => {

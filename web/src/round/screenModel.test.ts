@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemoryRoundServer } from "../core/round/InMemoryRound";
 import { InviteLinks } from "../core/round/InviteLinks";
-import { RoundException } from "../core/round/RoundModels";
+import { RoundException, type RoundSummary } from "../core/round/RoundModels";
 import { needsSignIn } from "./controller";
 import type { RoundScreenModel } from "./screenModel";
 import { account, Phone, WEB_APP_URL } from "./testing/phone";
@@ -42,6 +42,27 @@ async function inviteToken(one: Phone): Promise<string> {
   return token;
 }
 
+/**
+ * Eine zweite Runde „Klub“, die Konto 2 auf seinem Handy mit einem eigenen Abend anlegt; Konto 1 tritt ihr über den
+ * Server bei (wie von einem anderen Gerät aus).
+ */
+async function club(): Promise<Phone> {
+  const two = await phone("zwei", 2);
+  await two.startEvening("abend-klub");
+  await two.addGame("abend-klub");
+  await two.controller.create("Klub");
+  await pass();
+  await server.sessionFor("konto-1").joinRound(await two.mine.createInvite(two.state.link?.roundId ?? ""));
+  return two;
+}
+
+/** Die Runde `name` aus der Liste der Runden eines Handys. */
+function roundNamed(of: Phone, name: string): RoundSummary {
+  const round = of.state.rounds?.find((it) => it.name === name);
+  if (round === undefined) throw new Error(`keine Runde ${name} in der Liste`);
+  return round;
+}
+
 /** Die Statuszeile eines Handys. */
 function statusOf(of: Phone): string {
   return roundStatus({ ...of.state, needsSignIn: needsSignIn(of.state) }).text;
@@ -74,8 +95,8 @@ describe("Angemeldet, ohne Runde", () => {
 
     const screen = await screenOf(other);
 
-    expect(screen.getUi().rounds).toEqual([
-      { id: expect.any(String), name: "Stammtisch", rev: expect.any(Number), memberCount: 1, myPlayerId: null, isCreator: true },
+    expect(other.state.rounds).toEqual([
+      { id: expect.any(String), name: "Stammtisch", rev: expect.any(Number), memberCount: 1, myPlayerId: null, isCreator: true, memberNames: [] },
     ]);
     expect(screen.getUi().invite).toBeNull();
   });
@@ -91,27 +112,28 @@ describe("Angemeldet, ohne Runde", () => {
     const screen = await screenOf(other);
 
     // Sonst sähe es auf einem neuen Handy aus, als gäbe es keine Runde.
-    expect(screen.getUi().roundsFailed).toBe(true);
-    expect(screen.getUi().rounds).toBeNull();
+    expect(other.state.roundsFailed).toBe(true);
+    expect(other.state.rounds).toBeNull();
     other.session("konto-1").offline = false;
     const retrying = screen.retry();
     expect(screen.getUi().busy).toBe(true);
     await retrying;
     expect(screen.getUi().busy).toBe(false);
-    expect(screen.getUi().roundsFailed).toBe(false);
-    expect(screen.getUi().rounds?.map((it) => it.name)).toEqual(["Stammtisch"]);
+    expect(other.state.roundsFailed).toBe(false);
+    expect(other.state.rounds?.map((it) => it.name)).toEqual(["Stammtisch"]);
 
     // Scheitert es später noch einmal, bleibt die bekannte Liste stehen.
     other.session("konto-1").offline = true;
     await screen.retry();
-    expect(screen.getUi().roundsFailed).toBe(true);
-    expect(screen.getUi().rounds?.map((it) => it.name)).toEqual(["Stammtisch"]);
+    expect(other.state.roundsFailed).toBe(true);
+    expect(other.state.rounds?.map((it) => it.name)).toEqual(["Stammtisch"]);
   });
 
   it("ohne Anmeldung wird nichts nachgesehen", async () => {
     const one = await phone("eins");
-    const screen = await screenOf(one);
-    expect(screen.getUi().rounds).toBeNull();
+    await screenOf(one);
+    expect(one.state.rounds).toBeNull();
+    expect(one.state.roundsFailed).toBe(false);
     expect(one.backendLoads).toBe(1);
   });
 
@@ -123,7 +145,7 @@ describe("Angemeldet, ohne Runde", () => {
     const screen = await screenOf(two);
 
     expect(screen.getUi().invite).toEqual({ roundId: one.state.link?.roundId, roundName: "Stammtisch", memberCount: 1, alreadyMember: false });
-    expect(screen.getUi().rounds).toEqual([]);
+    expect(two.state.rounds).toEqual([]);
   });
 
   it("eine abgelaufene Einladung wird gemeldet und vergessen", async () => {
@@ -165,6 +187,23 @@ describe("Angemeldet, ohne Runde", () => {
     expect(screen.getUi().invite).toBeNull();
   });
 
+  it("kommt eine andere Einladung, gilt bis zum Nachsehen nichts mehr von der vorigen", async () => {
+    const one = await founder();
+    const other = await phone("drei", 3);
+    await other.controller.create("Klub");
+    await pass();
+    const two = await phone("zwei", 2);
+    two.controller.rememberInvite(await inviteToken(one));
+    const screen = await screenOf(two);
+    expect(screen.getUi().invite?.roundName).toBe("Stammtisch");
+
+    two.controller.rememberInvite(await inviteToken(other));
+    expect(screen.getUi().invite).toBeNull();
+    await pass();
+
+    expect(screen.getUi().invite?.roundName).toBe("Klub");
+  });
+
   it("nach dem Anmelden werden Runden und Einladung von selbst nachgesehen", async () => {
     const one = await founder();
     const two = await phone("zwei");
@@ -176,7 +215,7 @@ describe("Angemeldet, ohne Runde", () => {
     await pass();
 
     expect(screen.getUi().invite?.roundName).toBe("Stammtisch");
-    expect(screen.getUi().rounds).toEqual([]);
+    expect(two.state.rounds).toEqual([]);
   });
 
   it("„Verlassen“ bei einer Runde des Kontos: erst die Rückfrage, dann ist sie aus der Liste; auf dem Gerät ändert sich nichts", async () => {
@@ -190,7 +229,7 @@ describe("Angemeldet, ohne Runde", () => {
     await pass();
     await two.startEvening("eigener-abend");
     const screen = await screenOf(two);
-    const [round] = screen.getUi().rounds ?? [];
+    const [round] = two.state.rounds ?? [];
     expect(round).toMatchObject({ id, name: "Stammtisch", memberCount: 2 });
 
     // „Abbrechen“ lässt alles, wie es ist.
@@ -204,7 +243,7 @@ describe("Angemeldet, ohne Runde", () => {
     await screen.confirmLeave();
     expect(screen.getUi().leaving).toBeNull();
     expect(screen.getUi().error).toBeNull();
-    expect(screen.getUi().rounds).toEqual([]);
+    expect(two.state.rounds).toEqual([]);
     expect((await one.session("konto-1").members(id)).map((it) => it.userId)).toEqual(["konto-1"]);
     expect(two.store.getState().evenings.map((it) => it.id)).toContain("eigener-abend");
     expect(two.state.link).toBeNull();
@@ -215,19 +254,19 @@ describe("Angemeldet, ohne Runde", () => {
     const id = one.state.link?.roundId ?? "";
     const other = await phone("neues-handy", 1);
     const screen = await screenOf(other);
-    const [round] = screen.getUi().rounds ?? [];
+    const [round] = other.state.rounds ?? [];
     expect(round.memberCount).toBe(1);
 
     other.mine.offline = true;
     screen.askLeave(round);
     await screen.confirmLeave();
     expect(screen.getUi().error).toEqual({ kind: "Server", error: "OFFLINE", roundName: false });
-    expect(screen.getUi().rounds).toEqual([round]);
+    expect(other.state.rounds).toEqual([round]);
 
     other.mine.offline = false;
     screen.askLeave(round);
     await screen.confirmLeave();
-    expect(screen.getUi().rounds).toEqual([]);
+    expect(other.state.rounds).toEqual([]);
     expect(await one.session("konto-1").head(id)).toBeNull();
   });
 
@@ -263,8 +302,8 @@ describe("Runde anlegen", () => {
     expect(seen).toContain(true);
     expect(one.state.link?.roundName).toBe("Stammtisch");
     expect(await one.controller.myRounds()).toHaveLength(1);
-    // Mit Runde gibt es keine Liste der Runden mehr.
-    expect(screen.getUi().rounds).toBeNull();
+    // Nach dem Anlegen ist die Liste der Runden neu gelesen (für „Deine anderen Runden“ und die Runden-Auswahl).
+    expect(one.state.rounds?.map((it) => it.name)).toEqual(["Stammtisch"]);
   });
 
   it("ein unbrauchbarer Name der Runde: Fehler mit dem Hinweis auf 1 bis 40 Zeichen", async () => {
@@ -380,7 +419,7 @@ describe("Beitreten und Verwenden", () => {
     const one = await founder();
     const other = await phone("neues-handy", 1);
     const screen = await screenOf(other);
-    const [round] = screen.getUi().rounds ?? [];
+    const [round] = other.state.rounds ?? [];
 
     await screen.use(round);
     await pass();
@@ -544,7 +583,7 @@ describe("Verbunden", () => {
     expect(one.state.link).toBeNull();
     expect(one.state.account).toBeNull();
     expect(one.store.getState().evenings).toHaveLength(1);
-    expect(screen.getUi().rounds).toBeNull();
+    expect(one.state.rounds).toBeNull();
   });
 
   it("„Mit Google anmelden“ beginnt die Anmeldung", async () => {
@@ -583,5 +622,235 @@ describe("Verbunden", () => {
 
     expect(screen.getUi().error).toEqual({ kind: "Server", error: "OFFLINE", roundName: false });
     expect(roundErrorText("OFFLINE")).toBe("Keine Verbindung. Bitte später noch einmal versuchen.");
+  });
+});
+
+describe("Mit verbundener Runde: wechseln, beitreten, anlegen", () => {
+  it("„Wechseln“: erst vollständig abgleichen, dann die Rückfrage; „Abbrechen“ lässt alles, wie es ist", async () => {
+    const one = await founder();
+    const stammtisch = one.state.link?.roundId ?? "";
+    const two = await club();
+    const screen = await screenOf(one);
+    const klub = roundNamed(one, "Klub");
+    await one.addGame("abend-1");
+
+    const asking = screen.use(klub);
+    expect(screen.getUi().busy).toBe(true);
+    await asking;
+
+    expect(screen.getUi().switching).toEqual({ target: { kind: "use", round: klub }, fromId: stammtisch, from: "Stammtisch", pending: 0 });
+    expect(server.evenings(stammtisch)[0].entries).toHaveLength(2);
+    expect(one.state.link?.roundId).toBe(stammtisch);
+    screen.cancelSwitch();
+    expect(screen.getUi().switching).toBeNull();
+    expect(one.state.link?.roundId).toBe(stammtisch);
+
+    await screen.use(klub);
+    await screen.confirmSwitch();
+    await pass();
+
+    expect(screen.getUi().error).toBeNull();
+    expect(one.state.link?.roundName).toBe("Klub");
+    expect(one.store.getState().evenings).toEqual(two.store.getState().evenings);
+    expect(server.evenings(stammtisch)[0].entries).toHaveLength(2);
+  });
+
+  it("die Rückfrage nennt, was nach dem Abgleich noch wartet und beim Wechseln verloren ginge", async () => {
+    const one = await founder();
+    await club();
+    const screen = await screenOf(one);
+    one.mine.saveEvening = async () => {
+      throw new RoundException("TOO_LARGE");
+    };
+    await one.addGame("abend-1");
+
+    await screen.use(roundNamed(one, "Klub"));
+
+    expect(screen.getUi().switching?.pending).toBe(1);
+  });
+
+  it("ohne Netz kommt statt der Rückfrage der Fehlertext, und es bleibt alles, wie es ist", async () => {
+    const one = await founder();
+    const stammtisch = one.state.link?.roundId ?? "";
+    await club();
+    const screen = await screenOf(one);
+    one.mine.offline = true;
+
+    await screen.use(roundNamed(one, "Klub"));
+
+    expect(screen.getUi().switching).toBeNull();
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "OFFLINE", roundName: false });
+    expect(one.state.link?.roundId).toBe(stammtisch);
+    expect(one.store.getState().evenings.map((it) => it.id)).toEqual(["abend-1"]);
+  });
+
+  it("gibt es die verbundene Runde nicht mehr, kommt statt der Rückfrage die Meldung nach `Detached`", async () => {
+    const one = await founder();
+    await club();
+    const screen = await screenOf(one);
+    server.removeMember(one.state.link?.roundId ?? "", "konto-1");
+
+    await screen.use(roundNamed(one, "Klub"));
+
+    expect(screen.getUi().switching).toBeNull();
+    expect(screen.getUi().error).toBeNull();
+    expect(one.state.message).toBe("DETACHED");
+    expect(one.state.link).toBeNull();
+    expect(one.store.getState().evenings.map((it) => it.id)).toEqual(["abend-1"]);
+  });
+
+  it("ändert sich die verbundene Runde, gilt eine offene Rückfrage nicht mehr", async () => {
+    const one = await founder();
+    await club();
+    const screen = await screenOf(one);
+    await screen.use(roundNamed(one, "Klub"));
+    expect(screen.getUi().switching).not.toBeNull();
+
+    // Zum Beispiel in einem anderen Fenster: Die Runde ist getrennt worden.
+    await one.controller.signOut();
+    await pass();
+
+    expect(screen.getUi().switching).toBeNull();
+    await screen.confirmSwitch();
+    expect(one.state.link).toBeNull();
+  });
+
+  it("eine Einladung in die verbundene Runde: „Du bist schon in dieser Runde.“, und die Einladung ist vergessen", async () => {
+    const one = await founder();
+    const token = await inviteToken(one);
+    one.controller.rememberInvite(token);
+    const screen = await screenOf(one);
+    expect(screen.getUi().invite?.roundName).toBe("Stammtisch");
+
+    await screen.joinInvited();
+
+    expect(screen.getUi().message).toBe("ALREADY_IN_ROUND");
+    expect(screen.getUi().switching).toBeNull();
+    expect(one.state.pendingInvite).toBeNull();
+    expect(one.invite).toBeNull();
+    expect(one.mine.calls).not.toContain("joinRound");
+    screen.clearMessage();
+    expect(screen.getUi().message).toBeNull();
+
+    // Dasselbe mit dem eingefügten Code.
+    await screen.redeem(`Komm in unsere Schafkopfrunde Stammtisch: ${await one.controller.inviteLink()}`);
+    expect(screen.getUi().message).toBe("ALREADY_IN_ROUND");
+  });
+
+  it("eine Einladung in eine andere Runde: Rückfrage „Der Runde ‹Ziel› beitreten?“ mit dem Namen aus der Einladung", async () => {
+    const two = await phone("zwei", 2);
+    await two.startEvening("abend-freitag");
+    await two.controller.create("Freitag");
+    await pass();
+    const one = await founder();
+    const stammtisch = one.state.link?.roundId ?? "";
+    const token = await inviteToken(two);
+    one.controller.rememberInvite(token);
+    const screen = await screenOf(one);
+
+    await screen.joinInvited();
+
+    expect(screen.getUi().switching).toEqual({
+      target: { kind: "join", token, roundName: "Freitag" },
+      fromId: stammtisch,
+      from: "Stammtisch",
+      pending: 0,
+    });
+    await screen.confirmSwitch();
+    await pass();
+
+    expect(one.state.link?.roundName).toBe("Freitag");
+    expect(one.state.pendingInvite).toBeNull();
+    expect(one.store.getState().evenings.map((it) => it.id)).toEqual(["abend-freitag"]);
+    expect(server.evenings(stammtisch)).toHaveLength(1);
+    // Die Liste ist nach dem Beitreten neu gelesen (der Server im Speicher ordnet nach dem Anlegen der Runden).
+    expect(one.state.rounds?.map((it) => it.name).sort()).toEqual(["Freitag", "Stammtisch"]);
+  });
+
+  it("ist die Einladung beim Beitreten mit verbundener Runde inzwischen abgelaufen: Fehlertext, die Einladung ist vergessen", async () => {
+    const two = await phone("zwei", 2);
+    await two.controller.create("Freitag");
+    await pass();
+    const one = await founder();
+    one.controller.rememberInvite(await inviteToken(two));
+    const screen = await screenOf(one);
+    expect(screen.getUi().invite?.roundName).toBe("Freitag");
+    // Zwischen dem Öffnen und dem Antippen läuft sie ab.
+    one.mine.inviteInfo = async () => {
+      throw new RoundException("INVALID_INVITE");
+    };
+
+    await screen.joinInvited();
+
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "INVALID_INVITE", roundName: false });
+    expect(one.state.pendingInvite).toBeNull();
+    expect(screen.getUi().switching).toBeNull();
+    expect(one.state.link?.roundName).toBe("Stammtisch");
+  });
+
+  it("neue Runde anlegen: erst der Name, dann die Rückfrage; danach beginnt die neue Runde leer", async () => {
+    const one = await founder();
+    const stammtisch = one.state.link?.roundId ?? "";
+    const screen = await screenOf(one);
+
+    await screen.create("  Neue \t Runde ");
+
+    expect(screen.getUi().switching).toEqual({ target: { kind: "create", name: "Neue Runde" }, fromId: stammtisch, from: "Stammtisch", pending: 0 });
+    await screen.confirmSwitch();
+    await pass();
+
+    expect(screen.getUi().error).toBeNull();
+    expect(one.state.link).toMatchObject({ roundName: "Neue Runde", isCreator: true });
+    expect(one.store.getState().evenings).toEqual([]);
+    expect(server.evenings(stammtisch)).toHaveLength(1);
+  });
+
+  it("ein Name, den das Konto schon hat, wird vor der Rückfrage gemeldet; ebenso ein zu langer", async () => {
+    const one = await founder();
+    await club();
+    const screen = await screenOf(one);
+    one.mine.calls.length = 0;
+
+    await screen.create(" stammTISCH ");
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "NAME_TAKEN", roundName: true });
+    expect(roundErrorText("NAME_TAKEN", true)).toBe("Du hast schon eine Runde mit diesem Namen.");
+    // Auch der Name einer beigetretenen Runde ist vergeben.
+    await screen.create("klub");
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "NAME_TAKEN", roundName: true });
+    await screen.create("x".repeat(41));
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "INVALID_NAME", roundName: true });
+
+    expect(screen.getUi().switching).toBeNull();
+    expect(one.state.link?.roundName).toBe("Stammtisch");
+    expect(one.mine.calls).not.toContain("createRound");
+  });
+
+  it("die eigene leere Runde eines Versuchs, dessen Antwort verloren ging, gilt beim Prüfen des Namens nicht als vergeben", async () => {
+    const one = await phone("eins", 1);
+    await one.startEvening("abend-1");
+    const screen = await screenOf(one);
+    one.mine.loseNextAnswer = true;
+    await screen.create("Stammtisch");
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "OFFLINE", roundName: true });
+    expect(one.state.rounds?.map((it) => it.name)).toEqual(["Stammtisch"]);
+
+    await screen.create("Stammtisch");
+
+    expect(screen.getUi().error).toBeNull();
+    expect(one.state.link?.roundName).toBe("Stammtisch");
+    expect(await one.controller.myRounds()).toHaveLength(1);
+    expect(server.evenings(one.state.link?.roundId ?? "")).toHaveLength(1);
+  });
+
+  it("ohne verbundene Runde gibt es keine Rückfrage vor dem Wechseln: Verwenden fragt wie bisher nach dem Ersetzen", async () => {
+    await founder();
+    const other = await phone("neues-handy", 1);
+    await other.startEvening("eigener");
+    const screen = await screenOf(other);
+
+    await screen.use(roundNamed(other, "Stammtisch"));
+
+    expect(screen.getUi().switching).toBeNull();
+    expect(screen.getUi().replace?.kind).toBe("use");
   });
 });

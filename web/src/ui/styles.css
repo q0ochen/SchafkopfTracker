@@ -1523,6 +1523,91 @@ button.card {
   margin: 0;
 }
 
+/*
+ * Auf dem Start-Bildschirm ist die Zeile „Gemeinsame Runden“ eine Karte mit eigenem Knopf (Überschrift und
+ * Statuszeile öffnen den Bildschirm) und darunter der Runden-Auswahl (docs/ARCHITEKTUR.md 8.9). Der Knopf füllt die
+ * Karte bis an ihren Rand, damit die ganze obere Fläche antippbar bleibt.
+ */
+.round-row-open {
+  display: block;
+  width: calc(100% + 32px);
+  min-height: 56px;
+  margin: -16px -16px 0;
+  padding: 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Steht in der Karte nichts darunter, reicht der Knopf auch unten bis an den Rand. */
+.round-row-open:only-child {
+  margin-bottom: -16px;
+}
+
+.round-row-open:active {
+  background: var(--surface-3);
+}
+
+.round-row-name {
+  overflow-wrap: anywhere;
+}
+
+.round-row > .hint[role="status"] {
+  margin-top: 8px;
+}
+
+.round-row .message-card {
+  margin-bottom: 0;
+}
+
+/* Eine native Auswahlliste (am iPhone das gewohnte Rad), so hoch wie ein Tippziel und mit Pfeil in Textfarbe. */
+.select-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+}
+
+.select-field label {
+  font-size: 15px;
+  color: var(--on-surface-variant);
+}
+
+.select-wrap {
+  position: relative;
+}
+
+.select-wrap select {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 44px 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--outline);
+  background: var(--surface-1);
+  font-size: 17px;
+  appearance: none;
+  -webkit-appearance: none;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.select-wrap select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.select-wrap .icon {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
 .card.accent {
   border-color: var(--primary);
 }

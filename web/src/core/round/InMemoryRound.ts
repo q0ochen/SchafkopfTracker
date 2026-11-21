@@ -4,7 +4,7 @@
  * Der Server verhält sich nach dem Vertrag aus docs/ARCHITEKTUR.md, Abschnitt 8.2 und 8.3; maßgeblich bleibt der
  * echte Server in `supabase/` mit seinen Tests.
  */
-import { floorMod, kotlinTrim } from "../kotlin";
+import { compareText, floorMod } from "../kotlin";
 import type { Evening, EveningId, Player, PlayerId, RuleSet } from "../model";
 import { cleanName } from "../players";
 import {
@@ -20,6 +20,7 @@ import {
   type RoundSummary,
   type SavedEvening,
 } from "./RoundModels";
+import { RoundNames } from "./RoundNames";
 import type { RoundApi, RoundStore } from "./RoundPorts";
 
 /** Was sich ein Gerät zum Abgleich merkt, nur im Speicher. */
@@ -84,7 +85,7 @@ const MAX_MEMBERS = 12;
 const MAX_PLAYERS = 40;
 const MAX_EVENINGS = 3000;
 const MAX_INVITES = 20;
-const MAX_ROUND_NAME_LENGTH = 40;
+const MAX_ROUND_NAME_LENGTH = RoundNames.MAX_LENGTH;
 const MAX_ID_LENGTH = 64;
 
 /**
@@ -278,6 +279,20 @@ export class InMemoryRoundServer {
   }
 }
 
+/**
+ * Wie `member_names` auf dem Server: die Namen der Spieler, die Mitglieder übernommen haben (nicht gelöscht), ohne
+ * Groß/Klein sortiert, bei Gleichheit nach den Zeichen selbst (Kotlin: `compareBy({ it.lowercase() }, { it })`).
+ */
+function memberNames(round: Round): string[] {
+  const names: string[] = [];
+  for (const id of round.members.values()) {
+    if (id === null) continue;
+    const player = round.players.get(id);
+    if (player !== undefined && !player.deleted) names.push(player.name);
+  }
+  return names.sort((a, b) => compareText(a.toLowerCase(), b.toLowerCase()) || compareText(a, b));
+}
+
 /** Was ein Zugang vom Server braucht. */
 interface ServerInternals {
   readonly rounds: Map<RoundId, Round>;
@@ -440,21 +455,26 @@ export class InMemoryRoundSession implements RoundApi {
     return this.call("myRounds", false, () =>
       [...this.server.rounds.values()]
         .filter((it) => it.members.has(this.userId))
-        .map((it) => ({
-          id: it.id,
-          name: it.name,
-          rev: it.rev,
-          memberCount: it.members.size,
-          myPlayerId: it.members.get(this.userId) ?? null,
-          isCreator: it.createdBy === this.userId,
+        .map((round) => ({
+          id: round.id,
+          name: round.name,
+          rev: round.rev,
+          memberCount: round.members.size,
+          myPlayerId: round.members.get(this.userId) ?? null,
+          isCreator: round.createdBy === this.userId,
+          memberNames: memberNames(round),
         })),
     );
   }
 
   createRound(name: string): Promise<RoundId> {
     return this.call("createRound", true, () => {
-      const clean = kotlinTrim(name);
-      if (clean.length < 1 || clean.length > MAX_ROUND_NAME_LENGTH) throw new RoundException("INVALID_NAME");
+      const clean = RoundNames.clean(name);
+      if (!RoundNames.valid(clean)) throw new RoundException("INVALID_NAME");
+      // Wie auf dem Server: ein Name je Konto (docs/ARCHITEKTUR.md 8.7), geprüft vor der Obergrenze.
+      for (const round of this.server.rounds.values()) {
+        if (round.members.has(this.userId) && RoundNames.same(round.name, clean)) throw new RoundException("NAME_TAKEN");
+      }
       this.requireRoomForRound();
       const round = new Round(this.server.roundId(this.server.nextNumber()), clean, this.userId);
       // Das Anlegen mit dem ersten Mitglied ist die erste Änderung der Runde.

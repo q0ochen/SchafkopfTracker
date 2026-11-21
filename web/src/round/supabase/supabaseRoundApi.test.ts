@@ -215,13 +215,62 @@ describe("Anfragen wie im Vertrag (Abschnitt 8.3)", () => {
       payoutRule: "schafkopf",
     });
 
-    expect(await one.myRounds()).toEqual([{ id: round, name: "Stammtisch", rev: rev + 2, memberCount: 2, myPlayerId: null, isCreator: true }]);
+    // member_names (seit dem 21.11.2026): die Namen der Spieler, die Mitglieder übernommen haben, hier nur „Zwei“.
+    expect(await one.myRounds()).toEqual([
+      { id: round, name: "Stammtisch", rev: rev + 2, memberCount: 2, myPlayerId: null, isCreator: true, memberNames: ["Zwei"] },
+    ]);
     expect(bodyOf("my_rounds")).toEqual({});
-    expect((await two.myRounds())[0]).toMatchObject({ myPlayerId: "spieler-2", isCreator: false });
+    expect((await two.myRounds())[0]).toMatchObject({ myPlayerId: "spieler-2", isCreator: false, memberNames: ["Zwei"] });
 
     await two.leaveRound(round);
     expect(bodyOf("leave_round")).toEqual({ p_round: round });
     expect(await two.myRounds()).toEqual([]);
+  });
+
+  it("die Runden des Kontos: member_names fehlt bei einem älteren Server oder ist null, dann ist die Liste leer", async () => {
+    const fake = new FakeSupabase();
+    const { api } = client(fake);
+    fake.override = (request) =>
+      request.url.pathname === "/rest/v1/rpc/my_rounds"
+        ? {
+            status: 200,
+            body: [
+              { id: "erste", name: "Stammtisch", rev: 9, member_count: 3, my_player_id: "spieler-2", is_creator: false, member_names: ["Anna", "Zwei"] },
+              // Wie von einem Server vor dem 21.11.2026: ohne die Spalte.
+              { id: "andere", name: "Zweite", rev: 1, member_count: 1, my_player_id: null, is_creator: true },
+              { id: "dritte", name: "Dritte", rev: 2, member_count: 1, my_player_id: null, is_creator: true, member_names: null },
+            ],
+          }
+        : null;
+
+    expect(await api.myRounds()).toEqual([
+      { id: "erste", name: "Stammtisch", rev: 9, memberCount: 3, myPlayerId: "spieler-2", isCreator: false, memberNames: ["Anna", "Zwei"] },
+      { id: "andere", name: "Zweite", rev: 1, memberCount: 1, myPlayerId: null, isCreator: true, memberNames: [] },
+      { id: "dritte", name: "Dritte", rev: 2, memberCount: 1, myPlayerId: null, isCreator: true, memberNames: [] },
+    ]);
+
+    // Etwas anderes als eine Liste von Texten ist eine Antwort in unerwarteter Form.
+    for (const names of ["Anna", [17], [null], { 0: "Anna" }]) {
+      fake.override = (request) =>
+        request.url.pathname === "/rest/v1/rpc/my_rounds"
+          ? { status: 200, body: [{ id: "erste", name: "Stammtisch", rev: 9, member_count: 3, my_player_id: null, is_creator: false, member_names: names }] }
+          : null;
+      expect(await errorOf(() => api.myRounds()), JSON.stringify(names)).toBe("SERVER");
+    }
+  });
+
+  it("eine Runde mit dem Namen einer Runde des Kontos lehnt der Server ab (bereinigt, ohne Groß/Klein), vor der Obergrenze", async () => {
+    const fake = new FakeSupabase();
+    const one = client(fake).api;
+    const two = client(fake, TWO).api;
+    await one.createRound("Stammtisch");
+
+    expect(await errorOf(() => one.createRound("  stammTISCH "))).toBe("NAME_TAKEN");
+    expect(await errorOf(() => one.createRound(" STAMMTISCH\n"))).toBe("NAME_TAKEN");
+    expect(await errorOf(() => two.createRound("Stammtisch"))).toBeNull();
+    for (let index = 2; index <= InMemoryRoundServer.MAX_ROUNDS; index++) await one.createRound(`Runde ${index}`);
+    expect(await errorOf(() => one.createRound("runde 2"))).toBe("NAME_TAKEN");
+    expect(await errorOf(() => one.createRound("Runde 6"))).toBe("LIMIT_REACHED");
   });
 
   it("ein Abend geht als Dokument im Dateiformat der Sicherung hoch und kommt gleich zurück", async () => {
