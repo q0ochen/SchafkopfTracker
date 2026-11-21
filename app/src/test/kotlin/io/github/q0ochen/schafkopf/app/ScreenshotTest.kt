@@ -28,6 +28,7 @@ import io.github.q0ochen.schafkopf.app.ui.ai.AiSettingsScreen
 import io.github.q0ochen.schafkopf.app.ui.backup.BackupScreen
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
 import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
+import io.github.q0ochen.schafkopf.app.ui.editevening.EditEveningScreen
 import io.github.q0ochen.schafkopf.app.ui.common.labelRes
 import io.github.q0ochen.schafkopf.app.ui.statistics.GameModeChart
 import io.github.q0ochen.schafkopf.app.ui.statistics.StatisticsScreen
@@ -382,6 +383,33 @@ class ScreenshotTest {
         compose.waitForText("Kommentar teilen")
         compose.onNodeWithText("Kommentar teilen").performScrollTo()
         capture("21_abschluss_kommentar_dunkel")
+    }
+
+    @Test
+    fun abend_menue_dunkel() {
+        seed()
+        show(ThemeMode.DARK, ready = "Sepp") { BoardScreen(eveningId, Navigator()) }
+        compose.onNodeWithContentDescription("Mehr").performClick()
+        compose.waitForText("Abend bearbeiten")
+        capture("60_abend_menue_dunkel")
+    }
+
+    @Test
+    fun abend_bearbeiten_dunkel() {
+        seed()
+        show(ThemeMode.DARK, ready = "Datum ändern") { EditEveningScreen(eveningId, Navigator()) }
+        capture("61_abend_bearbeiten_dunkel")
+    }
+
+    // Die Datumsauswahl bringt ihre Texte aus dem System mit; auf Deutsch, wie auf den Handys der Runde.
+    @Test
+    @Config(qualifiers = "de-rDE-w411dp-h914dp-normal-long-notround-any-420dpi-keyshidden-nonav")
+    fun abend_bearbeiten_datum_hell() {
+        seed(finished = true)
+        show(ready = "Datum ändern") { EditEveningScreen(eveningId, Navigator()) }
+        compose.onNodeWithText("Datum ändern").performClick()
+        compose.waitForText("Übernehmen")
+        capture("62_abend_bearbeiten_datum_hell")
     }
 
     @Test

@@ -16,6 +16,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.q0ochen.schafkopf.app.ui.ai.AiSettingsScreen
 import io.github.q0ochen.schafkopf.app.ui.backup.BackupScreen
 import io.github.q0ochen.schafkopf.app.ui.board.BoardScreen
+import io.github.q0ochen.schafkopf.app.ui.editevening.EditEveningScreen
 import io.github.q0ochen.schafkopf.app.ui.closing.ClosingScreen
 import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormScreen
 import io.github.q0ochen.schafkopf.app.round.RoundCoordinator
@@ -84,6 +85,7 @@ fun AppNavHost() {
                 Screen.Start -> StartScreen(navigator)
                 Screen.NewEvening -> NewEveningScreen(navigator)
                 is Screen.Board -> BoardScreen(screen.eveningId, navigator)
+                is Screen.EditEvening -> EditEveningScreen(screen.eveningId, navigator)
                 is Screen.GameForm -> GameFormScreen(screen.eveningId, screen.entryId, navigator)
                 is Screen.Closing -> ClosingScreen(screen.eveningId, navigator)
                 is Screen.Statistics -> StatisticsScreen(screen.eveningId, navigator)

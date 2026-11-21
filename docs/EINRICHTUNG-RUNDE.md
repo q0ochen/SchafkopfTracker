@@ -184,6 +184,7 @@ pausiert.
 |---|---|---|
 | „Der Server ist noch nicht eingerichtet.“ | Die App wurde ohne Adresse des Servers gebaut | Variablen aus Schritt 4 prüfen, Apps neu bauen lassen (Schritt 5), App aktualisieren |
 | Google meldet „redirect_uri_mismatch“ | Die Weiterleitungs-URI im Google-Client stimmt nicht | Schritt 2, Punkt 5: Adresse genau vergleichen (Referenz, kein Leerzeichen, kein Schrägstrich am Ende) |
+| Nach der Google-Kontoauswahl steht in der App immer „Die Anmeldung hat nicht geklappt.“ | Das Client-Secret bei Supabase passt nicht zur Client-ID (so am 20.11.2026 passiert) | Im Google-Client ein neues Secret hinzufügen („Add secret“) und bei Supabase unter Google als Client-Secret eintragen, dazu die Client-ID vergleichen (Schritt 2 und 3). Claude kann mit dem Workflow „Supabase-Diagnose“ nachsehen, wie weit die Anmeldeversuche kommen |
 | Nach der Anmeldung landet man nicht in der App, oder dort steht „Die Anmeldung hat nicht geklappt.“ | Die Redirect URLs bei Supabase fehlen oder haben einen Tippfehler | Schritt 3, Punkt 2 |
 | Anmelden klappt, läuft aber nach einer Woche ab | Der Zustimmungsbildschirm steht noch auf „Testen“ | Schritt 2, Punkt 4 |
 | „Server nicht erreichbar“, obwohl Internet da ist | Das Supabase-Projekt ist pausiert | Schritt 7 |

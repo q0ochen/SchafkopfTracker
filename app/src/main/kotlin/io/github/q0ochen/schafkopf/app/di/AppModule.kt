@@ -13,6 +13,7 @@ import io.github.q0ochen.schafkopf.app.drive.AppAuthDriveAccount
 import io.github.q0ochen.schafkopf.app.drive.DriveAccount
 import io.github.q0ochen.schafkopf.app.ui.backup.BackupViewModel
 import io.github.q0ochen.schafkopf.app.ui.board.BoardViewModel
+import io.github.q0ochen.schafkopf.app.ui.editevening.EditEveningViewModel
 import io.github.q0ochen.schafkopf.app.security.AndroidKeystoreCipher
 import io.github.q0ochen.schafkopf.app.security.EncryptedSecretStore
 import io.github.q0ochen.schafkopf.app.security.EncryptedValues
@@ -65,6 +66,7 @@ import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.ports.SecretStore
 import io.github.q0ochen.schafkopf.domain.ports.SettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -165,6 +167,16 @@ val appModule = module {
     viewModel { RoundViewModel(get(), get(), get(), autoBackupEnabled = { get<AutoBackupStore>().status.value.enabled }) }
     viewModel { NewEveningViewModel(get(), get(), get(), get(), get()) }
     viewModel { params -> BoardViewModel(EveningId(params.get(0)), get(), get(), get(), get(), get()) }
+    viewModel { params ->
+        EditEveningViewModel(
+            eveningId = EveningId(params.get(0)),
+            evenings = get(),
+            players = get(),
+            editor = get(),
+            clock = get(),
+            linked = get<RoundCoordinator>().state.map { it.link != null },
+        )
+    }
     viewModel { params ->
         GameFormViewModel(
             eveningId = EveningId(params.get(0)),

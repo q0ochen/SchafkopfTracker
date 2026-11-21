@@ -85,6 +85,7 @@
     <string name="board_no_entries">Noch nichts eingetragen.</string>
     <string name="board_menu_statistics">Statistik dieses Abends</string>
     <string name="board_menu_closing">Abschluss</string>
+    <string name="board_menu_edit">Abend bearbeiten</string>
     <string name="board_menu_rules">Regeln dieses Abends</string>
     <string name="board_menu_finish">Abend beenden</string>
     <string name="board_menu_reopen">Abend wieder öffnen</string>
@@ -96,6 +97,14 @@
     <string name="board_entry_removed">Eintrag entfernt</string>
     <string name="board_finished_banner">Dieser Abend ist beendet.</string>
     <string name="board_missing">Diesen Abend gibt es nicht mehr.</string>
+
+    <!-- Abend bearbeiten (docs/ARCHITEKTUR.md, Abschnitt 4.1) -->
+    <string name="edit_title">Abend bearbeiten</string>
+    <string name="edit_date_heading">Datum</string>
+    <string name="edit_date_change">Datum ändern</string>
+    <string name="edit_date_apply">Übernehmen</string>
+    <string name="edit_hint_unchanged">Eingetragene Spiele und Beträge bleiben unverändert. Wer gibt, ergibt sich aus Sitzordnung und erstem Geber.</string>
+    <string name="edit_hint_round">Die Änderungen gelten für alle in der gemeinsamen Runde.</string>
     <string name="board_balance_description">%1$s: Stand %2$s, Platz %3$d</string>
 
     <!-- Bockrunde auslösen -->

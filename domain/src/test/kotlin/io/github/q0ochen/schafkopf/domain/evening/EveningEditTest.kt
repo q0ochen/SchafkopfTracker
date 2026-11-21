@@ -41,12 +41,12 @@ class EveningEditTest {
     private val original = EveningDetails.of(evening)
 
     @Test
-    fun `ohne Änderung bleibt der Abend, wie er ist`() {
+    fun `ohne Aenderung bleibt der Abend, wie er ist`() {
         assertSame(evening, EveningEdit.apply(evening, original, original))
     }
 
     @Test
-    fun `das neue Datum gilt, die Einträge behalten ihre Zeiten`() {
+    fun `das neue Datum gilt, die Eintraege behalten ihre Zeiten`() {
         val earlier = Instant.parse("2026-11-13T18:30:00Z")
         val result = EveningEdit.apply(evening, original, original.copy(startedAt = earlier))
         assertEquals(earlier, result.startedAt)
@@ -56,14 +56,14 @@ class EveningEditTest {
     }
 
     @Test
-    fun `ein beendeter Abend behält seine Dauer`() {
+    fun `ein beendeter Abend behaelt seine Dauer`() {
         val finished = evening.copy(finishedAt = Instant.parse("2026-11-20T23:45:10.5Z"))
         val result = EveningEdit.apply(finished, original, original.copy(startedAt = Instant.parse("2026-11-19T18:30:00.000000001Z")))
         assertEquals(Instant.parse("2026-11-19T23:45:10.500000001Z"), result.finishedAt)
     }
 
     @Test
-    fun `das Ende verschiebt sich vom inzwischen geänderten Beginn aus`() {
+    fun `das Ende verschiebt sich vom inzwischen geaenderten Beginn aus`() {
         // Ein anderes Handy hat den Beginn schon um eine Stunde verlegt; hier wird das Datum gewählt.
         val meanwhile = evening.copy(startedAt = start.plusSeconds(3600), finishedAt = start.plusSeconds(7200))
         val result = EveningEdit.apply(meanwhile, original, original.copy(startedAt = start.minusSeconds(86_400)))
@@ -72,7 +72,7 @@ class EveningEditTest {
     }
 
     @Test
-    fun `läge das Ende außerhalb des Zeitbereichs, bleibt es`() {
+    fun `laege das Ende ausserhalb des Zeitbereichs, bleibt es`() {
         val atEnd = evening.copy(finishedAt = Instant.MAX)
         val result = EveningEdit.apply(atEnd, original, original.copy(startedAt = start.plusSeconds(60)))
         assertEquals(start.plusSeconds(60), result.startedAt)
@@ -80,7 +80,7 @@ class EveningEditTest {
     }
 
     @Test
-    fun `der Ort wird gesäubert und gekürzt`() {
+    fun `der Ort wird gesaeubert und gekuerzt`() {
         val result = EveningEdit.apply(evening, original, original.copy(location = "  Beim Huber  "))
         assertEquals("Beim Huber", result.location)
 
@@ -90,7 +90,7 @@ class EveningEditTest {
     }
 
     @Test
-    fun `cleanLocation entfernt Leerraum wie Kotlin und kürzt auf 40 Zeichen`() {
+    fun `cleanLocation entfernt Leerraum wie Kotlin und kuerzt auf 40 Zeichen`() {
         assertEquals("Ort", EveningEdit.cleanLocation("\tOrt\n"))
         assertEquals(EveningDetails.MAX_LOCATION_LENGTH, EveningEdit.cleanLocation("y".repeat(60)).length)
         // U+FEFF zählt in Kotlin nicht als Leerraum.
@@ -98,7 +98,7 @@ class EveningEditTest {
     }
 
     @Test
-    fun `nur Geändertes wird übernommen, anderes bleibt wie inzwischen`() {
+    fun `nur Geaendertes wird uebernommen, anderes bleibt wie inzwischen`() {
         // Ein anderes Handy hat inzwischen den Ort und den ersten Geber geändert; hier nur die Sitzordnung.
         val meanwhile = evening.copy(location = "Beim Huber", firstDealer = c)
         val result = EveningEdit.apply(meanwhile, original, original.copy(seating = listOf(b, a, c, d)))

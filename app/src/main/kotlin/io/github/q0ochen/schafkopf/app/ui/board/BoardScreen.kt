@@ -135,6 +135,13 @@ fun BoardScreen(eveningId: String, navigator: Navigator) {
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.board_menu_edit)) },
+                                onClick = {
+                                    menuOpen = false
+                                    navigator.open(Screen.EditEvening(eveningId))
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(stringResource(R.string.board_menu_rules)) },
                                 onClick = {
                                     menuOpen = false

@@ -3,6 +3,7 @@ package io.github.q0ochen.schafkopf.app.ui.newevening
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.q0ochen.schafkopf.domain.evening.Evening
+import io.github.q0ochen.schafkopf.domain.evening.EveningDetails
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.IdGenerator
 import io.github.q0ochen.schafkopf.domain.model.Player
@@ -138,7 +139,7 @@ class NewEveningViewModel(
 
     fun setFirstDealer(player: PlayerId) = selection.update { it.copy(firstDealer = player) }
 
-    fun setLocation(location: String) = selection.update { it.copy(location = location.take(MAX_LOCATION_LENGTH)) }
+    fun setLocation(location: String) = selection.update { it.copy(location = location.take(EveningDetails.MAX_LOCATION_LENGTH)) }
 
     /** Übernimmt Spieler und Sitzordnung des letzten Abends. */
     fun useLastSeating() {
@@ -164,9 +165,5 @@ class NewEveningViewModel(
             evenings.save(evening)
             onStarted(evening.id.value)
         }
-    }
-
-    private companion object {
-        const val MAX_LOCATION_LENGTH = 40
     }
 }

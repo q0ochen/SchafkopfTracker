@@ -313,7 +313,7 @@ Als Nächstes (neben der gemeinsamen Runde, siehe unten): Client-ID für Google 
 schickt, dann die Anmeldung auf einem echten Handy erproben; Rückmeldungen der Tester; abstimmen, welche der Issues
 #1 bis #19 als erledigt gelten.
 
-## Stand am 19.11.2026: Gemeinsame Runde (gebaut, Server noch nicht eingerichtet)
+## Stand am 19.11.2026: Gemeinsame Runde (gebaut, Server seit dem 20.11.2026 eingerichtet)
 
 Der Nutzer hat am 19.11.2026 in einer Sprachnachricht zwei Ideen genannt (gemeinsame Runde „so ähnlich wie bei Drink
 With Me“, Spracheingabe) und um ein Brainstorming gebeten. Termin: Bis zum 12.12.2026 soll die App „einigermaßen gut“
@@ -370,19 +370,25 @@ Umgesetzt am 19.11.2026 auf dem Zweig `claude/gracious-keller-48tcn0`:
 - **Anleitung für den Nutzer:** `docs/EINRICHTUNG-RUNDE.md` (eigenes Supabase-Projekt in Frankfurt, Google-Client vom
   Typ „Webanwendung“, zwei Secrets und drei Variablen bei GitHub, Test zu zweit, „vor jedem Spielabend“).
 
-**Der Server ist noch nicht eingerichtet.** Ohne die GitHub-Variablen `SUPABASE_URL` und `SUPABASE_PUBLISHABLE_KEY`
-(öffentlich, kein Geheimnis; Android liest sie beim Bauen der Testversion, sonst `app/supabase.properties`; Web als
-`VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY`) bleibt die Funktion abgeschaltet („Der Server ist noch nicht
-eingerichtet.“). Sobald der Nutzer „Supabase ist eingerichtet“ meldet:
+**Der Server ist seit dem 20.11.2026 eingerichtet** (vom Nutzer selbst; er hatte gefragt, ob Claude das über die
+Chrome-Erweiterung erledigen kann, aber eine Cloud-Sitzung erreicht die Erweiterung nicht, empfohlen war deshalb eine
+Sitzung in der Claude-Desktop-App auf seinem PC). Projekt-Referenz in der GitHub-Variablen
+`SUPABASE_PROJECT_REF`; `SUPABASE_URL` und `SUPABASE_PUBLISHABLE_KEY` sind gesetzt (öffentlich, kein Geheimnis; Android
+liest sie beim Bauen der Testversion, sonst `app/supabase.properties`; Web als `VITE_SUPABASE_URL` und
+`VITE_SUPABASE_PUBLISHABLE_KEY`). „Supabase Deploy“: Lauf 1 brach mit „IPv6 is not supported“ ab, Lauf 2 ging ohne
+Änderung durch. Danach hat der Nutzer „Android“ und „Web-App“ von Hand neu gestartet; beide grün.
 
-1. Erledigt: Der Stand liegt seit dem 20.11.2026 in `main` (Pull Request #25). „Supabase Deploy“ hat nur
-   `workflow_dispatch` und lässt sich seitdem starten.
-2. „Supabase Deploy“ starten (wendet die Migrationen an; braucht die Secrets `SUPABASE_ACCESS_TOKEN` und
-   `SUPABASE_DB_PASSWORD` und die Variable `SUPABASE_PROJECT_REF`), danach „Android“ und „Web-App“ neu laufen lassen.
-3. Mit dem Nutzer den Test zu zweit aus der Anleitung durchgehen.
+- Die Anmeldung scheiterte danach immer mit „Die Anmeldung hat nicht geklappt.“, auch in Safari: Das Google
+  Client-Secret bei Supabase passte nicht. Gefunden am 21.11.2026 mit dem neuen Workflow „Supabase-Diagnose“ (alle
+  Versuche „ohne Konto“) und einer Test-Anmeldung, die auf einer 404-Seite außerhalb der App endet (dort steht die
+  Antwort des Servers in der Adresse). Nachdem der Nutzer ein neues Secret eingetragen hatte: „Ja, es klappt“ (in
+  Safari und in der App vom Home-Bildschirm; danach zwei Sitzungen auf dem Server). Das befürchtete Problem der App
+  vom Home-Bildschirm (getrennter Speicher) trat dabei nicht auf.
+- Das Access Token des Nutzers hat nur Rechte für die Datenbank (`analytics_logs_read` und `auth_config_read` fehlen);
+  die Diagnose liest deshalb über das Datenbank-Passwort aus `auth.flow_state` (siehe `supabase/README.md`).
+- Noch offen: der Test zu zweit aus der Anleitung (Runde anlegen, beitreten, gegenseitig eintragen).
 
-**Nicht geprüft:** die Anmeldung mit Google selbst (in der Probe melden sich Testkonten mit Passwort an), echte
-Geräte, Safari auf einem iPhone, das echte Supabase-Projekt des Nutzers.
+**Nicht geprüft:** echte Android-Geräte mit dem echten Server, der Abgleich zwischen zwei echten Handys.
 
 Gut zu wissen für die nächste Sitzung:
 
