@@ -289,8 +289,10 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
   nach hinten“. Die Spieler selbst lassen sich hier nicht austauschen.
 - Darunter: „Eingetragene Spiele und Beträge bleiben unverändert. Wer gibt, ergibt sich aus Sitzordnung und erstem
   Geber.“ Mit verbundener gemeinsamer Runde zusätzlich: „Die Änderungen gelten für alle in der gemeinsamen Runde.“
-- Unten der Knopf „Speichern“ (mindestens 56 dp hoch), nur aktiv, wenn sich etwas geändert hat (der Ort zählt als
-  geändert, wenn er nach `EveningEdit.cleanLocation` anders ist). Speichern übernimmt die Änderungen mit
+- Unten der Knopf „Speichern“ (mindestens 56 dp hoch), nur aktiv, wenn sich etwas geändert hat. Der Ort zählt als
+  geändert, wenn `cleanLocation` des Entwurfs anders ist als `cleanLocation` des ursprünglichen Orts; sonst geht der
+  ursprüngliche Ort unverändert als `edited.location` hinein (so überschreibt ein bloß getrimmter Ort nie, was ein
+  anderes Handy inzwischen eingetragen hat). Speichern übernimmt die Änderungen mit
   `EveningEdit.apply` über den Editor des Abends (in der Web-App über das Speichern des Abends) und kehrt zum Abend
   zurück; doppeltes Antippen speichert nur einmal. Zurück ohne Speichern verwirft die Änderungen ohne Rückfrage.
 
