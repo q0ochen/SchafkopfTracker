@@ -171,8 +171,9 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-`main` enthält alles bis Pull Request #27 (gesammelter Release vom 21.11.2026: Rückpfeil, geplante Abende,
-Ortsvorschläge; siehe unten); davor #26 („Abend bearbeiten“) und #25 (gemeinsame Runde, am 20.11.2026 auf Wunsch des
+`main` enthält alles bis Pull Request #28 („Abend teilen“ mit Vermögensverlauf, Statistik als Bild; am 21.11.2026
+abends zusammengeführt, siehe unten); davor #27 (gesammelter Release vom 21.11.2026: Rückpfeil, geplante Abende,
+Ortsvorschläge), #26 („Abend bearbeiten“) und #25 (gemeinsame Runde, am 20.11.2026 auf Wunsch des
 Nutzers angelegt, „Ja pull request anlegen“, und von ihm um 18:40 zusammengeführt). `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
@@ -565,9 +566,11 @@ Aussagekräftiges Diagramm mit den Spielernamen enthalten ist“.
   ist seitdem genauer. Bei der Suche fiel ein zweiter wackliger Fall auf, der Fehler in `awaitFirst` (ebenda); der ist
   behoben. Mit dem Diagramm-Nachzug und den genaueren Meldungen: „Android“ 58 und 59 grün (Stand `1969ecb`, samt
   Installationstest im Emulator); 57 scheiterte am wackligen Test der Startseite (`loading=false, 2 Abende`).
-- Pull Request nach `main` am 21.11.2026 abends auf Wunsch des Nutzers angelegt („nein mach einen pull request. nicht
-  weiter sammeln“): „Abend teilen“ in beiden Apps, Diagramm-Nachzug in Android, Korrektur von `awaitFirst` und die
-  genaueren Meldungen des Tests der Startseite. Schließt kein Issue (der Wunsch kam direkt vom Nutzer).
+- Pull Request #28 nach `main` am 21.11.2026 abends auf Wunsch des Nutzers angelegt („nein mach einen pull request.
+  nicht weiter sammeln“): „Abend teilen“ in beiden Apps, Diagramm-Nachzug in Android, Korrektur von `awaitFirst` und
+  die genaueren Meldungen des Tests der Startseite. Schließt kein Issue (der Wunsch kam direkt vom Nutzer). Vom Nutzer
+  um 20:27 zusammengeführt (`8a49ea4`). Läufe auf `main` grün (Android 61, Web-App 36): Web-App neu auf GitHub Pages,
+  Testversion 61 (`0.1.0-test.61`) im Release `testversion` und in der F-Droid-Paketquelle.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
