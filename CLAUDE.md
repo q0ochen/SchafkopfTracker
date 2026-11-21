@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 697, `data` 278, `database` 24, `app` 205, Web 560 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 39 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 697, `data` 278, `database` 24, `app` 205, Web 601 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 42 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -414,6 +414,28 @@ Gut zu wissen für die nächste Sitzung:
 - Der Nutzer berichtet, dass das App-Symbol auf seinem iPhone den Browser öffnet (bei welcher der beiden Web-Apps,
   ist offen). Unsere Web-App ist auf `display: standalone` eingestellt; vermutlich war beim Hinzufügen „Als Web-App
   öffnen“ aus. Auf einem echten iPhone nicht geprüft.
+
+## Stand am 21.11.2026: Abend bearbeiten
+
+Wunsch des Nutzers (21.11.2026): im Menü des Abends einen Punkt, um den Abend nachträglich zu bearbeiten, „Wichtig
+wäre auf jeden Fall, dass man das Datum nachträglich ändern kann und eventuell auch die Location“; welche Änderungen
+sonst sinnvoll sind, überließ er Claude, „im Rahmen, dass die App stabil bleibt“ (vier Leute tragen in denselben
+Abend ein).
+
+- Umgesetzt in Android-App und Web-App: Datum (keine Tage nach heute; die Uhrzeit bleibt), Ort, Sitzordnung und
+  erster Geber. Nicht änderbar: die Spieler am Tisch (die Einträge nennen sie), die Einträge selbst; das Regelwerk hat
+  weiter „Regeln dieses Abends“. Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 2 („Abend“, `EveningEdit.apply`) und 4.1
+  (Texte wörtlich, Menüreihenfolge).
+- Stabil in der gemeinsamen Runde: Gespeichert wird nur, was auf diesem Gerät gegenüber dem Stand beim Öffnen
+  geändert wurde; die Felder des Abends führt `EveningMerge.merge3` ohnehin einzeln zusammen.
+- Kotlin: `domain/evening/EveningEdit.kt`, `app/ui/editevening/` (Bildschirmfotos 60 bis 62). Web: Port
+  `web/src/core/evening/EveningEdit.ts` (Golden-Abschnitt `edits`, 70 Fälle, auch Zeitpunkte am Rand von `Instant`),
+  `web/src/ui/editEvening.ts`, `EditEveningScreen.tsx`, Adresse `#/abend/<id>/bearbeiten`; die Web-App baute ein
+  Helfer. Nebenbei: `formatInstant` liegt jetzt im Kern der Web-App (das Dateiformat nutzt es), und „Neuer Abend“
+  trimmt den Ort in der Web-App wie Kotlin.
+- Testnamen in `app` ohne Umlaute: Klassendateien von Lambdas mit Umlauten im Namen scheiterten hier beim Kompilieren
+  (Dateinamen ohne UTF-8).
+- Nicht geprüft: echte Geräte; wie das Datumsfeld der Web-App in Safari auf dem iPhone aussieht.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 

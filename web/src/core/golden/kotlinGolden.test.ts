@@ -313,7 +313,7 @@ describe("Rechenkern gegen den Kotlin-Kern (kotlin-golden.json)", () => {
       if (snapshot() !== before) failures.push(`${c.id}: Die Eingaben wurden verändert.`);
     }
     expect(failures).toEqual([]);
-    expect(golden.edits.length).toBe(69);
+    expect(golden.edits.length).toBe(70);
   });
 
   it("die Golden-Daten für „Abend bearbeiten“ enthalten die gezielten Fallen", () => {

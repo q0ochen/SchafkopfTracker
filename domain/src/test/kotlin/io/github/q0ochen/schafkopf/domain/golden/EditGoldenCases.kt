@@ -100,6 +100,14 @@ internal object EditGoldenCases {
                 original,
                 original.copy(startedAt = start.minusSeconds(60)),
             ),
+            // Instant.plus(Duration) addiert erst die Sekunden, dann die Nanosekunden, und prüft nach jedem Schritt den
+            // Bereich: −0,5 s sind −1 s und +0,5 s, also bleibt das Ende hier stehen, obwohl das Ergebnis im Bereich läge.
+            EditCase(
+                "datum-ende-knapp-am-anfang",
+                evening.copy(finishedAt = Instant.MIN.plusMillis(600)),
+                original,
+                original.copy(startedAt = start.minusMillis(500)),
+            ),
             EditCase("datum-unverändert-inzwischen-geändert", evening.copy(startedAt = start.plusSeconds(60)), original, original),
             EditCase("ort-gesäubert", evening, original, original.copy(location = "  Beim Huber  ")),
             EditCase("ort-gekürzt", evening, original, original.copy(location = "x".repeat(39) + "  yyy")),

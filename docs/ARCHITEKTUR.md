@@ -124,7 +124,8 @@ falschen Summen:
   erster Geber; Port in `web/src/core/evening/EveningEdit.ts`, Golden-Abschnitt `edits`): Übernommen wird nur, was
   zwischen `original` (Stand beim Öffnen von „Abend bearbeiten“) und `edited` geändert wurde; alles andere bleibt wie
   in `current`, denn in der gemeinsamen Runde kann ein anderes Handy den Abend inzwischen geändert haben. Ein neuer
-  Beginn verschiebt ein vorhandenes Ende um dieselbe Zeitspanne (außerhalb des Bereichs von `Instant` bleibt das Ende);
+  Beginn verschiebt ein vorhandenes Ende um dieselbe Zeitspanne, wie `Instant.plus(Duration)`: erst die Sekunden,
+  dann die Nanosekunden; verlässt ein Schritt den Bereich von `Instant`, bleibt das Ende;
   die Einträge behalten ihre Zeiten. Der Ort wird ohne Leerraum an den Rändern (Kotlins `trim`) auf höchstens 40
   Zeichen gekürzt und danach noch einmal getrimmt. Eine Sitzordnung gilt nur, wenn sie genau die Spieler am Tisch
   enthält, jeden einmal; ein erster Geber nur, wenn er danach am Tisch sitzt. Wer am Tisch sitzt, die Einträge und das

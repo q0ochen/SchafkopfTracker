@@ -3,6 +3,7 @@
  * hier als reine Funktionen über der Auswahl des Nutzers.
  */
 import { MAX_LOCATION_LENGTH } from "../core/evening/EveningEdit";
+import { kotlinTrim } from "../core/kotlin";
 import type { Evening, Player, PlayerId, RuleSet } from "../core/model";
 
 /** Am Tisch sitzen genau vier. */
@@ -133,7 +134,7 @@ export function createEvening(view: NewEveningView, rules: RuleSet, id: string, 
     id,
     startedAt,
     finishedAt: null,
-    location: view.location.trim(),
+    location: kotlinTrim(view.location),
     seating: [...view.seating],
     firstDealer: dealer,
     rules,
