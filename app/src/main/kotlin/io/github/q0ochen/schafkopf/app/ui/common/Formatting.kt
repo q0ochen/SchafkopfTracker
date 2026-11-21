@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -17,6 +18,9 @@ private const val NO_BREAK_SPACE = "\u00A0"
 
 /** Datum eines Abends, zum Beispiel „Sa., 14. Nov. 2026“. */
 fun formatDate(instant: Instant, zone: ZoneId = ZoneId.systemDefault()): String = DATE_FORMAT.withZone(zone).format(instant)
+
+/** Ein Tag im selben Format wie [formatDate], zum Beispiel „Sa., 12. Dez. 2026“. */
+fun formatDate(date: LocalDate): String = DATE_FORMAT.format(date)
 
 /** Datum und Uhrzeit, zum Beispiel „14. Nov. 2026, 21:05“. */
 fun formatDateTime(instant: Instant, zone: ZoneId = ZoneId.systemDefault()): String =

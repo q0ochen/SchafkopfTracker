@@ -2,12 +2,16 @@ package io.github.q0ochen.schafkopf.app.ui.editevening
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.q0ochen.schafkopf.app.ui.place.PlaceSuggestions
+import io.github.q0ochen.schafkopf.app.ui.place.PlaceSuggestionsState
 import io.github.q0ochen.schafkopf.domain.evening.EveningDetails
 import io.github.q0ochen.schafkopf.domain.evening.EveningEdit
 import io.github.q0ochen.schafkopf.domain.evening.EveningEditor
 import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
+import io.github.q0ochen.schafkopf.domain.ports.PlaceSearch
+import io.github.q0ochen.schafkopf.domain.ports.PlaceSuggestion
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,8 +30,8 @@ import java.time.ZonedDateTime
 /**
  * Zustand von „Abend bearbeiten“ (docs/ARCHITEKTUR.md, Abschnitt 4.1).
  *
- * @property date Das gewählte Datum (Ortszeit des Geräts).
- * @property today Spätestes wählbares Datum.
+ * @property date Das gewählte Datum (Ortszeit des Geräts); jeder Tag lässt sich wählen, auch einer nach heute.
+ * @property places Ortsvorschläge unter dem Feld „Ort“ (Abschnitt 4.3).
  * @property linked Ob das Gerät mit einer gemeinsamen Runde verbunden ist.
  * @property changed Ob sich gegenüber dem Stand beim Öffnen etwas geändert hat.
  */
@@ -36,8 +40,8 @@ data class EditEveningUiState(
     val missing: Boolean = false,
     val startedAt: Instant? = null,
     val date: LocalDate? = null,
-    val today: LocalDate? = null,
     val location: String = "",
+    val places: PlaceSuggestionsState = PlaceSuggestionsState(),
     val seating: List<PlayerId> = emptyList(),
     val firstDealer: PlayerId? = null,
     val names: Map<PlayerId, String> = emptyMap(),
@@ -68,6 +72,7 @@ private data class Form(
  *
  * @param clock Uhr mit der Zeitzone des Geräts: Datum und Uhrzeit des Beginns gelten in Ortszeit.
  * @param linked Ob das Gerät mit einer gemeinsamen Runde verbunden ist (für den Hinweis).
+ * @param placeSearch Ortsvorschläge aus OpenStreetMap (Abschnitt 4.3).
  */
 class EditEveningViewModel(
     private val eveningId: EveningId,
@@ -76,9 +81,11 @@ class EditEveningViewModel(
     private val editor: EveningEditor,
     private val clock: Clock,
     linked: Flow<Boolean>,
+    placeSearch: PlaceSearch,
 ) : ViewModel() {
 
     private val form = MutableStateFlow(Form())
+    private val places = PlaceSuggestions(viewModelScope, placeSearch)
 
     init {
         viewModelScope.launch {
@@ -100,15 +107,15 @@ class EditEveningViewModel(
     }
 
     val state: StateFlow<EditEveningUiState> =
-        combine(form, players.players, linked) { current, allPlayers, isLinked ->
+        combine(form, players.players, linked, places.state) { current, allPlayers, isLinked, suggestions ->
             val original = current.original
             EditEveningUiState(
                 loading = current.loading,
                 missing = !current.loading && original == null,
                 startedAt = original?.let { edited(current, it).startedAt },
                 date = current.date,
-                today = LocalDate.now(clock),
                 location = current.location,
+                places = suggestions,
                 seating = current.seating,
                 firstDealer = current.firstDealer,
                 names = allPlayers.associate { it.id to it.name },
@@ -118,13 +125,20 @@ class EditEveningViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), EditEveningUiState())
 
-    /** Wählt ein anderes Datum; Tage nach heute gibt es nicht. */
-    fun setDate(date: LocalDate) {
-        if (date.isAfter(LocalDate.now(clock))) return
-        form.update { it.copy(date = date) }
+    /** Wählt ein anderes Datum, auch einen Tag nach heute (dann ist der Abend geplant, Abschnitt 4.2). */
+    fun setDate(date: LocalDate) = form.update { it.copy(date = date) }
+
+    /** Der Nutzer hat den Ort geändert; ab drei Zeichen gibt es Vorschläge. */
+    fun setLocation(location: String) {
+        form.update { it.copy(location = location.take(EveningDetails.MAX_LOCATION_LENGTH)) }
+        places.typed(location)
     }
 
-    fun setLocation(location: String) = form.update { it.copy(location = location.take(EveningDetails.MAX_LOCATION_LENGTH)) }
+    /** Übernimmt einen Ortsvorschlag als Ort und schließt die Liste. */
+    fun pickPlace(suggestion: PlaceSuggestion) {
+        places.close()
+        form.update { it.copy(location = suggestion.text.take(EveningDetails.MAX_LOCATION_LENGTH)) }
+    }
 
     /** Verschiebt einen Spieler in der Sitzordnung um einen Platz nach vorn (−1) oder hinten (+1). */
     fun move(player: PlayerId, delta: Int) {

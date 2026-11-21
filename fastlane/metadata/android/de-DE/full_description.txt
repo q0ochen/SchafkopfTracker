@@ -13,7 +13,7 @@
 <li><b>Gemacht für schummrige Wirtshäuser:</b> dunkles Design, große Tasten, Bedienung mit Screenreader.</li>
 </ul>
 
-<p><b>Datenschutz:</b> Ohne die freiwilligen Zusätze bleibt alles auf dem Gerät. Internet braucht die App nur für sie: die gemeinsame Runde (Namen, Abende und Regeln liegen dann auf dem Server der Runde; lesen können sie nur ihre Mitglieder), die Sicherung in Google Drive und den Abend-Kommentator mit Sprachmodell (sendet erst nach Zustimmung, standardmäßig ohne echte Namen). Keine Werbung, kein Tracking.</p>
+<p><b>Datenschutz:</b> Ohne die freiwilligen Zusätze bleibt alles auf dem Gerät. Internet braucht die App nur für sie: die gemeinsame Runde (Namen, Abende und Regeln liegen dann auf dem Server der Runde; lesen können sie nur ihre Mitglieder), die Sicherung in Google Drive den Abend-Kommentator mit Sprachmodell (sendet erst nach Zustimmung, standardmäßig ohne echte Namen) und die Ortsvorschläge (der eingetippte Ort geht an photon.komoot.io, eine Suche in OpenStreetMap, ohne Standort). Keine Werbung, kein Tracking.</p>
 
 <p><b>Testversion:</b> Die Uhr-App kommt später. Fürs iPhone gibt es eine Web-App mit denselben Rechnungen.</p>
 

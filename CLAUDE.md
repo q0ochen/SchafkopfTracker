@@ -469,6 +469,41 @@ drückt und in den neuen Bildschirm gelangt kann man nicht mehr auf den Rückpfe
   `main` (Push oder „Run workflow“); Arbeitszweige werden nur geprüft. In F-Droid steht seit dem 21.11.2026 die
   Testversion 49 (= `main` mit Pull Request #26).
 
+## Stand am 21.11.2026 (nachmittags): Abend vorab anlegen und Ortsvorschläge
+
+Wünsche des Nutzers (21.11.2026): „Es muss auch möglich sein, das Datum für den Abend in der Zukunft anzulegen, damit
+man bereits vorab den Abend anlegen kann, bevor man sich überhaupt in der Kneipe getroffen hat“, und den Ort „über die
+Google Locations“ festsetzen, „so wie das zum Beispiel bei WhatsApp ist … Ich gebe beispielsweise Klinikum Bamberg ein
+und mir erscheint als Dropdown automatisch die anklickbare Adresse und Postleitzahl“. Auf Rückfrage entschieden: „Erst
+nur per Name“ (kein Standort des Handys) und OpenStreetMap statt Google (Google verlangt ein Rechnungskonto mit
+Kreditkarte; Leitplanke „kein Geld ausgeben“).
+
+- **Geplante Abende** (Vertrag `docs/ARCHITEKTUR.md`, 4.2): „Neuer Abend“ hat ein Datum (vorbelegt heute, jeder Tag
+  wählbar); nach heute: Hinweis „Der Abend ist geplant. …“ und Knopf „Abend anlegen“. „Abend bearbeiten“ erlaubt jetzt
+  auch Tage nach heute. Geplant = nicht beendet und Tag des Beginns nach heute (`Evening.isPlanned`); die Startseite
+  zeigt ihn nie als „Abend läuft“, in der Liste mit der Marke „geplant“; am Tag selbst läuft er. Gespeichert wird
+  dafür nichts Neues. Kotlin: `ui/common/EveningDateDialog.kt` (gemeinsame Datumsauswahl), `NewEveningViewModel`,
+  `StartViewModel` (bekommt die `Clock`).
+- **Ortsvorschläge** (Vertrag 4.3): Photon von komoot (`https://photon.komoot.io/api/?q=…&lang=de&limit=8`, ohne
+  Schlüssel), ab 3 Zeichen 400 ms nach der letzten Eingabe, es zählt nur die letzte Antwort; Liste mit Name und
+  Adresse, darunter „Vorschläge: © OpenStreetMap-Mitwirkende, über photon.komoot.io“; ohne Netz „Ortsvorschläge gibt
+  es nur mit Internet.“. Ein Ort hat jetzt bis zu 100 statt 40 Zeichen (das Dateiformat prüft die Länge nicht).
+  Kotlin: Port `domain.ports.PlaceSearch`, `data/place` (`PhotonPlaces` rein, `PhotonPlaceSearch` mit OkHttp, 10 s
+  Frist), `app/ui/place` (`PlaceSuggestions` steuert, `PlaceSuggestionList` zeigt). Golden-Abschnitt `places` in
+  `web/src/data/golden/kotlin-format-golden.json` (71 Fälle, darunter eine echte Antwort vom 21.11.2026 in
+  `data/src/test/resources/place/`). Die Cloud-Umgebung „SchafkopfTracker“ erlaubt seit dem 21.11.2026 auf Vorschlag
+  von Claude (vom Nutzer bestätigt) zusätzlich `photon.komoot.io`; die echte Antwort hatte genau das erwartete Format.
+- **Tests der Android-App:** Ortsvorschläge kommen dort aus `TestPlaceSearch` (nie aus dem Netz). `TestSchafkopfApp`
+  schließt die Datenbank eines Tests erst 15 s nach dem Ende von Koin und beendet ein übrig gebliebenes Koin: Am
+  21.11.2026 fragte ein ViewModel nach Testende die schon geschlossene Datenbank ab, die Ausnahme landete im nächsten
+  Test, und danach scheiterten 39 Tests mit „A Koin Application has already been started“. Bildschirmfotos 63 bis 66
+  (`PlanAndPlaceScreenshotTest`).
+- Android veröffentlicht seitdem nur noch von `main` (siehe oben, „Ja, erst mit dem Release“).
+- **Nicht geprüft:** echte Geräte; ob der Browser auf dem iPhone den Dienst abfragen darf (CORS): Die Antwort ohne
+  `Origin` hatte keine CORS-Kopfzeile, was bei Photon (Javalin) normal ist; eine Probe mit `Origin` wurde hier nicht
+  zugelassen. Kommen in der Web-App auf dem iPhone keine Vorschläge, sondern immer „Ortsvorschläge gibt es nur mit
+  Internet.“, zuerst das prüfen.
+
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
 Dem Nutzer am 15.11.2026 als Fragen gestellt; Antworten hier nachtragen:

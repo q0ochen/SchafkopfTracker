@@ -2,7 +2,8 @@
 # fastlane/metadata/android/ (dieselben Texte nutzt später auch das offizielle F-Droid).
 # Anti-Feature „NonFreeNet“: Drei freiwillige Zusätze sprechen mit Diensten von Google (Abend-Kommentator mit
 # Gemini, Sicherung in Google Drive, Anmeldung bei der gemeinsamen Runde mit einem Google-Konto). Ohne sie arbeitet
-# die App vollständig ohne Netz; keine Werbung, kein Tracking.
+# die App vollständig ohne Netz; keine Werbung, kein Tracking. Die Ortsvorschläge fragen OpenStreetMap über Photon
+# (freie Software, freie Daten, ohne Konto); das ist kein NonFreeNet.
 AntiFeatures:
   NonFreeNet:
     de: Freiwillig - Abend-Kommentator mit Google Gemini, Sicherung in Google Drive, gemeinsame Runde mit Anmeldung über Google.

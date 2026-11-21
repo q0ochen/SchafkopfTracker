@@ -10,6 +10,8 @@ import io.github.q0ochen.schafkopf.domain.rules.ResultLevel
 import io.github.q0ochen.schafkopf.domain.rules.RuleSet
 import io.github.q0ochen.schafkopf.domain.rules.Suit
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Ein Eintrag in der Liste eines Abends. Gespeichert werden nur Tatsachen;
@@ -131,6 +133,12 @@ data class Evening(
     val entries: List<EveningEntry> = emptyList(),
 ) {
     val isRunning: Boolean get() = finishedAt == null
+
+    /**
+     * Ob der Abend geplant ist (docs/ARCHITEKTUR.md, Abschnitt 4.2): nicht beendet, und der Tag des Beginns liegt in
+     * der Zeitzone [zone] nach [today]. Am Tag selbst gilt er als laufend. Gespeichert wird dafür nichts.
+     */
+    fun isPlanned(today: LocalDate, zone: ZoneId): Boolean = isRunning && startedAt.atZone(zone).toLocalDate().isAfter(today)
 
     /** Hängt einen Eintrag ans Ende an. */
     fun append(entry: EveningEntry): Evening = copy(entries = entries + entry)

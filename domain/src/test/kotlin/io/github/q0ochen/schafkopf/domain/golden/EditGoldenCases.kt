@@ -110,8 +110,8 @@ internal object EditGoldenCases {
             ),
             EditCase("datum-unverändert-inzwischen-geändert", evening.copy(startedAt = start.plusSeconds(60)), original, original),
             EditCase("ort-gesäubert", evening, original, original.copy(location = "  Beim Huber  ")),
-            EditCase("ort-gekürzt", evening, original, original.copy(location = "x".repeat(39) + "  yyy")),
-            EditCase("ort-zu-lang", evening, original, original.copy(location = "Gasthaus " + "z".repeat(50))),
+            EditCase("ort-gekürzt", evening, original, original.copy(location = "x".repeat(99) + "  yyy")),
+            EditCase("ort-zu-lang", evening, original, original.copy(location = "Gasthaus " + "z".repeat(110))),
             EditCase("ort-sonderzeichen", evening, original, original.copy(location = " ﻿Ort \u001c")),
             EditCase("ort-leer", evening, original, original.copy(location = " \t ")),
             EditCase("ort-unverändert-inzwischen-geändert", evening.copy(location = "Daheim"), original, original),
@@ -144,7 +144,7 @@ internal object EditGoldenCases {
     private fun randomCases(): List<EditCase> {
         val random = Random(20261121)
         val table = listOf(a, b, c, d)
-        val locations = listOf("", "Wirtshaus", " Beim Huber ", "Daheim", "x".repeat(45), " Stammtisch ")
+        val locations = listOf("", "Wirtshaus", " Beim Huber ", "Daheim", "x".repeat(105), " Stammtisch ")
         fun Random.instant(): Instant =
             Instant.ofEpochSecond(nextLong(1_577_836_800L, 1_893_456_000L), if (nextBoolean()) 0L else nextLong(0, 1_000_000_000))
         fun Random.seating(): List<PlayerId> = when (nextInt(6)) {

@@ -11,8 +11,11 @@ import { compareInstants, durationBetween, formatInstant, instantParts, plusDura
 import { kotlinTrim } from "../kotlin";
 import type { Evening, InstantText, PlayerId } from "../model";
 
-/** Höchstlänge des Orts in Zeichen (UTF-16-Einheiten wie Kotlins `take`), wie auf dem Bildschirm „Neuer Abend“. */
-export const MAX_LOCATION_LENGTH = 40;
+/**
+ * Höchstlänge des Orts in Zeichen (UTF-16-Einheiten wie Kotlins `take`), wie auf dem Bildschirm „Neuer Abend“. Seit dem
+ * 21.11.2026 100 statt 40, damit ein Ortsvorschlag mit Adresse und Postleitzahl hineinpasst (docs/ARCHITEKTUR.md, 4.3).
+ */
+export const MAX_LOCATION_LENGTH = 100;
 
 /**
  * Was sich an einem Abend nachträglich ändern lässt (Kotlin: `EveningDetails`): wann er begann, wo er war, die
@@ -101,7 +104,7 @@ export const EveningEdit = {
   },
 
   /**
-   * Der Ort, wie er gespeichert wird (Kotlin: `location.trim().take(40).trim()`): ohne Leerraum an den Rändern im
+   * Der Ort, wie er gespeichert wird (Kotlin: `location.trim().take(MAX_LOCATION_LENGTH).trim()`): ohne Leerraum an den Rändern im
    * Sinn von Kotlin (`kotlinTrim`), dann auf {@link MAX_LOCATION_LENGTH} Zeichen gekürzt und noch einmal getrimmt.
    */
   cleanLocation,

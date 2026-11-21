@@ -260,7 +260,7 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 
 - MVVM: je Bildschirm ein ViewModel mit `StateFlow` als Zustand; die Oberfläche liest nur diesen Zustand.
 - Navigation: eigener Stapel aus `Screen`-Werten (`Navigator`), je Eintrag ein eigener ViewModel-Speicher.
-- Bildschirme: Start, Neuer Abend, Abend, Abend bearbeiten (4.1), Spiel eintragen, Abschluss, Statistik (ein Abend oder alle Abende, oben
+- Bildschirme: Start, Neuer Abend (Datum 4.2, Ortsvorschläge 4.3), Abend, Abend bearbeiten (4.1), Spiel eintragen, Abschluss, Statistik (ein Abend oder alle Abende, oben
   wählbar; Vermögensverlauf als selbst gezeichnetes Liniendiagramm mit Tabelle als Alternative; Spielarten als
   Balkendiagramm `GameModeChart` mit eigenem Maßstab je Spielart, `BarScale`), Spieler, Einstellungen, Regelwerk,
   Sicherung, Abend-Kommentator.
@@ -281,9 +281,11 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
   `EveningEdit.apply`. Gibt es ihn nicht (mehr): „Diesen Abend gibt es nicht mehr.“
 - **Datum:** Überschrift „Datum“. Android zeigt das Datum wie im Titel des Abends und daneben den Knopf „Datum
   ändern“; er öffnet die Datumsauswahl mit „Übernehmen“ und „Abbrechen“. Die Web-App nimmt ein Datumsfeld des Browsers
-  mit der Beschriftung „Datum“. Tage nach heute lassen sich nicht wählen. Die Uhrzeit des Beginns bleibt (dieselbe
-  Ortszeit am neuen Tag); ist der Tag derselbe wie vorher, bleibt der Beginn genau, wie er war.
-- **Ort:** Feld „Ort (freiwillig)“, höchstens 40 Zeichen.
+  mit der Beschriftung „Datum“. Jeder Tag lässt sich wählen, auch einer nach heute (dann ist der Abend geplant, 4.2;
+  bis zum 21.11.2026 waren Tage nach heute gesperrt). Die Uhrzeit des Beginns bleibt (dieselbe Ortszeit am neuen Tag);
+  ist der Tag derselbe wie vorher, bleibt der Beginn genau, wie er war.
+- **Ort:** Feld „Ort (freiwillig)“, höchstens 100 Zeichen (`EveningDetails.MAX_LOCATION_LENGTH`, bis zum 21.11.2026
+  40), mit Ortsvorschlägen (4.3).
 - **Sitzordnung und erster Geber** wie bei „Neuer Abend“: Überschrift „Sitzordnung im Uhrzeigersinn“, darunter „In
   dieser Reihenfolge wechselt der Geber. Antippen legt fest, wer zuerst gibt.“; je Spieler eine Zeile „1. ‹Name›“ mit
   Auswahlknopf, beim ersten Geber „gibt zuerst“, und die Pfeile „‹Name› einen Platz nach vorn“ bzw. „‹Name› einen Platz
@@ -296,6 +298,73 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
   anderes Handy inzwischen eingetragen hat). Speichern übernimmt die Änderungen mit
   `EveningEdit.apply` über den Editor des Abends (in der Web-App über das Speichern des Abends) und kehrt zum Abend
   zurück; doppeltes Antippen speichert nur einmal. Zurück ohne Speichern verwirft die Änderungen ohne Rückfrage.
+
+### 4.2 Datum beim neuen Abend und geplante Abende (Android-App und Web-App gleich, Texte wörtlich)
+
+Wunsch des Projektinhabers vom 21.11.2026: einen Abend schon vorab anlegen können, bevor man sich trifft.
+
+- „Neuer Abend“ hat nach der Sitzordnung die Überschrift „Datum“ und darunter das Datum wie in 4.1 (Android: Datum wie
+  im Titel des Abends und daneben der Knopf „Datum ändern“, Datumsauswahl mit „Übernehmen“ und „Abbrechen“; Web-App:
+  Datumsfeld des Browsers mit der Beschriftung „Datum“). Vorbelegt ist heute; jeder Tag lässt sich wählen. Danach folgt
+  wie bisher das Feld „Ort (freiwillig)“.
+- Beginn des neuen Abends: Ist der gewählte Tag heute, der Zeitpunkt des Antippens wie bisher; sonst dieselbe Ortszeit
+  wie beim Antippen, aber an dem gewählten Tag.
+- Liegt der gewählte Tag nach heute, steht unter dem Datum „Der Abend ist geplant. Bis zu diesem Tag steht er unter
+  „Abende“ als „geplant“.“, und der Hauptknopf heißt „Abend anlegen“ statt „Abend starten“ (fehlen noch Spieler, bleibt
+  es bei „Noch ‹n› auswählen“). Danach öffnet sich der Abend wie bisher.
+- **Geplant** ist ein Abend, der nicht beendet ist und dessen Tag des Beginns (Ortszeit des Geräts) nach heute liegt.
+  Gespeichert wird dafür nichts Zusätzliches; sonst gilt alles wie für jeden anderen Abend (eintragen, bearbeiten,
+  beenden, gemeinsame Runde). Ein Abend ohne Spiele zählt in der Statistik ohnehin nicht.
+- Startseite: Die Karte „Abend läuft“ zeigt den neuesten Abend, der läuft und nicht geplant ist (ohne einen solchen
+  keine Karte). In der Liste „Abende“ trägt ein geplanter Abend die Marke „geplant“ statt „läuft“. Am Tag selbst gilt
+  er als laufend.
+
+### 4.3 Ortsvorschläge (Android-App und Web-App gleich, Texte wörtlich)
+
+Beim Feld „Ort (freiwillig)“ in „Neuer Abend“ und „Abend bearbeiten“ schlägt die App Orte aus OpenStreetMap vor.
+Entscheidung des Projektinhabers vom 21.11.2026: Suche per Name, ohne Standort des Geräts; OpenStreetMap statt Google
+(Google verlangt ein Rechnungskonto, OpenStreetMap ist kostenlos, ohne Konto und passt zu F-Droid).
+
+- **Dienst:** Photon von komoot, `GET https://photon.komoot.io/api/?q=‹Text›&lang=de&limit=8` (`q` URL-kodiert), ohne
+  Schlüssel, ohne Konto und ohne eigene Kopfzeilen (keine Kennung von App, Gerät oder Nutzer). Gesendet wird nur der
+  eingetippte Text. Antwort: GeoJSON-`FeatureCollection`; gelesen werden nur `features[].properties`, unbekannte
+  Felder zählen nicht. Status nicht 200, kein JSON-Objekt oder `features` keine Liste: Fehler. Ein Eintrag von
+  `features`, der kein Objekt ist oder dessen `properties` kein Objekt ist, entfällt.
+- **Wann:** Nur nach einer Eingabe des Nutzers in das Feld, nie für einen vorhandenen Ort beim Öffnen. Hat der
+  getrimmte Text mindestens 3 Zeichen, wird 400 ms nach der letzten Eingabe gesucht, und zwar nach dem getrimmten Text.
+  Jede neue Eingabe verwirft die geplante oder laufende Suche; es zählt nur die Antwort auf die letzte Eingabe. Unter 3
+  Zeichen: keine Suche, Vorschläge und Hinweis verschwinden. Höchstens 10 Sekunden je Suche.
+- **Ein Vorschlag aus `properties`** (`PhotonPlaces.suggestions`): Jeder Wert wird getrimmt; fehlt er, ist er kein
+  Text oder ist er danach leer, zählt er als leer.
+  - `straße` = `street`, mit einem Leerzeichen und `housenumber` dahinter, wenn es eine Hausnummer gibt; ohne `street`
+    leer (auch wenn es eine Hausnummer gibt).
+  - `ort` = `city`, sonst `locality`, sonst `district`.
+  - `ortszeile` = `postcode` und `ort`, durch ein Leerzeichen getrennt, soweit vorhanden.
+  - `land` = `country`, wenn `countrycode` nicht leer und (ohne Unterschied von Groß- und Kleinbuchstaben) nicht `DE`
+    ist; sonst leer.
+  - `titel` = das erste nicht leere aus `name`, `straße`, `ort`, `state`, `country`. Ist alles leer, entfällt der
+    Vorschlag.
+  - `details` = `straße`, `ortszeile` und `land`, jeweils nur, wenn nicht leer und nicht gleich `titel`, mit „, “
+    verbunden (kann leer sein).
+  - `text` = `titel` und `details` (wenn nicht leer) mit „, “ verbunden, dann gesäubert wie jeder Ort
+    (`EveningEdit.cleanLocation`: getrimmt, höchstens 100 Zeichen). Ist `text` danach leer, entfällt der Vorschlag.
+  - In der Reihenfolge der Antwort; ein Vorschlag, dessen `text` schon vorkam, entfällt; höchstens 5 Vorschläge.
+- **Anzeige:** Direkt unter dem Feld eine Liste, je Vorschlag eine antippbare Zeile (mindestens 56 dp hoch) mit
+  `titel` und darunter kleiner `details` (wenn nicht leer). Unter der Liste klein:
+  „Vorschläge: © OpenStreetMap-Mitwirkende, über photon.komoot.io“. Antippen setzt `text` als Ort und schließt die
+  Liste; dafür wird nicht gesucht, bis der Nutzer wieder tippt. Ohne Vorschläge (auch bei leerer Antwort) keine Liste.
+- **Fehler** (kein Netz, Zeitüberschreitung, Antwort unbrauchbar): keine Liste, stattdessen klein unter dem Feld
+  „Ortsvorschläge gibt es nur mit Internet.“ bis zur nächsten Eingabe. Der Ort lässt sich immer frei eintippen; nichts
+  davon hält Anlegen oder Speichern auf.
+- **Länge:** Ein Ort hat seitdem höchstens 100 Zeichen (vorher 40). Das Dateiformat prüft die Länge nicht: Ältere
+  Versionen zeigen längere Orte und kürzen sie erst, wenn man dort den Ort bearbeitet.
+- **Kotlin:** Port `PlaceSearch` mit `PlaceSuggestion(title, details, text)` in `domain.ports` (wirft bei Fehlern),
+  `PhotonPlaceSearch` und die reine Funktion `PhotonPlaces.suggestions(json)` in `data/place`; die Steuerung (Warten,
+  Verwerfen, Zustand) teilen sich beide ViewModels (`app/ui/place`). Golden-Abschnitt `places` in
+  `web/src/data/golden/kotlin-format-golden.json` (Antworttext → Vorschläge oder Fehler).
+- **Web:** dieselbe reine Funktion in `web/src/data/place` gegen den Golden-Abschnitt `places`; `connect-src` der
+  Content-Security-Policy enthält immer `https://photon.komoot.io`. Der Service Worker lässt fremde Herkünfte ohnehin
+  durch.
 
 ## 5. Tests
 
