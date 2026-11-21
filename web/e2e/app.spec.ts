@@ -244,6 +244,30 @@ test("Abend bearbeiten: einen Abend, den es nicht gibt, gibt es nicht", async ({
   await expect(page.getByText("Diesen Abend gibt es nicht mehr.")).toBeVisible();
 });
 
+test("Zurück im Abend nach „Weiterspielen“, auch doppelt angetippt", async ({ page }) => {
+  await startEvening(page);
+  await openApp(page);
+  // Doppelt angetippt: Es entsteht nur ein Schritt, ein Zurück reicht.
+  await page.getByRole("button", { name: "Weiterspielen" }).dblclick();
+  await expect(page.getByRole("button", { name: "Spiel eintragen" })).toBeVisible();
+  await page.getByRole("button", { name: "Zurück", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Weiterspielen" })).toBeVisible();
+});
+
+test("Zurück geht auch, wenn der Browser keinen Schritt zurück kann", async ({ page }) => {
+  // So verhält sich iOS, wenn es die App vom Home-Bildschirm neu geladen und nur den letzten Bildschirm samt Zustand
+  // behalten hat: `history.back()` bewegt nichts. Dann führt „Zurück“ zum übergeordneten Bildschirm.
+  await page.addInitScript(() => {
+    History.prototype.back = () => undefined;
+  });
+  await startEvening(page);
+  await openApp(page);
+  await page.getByRole("button", { name: "Weiterspielen" }).click();
+  await expect(page.getByRole("button", { name: "Spiel eintragen" })).toBeVisible();
+  await page.getByRole("button", { name: "Zurück", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Weiterspielen" })).toBeVisible();
+});
+
 test("Spieler löschen: ohne Abend mit Rückfrage, mit Abend nur archivieren", async ({ page }) => {
   await openApp(page, "/spieler");
   await page.getByLabel("Neuer Spieler").fill("Gast");

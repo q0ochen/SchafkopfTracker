@@ -124,12 +124,23 @@ function depthOf(state: unknown): number {
   return typeof depth === "number" && Number.isInteger(depth) && depth >= 0 ? depth : 0;
 }
 
+/**
+ * So lange wartet „Zurück“ darauf, dass der Browser einen Schritt zurückgeht. Geschieht in dieser Zeit nichts, geht es
+ * zum übergeordneten Bildschirm.
+ */
+export const BACK_FALLBACK_MILLIS = 400;
+
 /** Kleiner Router über die History-API mit Anker-Adressen. */
 export class Router {
   private readonly listeners = new Set<(route: Route) => void>();
+  /** Wie oft der Browser seit dem Laden einen Schritt zurück oder vor gegangen ist (für „Zurück“). */
+  private pops = 0;
 
   constructor(private readonly win: Window = window) {
-    win.addEventListener("popstate", () => this.emit());
+    win.addEventListener("popstate", () => {
+      this.pops++;
+      this.emit();
+    });
     win.addEventListener("hashchange", () => this.emit());
   }
 
@@ -137,22 +148,41 @@ export class Router {
     return parseRoute(this.win.location.hash);
   }
 
-  /** Öffnet einen Bildschirm; `replace` ersetzt den aktuellen (zum Beispiel nach dem Anlegen eines Abends). */
+  /**
+   * Öffnet einen Bildschirm; `replace` ersetzt den aktuellen (zum Beispiel nach dem Anlegen eines Abends). Ist der
+   * Bildschirm schon offen (etwa nach doppeltem Antippen), entsteht kein zweiter Eintrag: Sonst führte „Zurück“
+   * scheinbar ins Leere, nämlich auf denselben Bildschirm.
+   */
   open(route: Route, options: { replace?: boolean } = {}): void {
     const depth = depthOf(this.win.history.state);
     const href = `#${pathOf(route)}`;
     if (options.replace) this.win.history.replaceState({ depth } satisfies HistoryState, "", href);
-    else this.win.history.pushState({ depth: depth + 1 } satisfies HistoryState, "", href);
+    else if (href !== this.win.location.hash) this.win.history.pushState({ depth: depth + 1 } satisfies HistoryState, "", href);
     this.emit();
   }
 
-  /** Zurück: innerhalb der App einen Schritt zurück, sonst zum übergeordneten Bildschirm. */
+  /**
+   * Zurück: innerhalb der App einen Schritt zurück, sonst zum übergeordneten Bildschirm.
+   *
+   * Ob es den vorigen Schritt wirklich gibt, weiß nur der Browser: Lädt iOS die App vom Home-Bildschirm neu (zum
+   * Beispiel, nachdem sie eine Weile im Hintergrund war), stellt es den letzten Bildschirm samt Zustand wieder her,
+   * aber nicht die Schritte davor. Dann bewegt `history.back()` nichts, und „Zurück“ reagierte gar nicht. Deshalb geht
+   * es, wenn nach {@link BACK_FALLBACK_MILLIS} kein Schritt zurück kam, zum übergeordneten Bildschirm. Der gilt dann als
+   * erster Bildschirm der App, damit das nächste „Zurück“ nicht wieder warten muss.
+   */
   back(): void {
-    if (depthOf(this.win.history.state) > 0) {
-      this.win.history.back();
-    } else {
+    if (depthOf(this.win.history.state) === 0) {
       this.open(parentOf(this.current()), { replace: true });
+      return;
     }
+    const pops = this.pops;
+    const href = this.win.location.href;
+    this.win.history.back();
+    this.win.setTimeout(() => {
+      if (this.pops !== pops || this.win.location.href !== href) return;
+      this.win.history.replaceState({ depth: 0 } satisfies HistoryState, "", `#${pathOf(parentOf(this.current()))}`);
+      this.emit();
+    }, BACK_FALLBACK_MILLIS);
   }
 
   subscribe(listener: (route: Route) => void): () => void {

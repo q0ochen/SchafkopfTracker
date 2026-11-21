@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { parentOf, parseRoute, pathOf, type Route } from "./router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BACK_FALLBACK_MILLIS, parentOf, parseRoute, pathOf, Router, type Route } from "./router";
 
 describe("Router", () => {
   const routes: Route[] = [
@@ -77,3 +77,153 @@ describe("Router", () => {
     expect(parentOf({ name: "board", eveningId: "a" })).toEqual({ name: "start" });
   });
 });
+
+/**
+ * Ein Fenster mit History im Arbeitsspeicher: Einträge mit Zustand und Anker; `back()` meldet `popstate` erst etwas
+ * später, wie ein Browser. `lost` stellt nach, dass iOS die App neu geladen und nur den letzten Eintrag behalten hat.
+ */
+class FakeWindow {
+  entries: { state: unknown; hash: string }[] = [{ state: null, hash: "" }];
+  index = 0;
+  private readonly handlers = new Map<string, Array<() => void>>();
+
+  readonly history = {
+    pushState: (state: unknown, _title: string, url: string) => {
+      this.entries = [...this.entries.slice(0, this.index + 1), { state, hash: url }];
+      this.index = this.entries.length - 1;
+    },
+    replaceState: (state: unknown, _title: string, url: string) => {
+      this.entries[this.index] = { state, hash: url };
+    },
+    back: () => {
+      if (this.index === 0) return;
+      this.index--;
+      setTimeout(() => this.dispatch("popstate"), 10);
+    },
+    get state(): unknown {
+      return undefined;
+    },
+  };
+
+  readonly location = {
+    get hash(): string {
+      return "";
+    },
+    get href(): string {
+      return "";
+    },
+  };
+
+  constructor() {
+    Object.defineProperty(this.history, "state", { get: () => this.entries[this.index].state });
+    Object.defineProperty(this.location, "hash", { get: () => this.entries[this.index].hash });
+    Object.defineProperty(this.location, "href", { get: () => `https://example.org/app/${this.entries[this.index].hash}` });
+  }
+
+  addEventListener(type: string, handler: () => void): void {
+    this.handlers.set(type, [...(this.handlers.get(type) ?? []), handler]);
+  }
+
+  setTimeout(handler: () => void, millis: number): number {
+    return setTimeout(handler, millis) as unknown as number;
+  }
+
+  dispatch(type: string): void {
+    for (const handler of this.handlers.get(type) ?? []) handler();
+  }
+}
+
+describe("Router: Zurück", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  function routerOn(win: FakeWindow): { router: Router; routes: Route[] } {
+    const router = new Router(win as unknown as Window);
+    const routes: Route[] = [];
+    router.subscribe((route) => routes.push(route));
+    return { router, routes };
+  }
+
+  it("geht einen Schritt zurück, ohne zusätzlich zum übergeordneten Bildschirm zu springen", () => {
+    const win = new FakeWindow();
+    const { router, routes } = routerOn(win);
+    router.open({ name: "round" });
+    router.back();
+    vi.advanceTimersByTime(BACK_FALLBACK_MILLIS + 50);
+
+    expect(router.current()).toEqual({ name: "start" });
+    expect(routes.at(-1)).toEqual({ name: "start" });
+    expect(win.entries).toHaveLength(2);
+  });
+
+  it("führt nach dem Abend zurück, wenn der Abend über den Abend hinaus geöffnet wurde", () => {
+    // Vom Abend aus „Gemeinsame Runde“: Zurück führt zum Abend, nicht zum übergeordneten Start.
+    const win = new FakeWindow();
+    const { router } = routerOn(win);
+    router.open({ name: "board", eveningId: "abend" });
+    router.open({ name: "round" });
+    router.back();
+    vi.advanceTimersByTime(BACK_FALLBACK_MILLIS + 50);
+    expect(router.current()).toEqual({ name: "board", eveningId: "abend" });
+  });
+
+  it("geht zum übergeordneten Bildschirm, wenn der Browser keinen Schritt zurück hat", () => {
+    // So stellt iOS die App vom Home-Bildschirm nach dem Neuladen her: letzter Bildschirm samt Zustand, nichts davor.
+    const win = new FakeWindow();
+    win.entries = [{ state: { depth: 1 }, hash: "#/abend/abend" }];
+    const { router, routes } = routerOn(win);
+
+    router.back();
+    expect(router.current()).toEqual({ name: "board", eveningId: "abend" });
+    vi.advanceTimersByTime(BACK_FALLBACK_MILLIS);
+
+    expect(router.current()).toEqual({ name: "start" });
+    expect(routes.at(-1)).toEqual({ name: "start" });
+    expect(win.entries).toEqual([{ state: { depth: 0 }, hash: "#/" }]);
+  });
+
+  it("wartet nach einem vergessenen Schritt beim nächsten Zurück nicht noch einmal", () => {
+    // Formular eines Spiels, nach dem Neuladen ohne die Schritte davor: Zurück führt zum Abend (nach der Wartezeit),
+    // das nächste Zurück sofort zum Start.
+    const win = new FakeWindow();
+    win.entries = [{ state: { depth: 2 }, hash: "#/abend/abend/spiel" }];
+    const { router } = routerOn(win);
+
+    router.back();
+    vi.advanceTimersByTime(BACK_FALLBACK_MILLIS);
+    expect(router.current()).toEqual({ name: "board", eveningId: "abend" });
+
+    router.back();
+    expect(router.current()).toEqual({ name: "start" });
+    expect(win.entries).toEqual([{ state: { depth: 0 }, hash: "#/" }]);
+
+    // Danach geht es ganz normal weiter: Neue Schritte lassen sich wieder zurückgehen.
+    router.open({ name: "board", eveningId: "abend" });
+    router.back();
+    vi.advanceTimersByTime(BACK_FALLBACK_MILLIS + 50);
+    expect(router.current()).toEqual({ name: "start" });
+    expect(win.entries).toHaveLength(2);
+  });
+
+  it("ohne Schritte in der App geht es sofort zum übergeordneten Bildschirm", () => {
+    const win = new FakeWindow();
+    win.entries = [{ state: null, hash: "#/abend/abend/spiel" }];
+    const { router } = routerOn(win);
+    router.back();
+    expect(router.current()).toEqual({ name: "board", eveningId: "abend" });
+  });
+
+  it("öffnet denselben Bildschirm nicht doppelt (doppeltes Antippen)", () => {
+    const win = new FakeWindow();
+    const { router, routes } = routerOn(win);
+    router.open({ name: "board", eveningId: "abend" });
+    router.open({ name: "board", eveningId: "abend" });
+    expect(win.entries).toHaveLength(2);
+    expect(routes).toHaveLength(2);
+
+    router.back();
+    vi.advanceTimersByTime(BACK_FALLBACK_MILLIS + 50);
+    expect(router.current()).toEqual({ name: "start" });
+  });
+});
+

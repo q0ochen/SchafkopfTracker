@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 697, `data` 278, `database` 24, `app` 205, Web 601 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 42 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 697, `data` 278, `database` 24, `app` 205, Web 607 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 44 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -442,6 +442,21 @@ Abend ein).
 - Testnamen in `app` ohne Umlaute: Klassendateien von Lambdas mit Umlauten im Namen scheiterten hier beim Kompilieren
   (Dateinamen ohne UTF-8).
 - Nicht geprüft: echte Geräte; wie das Datumsfeld der Web-App in Safari auf dem iPhone aussieht.
+- Pull Request #26 (Abend bearbeiten) auf Wunsch des Nutzers angelegt („Ja, Pull request anlegen“) und von ihm am
+  21.11.2026 zusammengeführt (`767cb88` auf `main`).
+
+Danach meldete der Nutzer (21.11.2026, Bildschirmfoto der Web-App auf dem iPhone): „Sobald man auf "weiterspielen"
+drückt und in den neuen Bildschirm gelangt kann man nicht mehr auf den Rückpfeil drücken“.
+
+- In Chromium nicht nachzustellen (auch nicht mit doppeltem Antippen). Vermutete Ursache: iOS stellt die App vom
+  Home-Bildschirm nach dem Neuladen (etwa nach einer Weile im Hintergrund) am letzten Bildschirm samt Zustand wieder
+  her, aber ohne die Schritte davor; dann bewegt `history.back()` nichts.
+- Behoben in `web/src/app/router.ts` (Vertrag `docs/ARCHITEKTUR.md`, Abschnitt 7, „Navigation“): Hat der Browser nach
+  400 ms nichts bewegt, geht „Zurück“ zum übergeordneten Bildschirm, und der gilt ab dann als erster. Ein Bildschirm,
+  der schon offen ist, kommt nicht ein zweites Mal in die Geschichte. Tests: `router.test.ts` und zwei in
+  `e2e/app.spec.ts` (einer legt `History.prototype.back` still und scheitert ohne die Korrektur).
+- Nicht auf einem echten iPhone geprüft. Hilft es dort nicht, erreicht vermutlich das Antippen den Knopf nicht; dann
+  beim Nutzer nachfragen, ob „Zurück“ auf anderen Bildschirmen geht und ob vorher etwas eingeblendet war.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
