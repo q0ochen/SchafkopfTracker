@@ -89,6 +89,12 @@ Auswertung wahlweise für einen einzelnen Abend oder über alle Abende („ewige
 Stand 16.11.2026: umgesetzt in der Android-App (Statistik, Abschluss, Teilen als Text und Bild) und in der Web-App
 (ohne Teilen als Bild); das Balkendiagramm je Spielart in beiden.
 
+Wunsch des Nutzers vom 21.11.2026: „Abschluss soll "Abend teilen" heißen und dann soll man die Statistik auch als Bild
+teilen können in dem dann auch ein aussagekräftiges Diagramm mit den Spielernamen enthalten ist“. Umgesetzt in beiden
+Apps: Der Bildschirm heißt „Abend teilen“ und zeigt zusätzlich den Vermögensverlauf des Abends; „Als Bild teilen“ ist
+die Hauptaktion, und das Bild enthält Endstand, Vermögensverlauf mit Legende der Namen und „Wer zahlt wem“. Die
+Web-App teilt Bilder seitdem auch (über das Teilen-Menü des iPhones), ebenso die Statistik (docs/ARCHITEKTUR.md, 4.4).
+
 ## 6. Sicherung und Zusätze
 
 - **Google Drive:** Nach jedem Eintragen, Ändern oder Löschen wird im Hintergrund eine Sicherung auf Google Drive

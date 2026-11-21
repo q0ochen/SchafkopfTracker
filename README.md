@@ -99,8 +99,8 @@ funktioniert auch ohne Empfang; abgeglichen wird im Hintergrund.
 | Ortsvorschläge beim Ort aus OpenStreetMap: Name, Straße und Postleitzahl zum Antippen | Android-App und Web-App |
 | Dunkles Design als Standard, große Tippflächen, Bedienung mit Screenreader | fertig |
 | Statistik für einen Abend und über alle Abende: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index, Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner | Rechenwerk fertig, getestet |
-| Statistik-Bildschirm mit Diagrammen (Vermögensverlauf, Balken je Spielart), Abschluss mit „Wer zahlt wem“, Teilen als Text | Android-App und Web-App |
-| Teilen als Bild (Abschluss und Statistik) | Android-App |
+| Statistik-Bildschirm mit Diagrammen (Vermögensverlauf, Balken je Spielart), „Abend teilen“ mit „Wer zahlt wem“, Teilen als Text | Android-App und Web-App |
+| Teilen als Bild („Abend teilen“ und Statistik), mit Vermögensverlauf und Namen der Spieler | Android-App und Web-App |
 | Speichern auf dem Gerät (jede Eingabe sofort; Android: Room-Datenbank) | fertig |
 | Testversion für Android über eine eigene F-Droid-Paketquelle, Web-App fürs iPhone | eingerichtet |
 | Sicherung als Datei (speichern und einlesen, zwischen iPhone und Android austauschbar) | Android-App und Web-App |

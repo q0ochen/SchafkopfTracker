@@ -37,7 +37,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-/** Teilen aus dem Abschluss: Das Teilen-Menü von Android bekommt den Text bzw. das Bild. */
+/** Teilen aus „Abend teilen“: Das Teilen-Menü von Android bekommt den Text bzw. das Bild. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36], application = TestSchafkopfApp::class)
@@ -114,7 +114,7 @@ class ShareTest {
         @Suppress("DEPRECATION")
         val uri: Uri = send.getParcelableExtra(Intent.EXTRA_STREAM)!!
         assertEquals("${app.packageName}.dateien", uri.authority)
-        val file = File(File(app.cacheDir, Sharing.SHARED_FOLDER), "schafkopf-abschluss.png")
+        val file = File(File(app.cacheDir, Sharing.SHARED_FOLDER), "schafkopf-abend.png")
         assertTrue("Bild fehlt", file.isFile)
         // PNG-Signatur und eine sinnvolle Größe (mehr als ein leeres Bild).
         val bytes = file.readBytes()

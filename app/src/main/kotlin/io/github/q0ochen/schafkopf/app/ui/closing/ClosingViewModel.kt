@@ -11,6 +11,7 @@ import io.github.q0ochen.schafkopf.domain.model.EveningId
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
+import io.github.q0ochen.schafkopf.domain.stats.StatisticEngine
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -21,7 +22,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 
 /**
- * Zustand des Abschlusses.
+ * Zustand von „Abend teilen“ (bis 21.11.2026 „Abschluss“, docs/ARCHITEKTUR.md, Abschnitt 4.4).
  *
  * @property computed Der durchgerechnete Abend; `null`, solange geladen wird oder wenn es den Abend nicht mehr gibt.
  */
@@ -31,6 +32,7 @@ data class ClosingUiState(
     val closing: Closing? = null,
     val names: Map<PlayerId, String> = emptyMap(),
     val colorIndex: Map<PlayerId, Int> = emptyMap(),
+    val balanceSeries: List<Pair<PlayerId, List<Int>>> = emptyList(),
     val commentary: CommentaryUi = CommentaryUi.Idle,
 )
 
@@ -54,12 +56,17 @@ class ClosingViewModel(
         combine(evenings.evening(eveningId), players.players) { evening, allPlayers ->
             val names = allPlayers.associate { it.id to it.name }
             val computed = evening?.let(EveningCalculator::compute)
+            // Der Vermögensverlauf wie in der Statistik dieses Abends: Spieler in Sitzreihenfolge, Start und nach jedem Spiel.
+            val finance = evening?.let { StatisticEngine.forEvening(it) }
             ClosingUiState(
                 loading = false,
                 computed = computed,
                 closing = computed?.let { Closing.of(it, names) },
                 names = names,
                 colorIndex = allPlayers.associate { it.id to it.colorIndex },
+                balanceSeries = finance?.players.orEmpty().map { player ->
+                    player to (finance?.finance?.balanceSeries?.get(player) ?: listOf(0))
+                },
             )
         }.flowOn(computeDispatcher)
 

@@ -260,7 +260,7 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 
 - MVVM: je Bildschirm ein ViewModel mit `StateFlow` als Zustand; die Oberfläche liest nur diesen Zustand.
 - Navigation: eigener Stapel aus `Screen`-Werten (`Navigator`), je Eintrag ein eigener ViewModel-Speicher.
-- Bildschirme: Start, Neuer Abend (Datum 4.2, Ortsvorschläge 4.3), Abend, Abend bearbeiten (4.1), Spiel eintragen, Abschluss, Statistik (ein Abend oder alle Abende, oben
+- Bildschirme: Start, Neuer Abend (Datum 4.2, Ortsvorschläge 4.3), Abend, Abend bearbeiten (4.1), Spiel eintragen, Abend teilen (4.4, bis 21.11.2026 „Abschluss“), Statistik (ein Abend oder alle Abende, oben
   wählbar; Vermögensverlauf als selbst gezeichnetes Liniendiagramm mit Tabelle als Alternative; Spielarten als
   Balkendiagramm `GameModeChart` mit eigenem Maßstab je Spielart, `BarScale`), Spieler, Einstellungen, Regelwerk,
   Sicherung, Abend-Kommentator.
@@ -269,13 +269,13 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
   Abend `SummaryFactsBuilder` und `SummaryPrompt.SYSTEM_PROMPT`, für alle Abende `HistoryFactsBuilder` (auf der
   `StatisticEngine`) und `SummaryPrompt.HISTORY_SYSTEM_PROMPT`. Abschluss und Statistik teilen sich den Ablauf
   (`ui/ai/Commentary.kt`: `CommentaryFlow`, `CommentarySection`, Zustimmungsdialog).
-- Teilen: Abschluss und Statistik als Text (`ACTION_SEND`) und als Bild (Compose-Ansicht über `GraphicsLayer` als PNG
-  im Cache, weitergegeben über `FileProvider`, nur der Ordner `cache/geteilt`).
+- Teilen: „Abend teilen“ (4.4) und Statistik als Bild (Compose-Ansicht über `GraphicsLayer` als PNG im Cache,
+  weitergegeben über `FileProvider`, nur der Ordner `cache/geteilt`) und als Text (`ACTION_SEND`).
 - Texte der Oberfläche stehen in `res/values/strings*.xml`; Beträge formatiert ausschließlich `:app`.
 
 ### 4.1 Abend bearbeiten (Android-App und Web-App gleich, Texte wörtlich)
 
-- Menü des Abends, in dieser Reihenfolge: „Statistik dieses Abends“, „Abschluss“, **„Abend bearbeiten“**, „Regeln
+- Menü des Abends, in dieser Reihenfolge: „Statistik dieses Abends“, „Abend teilen“ (4.4), **„Abend bearbeiten“**, „Regeln
   dieses Abends“, „Abend beenden“ bzw. „Abend wieder öffnen“, „Abend löschen“. Für laufende und beendete Abende.
 - Bildschirm „Abend bearbeiten“. Beim Öffnen wird der Abend einmal gelesen; das ist `original` für
   `EveningEdit.apply`. Gibt es ihn nicht (mehr): „Diesen Abend gibt es nicht mehr.“
@@ -365,6 +365,34 @@ Entscheidung des Projektinhabers vom 21.11.2026: Suche per Name, ohne Standort d
 - **Web:** dieselbe reine Funktion in `web/src/data/place` gegen den Golden-Abschnitt `places`; `connect-src` der
   Content-Security-Policy enthält immer `https://photon.komoot.io`. Der Service Worker lässt fremde Herkünfte ohnehin
   durch.
+
+### 4.4 Abend teilen (Android-App und Web-App gleich, Texte wörtlich)
+
+Wunsch des Projektinhabers vom 21.11.2026: „Abschluss soll "Abend teilen" heißen und dann soll man die Statistik auch
+als Bild teilen können in dem dann auch ein aussagekräftiges Diagramm mit den Spielernamen enthalten ist“ (Vorbild:
+ein „Geldverlauf“ mit einer farbigen Linie je Spieler und einer Legende mit den Namen).
+
+- **Name:** Menüpunkt und Bildschirm heißen „Abend teilen“ (bis 21.11.2026 „Abschluss“). „Abend beenden“ führt wie
+  bisher dorthin.
+- **Bildschirm**, von oben: Datum wie im Titel des Abends, mit Ort „‹Datum› · ‹Ort›“; „‹n› Spiele“ (läuft der Abend
+  noch, dahinter „ · Der Abend läuft noch.“ bzw. in Android die Zeile „Der Abend läuft noch.“ wie bisher); „Endstand“
+  mit „‹Platz›. ‹Name›“ und Betrag je Spieler; **neu: „Vermögensverlauf“** mit dem Diagramm dieses Abends wie in der
+  Statistik (eine Linie je Spieler in seiner Farbe, Start und nach jedem Spiel, Beträge an der senkrechten Achse, die
+  Null deutlich, darunter die Legende mit Farbe und Name je Spieler; ohne Spiele „Der Verlauf erscheint nach dem
+  ersten Spiel.“); „Wer zahlt wem“ wie bisher. Darunter die Knöpfe „Als Bild teilen“ (Hauptaktion, zuerst) und „Als
+  Text teilen“, dann „Statistik dieses Abends“ (Android danach wie bisher der Abend-Kommentator).
+- **Das Bild** zeigt genau diesen oberen Teil, vom Datum bis „Wer zahlt wem“, ohne Knöpfe, in den Farben des
+  eingestellten Designs (dunkel oder hell). Android nimmt den Bildschirmausschnitt (`captureInto`); die Web-App zeichnet
+  dasselbe in einem Canvas, 1080 Pixel breit, und gibt es als PNG weiter. Dateiname `schafkopf-abend.png`. Der geteilte
+  Text bleibt, wie er ist.
+- **Statistik:** Auch dort heißen die Knöpfe „Als Bild teilen“ (zuerst) und „Als Text teilen“ (Android wie bisher;
+  die Web-App bekommt nur „Als Bild teilen“). Das Bild zeigt den oberen Teil der Statistik: Auswahl („Abend vom …“ bzw.
+  „Alle Abende (ewige Tabelle)“), Kontostand und Vermögensverlauf mit Legende (bei allen Abenden mit den feinen
+  Linien, wo ein Abend beginnt). Dateiname `schafkopf-statistik.png`.
+- **Weitergeben:** Android über den Teilen-Dialog wie bisher. Die Web-App über das Teilen-Menü des Browsers
+  (`navigator.share` mit der Datei, auf dem iPhone also direkt in WhatsApp und Co.); kann der Browser keine Dateien
+  teilen, wird das Bild heruntergeladen. Meldungen: „Das Bild ist heruntergeladen.“ bzw. „Das Bild ließ sich nicht
+  erstellen.“; Abbrechen im Teilen-Menü meldet nichts.
 
 ## 5. Tests
 
