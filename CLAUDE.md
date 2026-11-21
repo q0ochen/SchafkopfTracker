@@ -505,7 +505,13 @@ Kreditkarte; Leitplanke „kein Geld ausgeben“).
   (`isPlanned`, `startOnDay`). Die Content-Security-Policy erlaubt `https://photon.komoot.io`. Alle Oberflächen-Tests
   leiten Photon um (`web/e2e/support.ts`, ohne Antwort abgebrochen; `answerPlaces` liefert Vorschläge): Kein Test
   fragt den echten Dienst. Der Text „Über die App“ in den Einstellungen nennt jetzt die Ortsvorschläge.
-- Android veröffentlicht seitdem nur noch von `main` (siehe oben, „Ja, erst mit dem Release“).
+- Android veröffentlicht seitdem nur noch von `main` (siehe oben, „Ja, erst mit dem Release“). Geprüft am 21.11.2026:
+  Läufe „Android“ 51, „Web-App“ 31 und „Supabase“ 17 grün (Stand `b8fd1c2`); Testversion und Paketquelle wurden dabei
+  wie gewollt übersprungen. Lauf 50 (nur die Umstellung) scheiterte, weil Robolectric seine Android-Laufzeit nicht
+  herunterladen konnte (`MavenArtifactFetcher`, FileNotFoundException), also außerhalb des Codes; tritt das wieder auf,
+  Lauf einmal neu starten.
+- Alles liegt auf `claude/gracious-keller-48tcn0` und wartet mit der Korrektur des Rückpfeils auf den gesammelten
+  Release; Pull Request nur auf Bitte des Nutzers.
 - **Nicht geprüft:** echte Geräte; ob der Browser auf dem iPhone den Dienst abfragen darf (CORS): Die Antwort ohne
   `Origin` hatte keine CORS-Kopfzeile, was bei Photon (Javalin) normal ist; eine Probe mit `Origin` wurde hier nicht
   zugelassen. Kommen in der Web-App auf dem iPhone keine Vorschläge, sondern immer „Ortsvorschläge gibt es nur mit
