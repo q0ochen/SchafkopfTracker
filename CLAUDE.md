@@ -409,7 +409,10 @@ Gut zu wissen für die nächste Sitzung:
   stand: Tritt es wieder auf, zuerst diese Meldung lesen. Am 21.11.2026 trat es wieder auf (Lauf 43, der nächste
   Lauf mit fast gleichem Stand war grün); die Meldung fehlte im Protokoll, weil Gradle nur den Namen des Fehlers
   ausgab. Seitdem schreibt `app/build.gradle.kts` die ganze Meldung ins Protokoll, und `android.yml` lädt bei
-  Fehlschlägen die Testergebnisse hoch (Artefakt „Testergebnisse“). (2) Der Tag „testversion“ ließ sich nicht verschieben
+  Fehlschlägen die Testergebnisse hoch (Artefakt „Testergebnisse“). Gleich der nächste Lauf (46) zeigte: Die Startseite
+  stand noch auf „wird geladen“, die Daten kamen in 30 s nicht an. Die Test-JVM hatte nur Gradles 512 MB, und hier war
+  der Speicher während der Bildschirmtests zeitweise zu 99 % belegt; seitdem bekommen die Tests von `app` 2 GB, und
+  `waitForText` nennt bei einem Fehlschlag auch die Speicherbelegung. (2) Der Tag „testversion“ ließ sich nicht verschieben
   (HTTP 403), wenn der Stand eine Workflow-Datei änderte und beim Veröffentlichen schon ein neuerer Stand auf dem
   Zweig lag; die Testversion wird jetzt trotzdem ersetzt.
 - Die Spracheingabe ist verworfen. Falls sie wieder aufkommt: Kern wäre ein Parser Text → `GameDraft` mit Kölner
