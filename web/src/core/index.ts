@@ -13,8 +13,20 @@
  * - Beträge sind ganze Cent im Bereich eines Kotlin-`Int`; wo Kotlin dabei überläuft, läuft der Kern genauso über.
  */
 export * from "./model";
-export { compareInstants, instantFromEpochMillis, instantParts, instantToEpochMillis } from "./instant";
-export type { InstantParts } from "./instant";
+export {
+  civilFromDays,
+  compareInstants,
+  daysFromCivil,
+  durationBetween,
+  formatInstant,
+  INSTANT_MAX_EPOCH_SECOND,
+  INSTANT_MIN_EPOCH_SECOND,
+  instantFromEpochMillis,
+  instantParts,
+  instantToEpochMillis,
+  plusDuration,
+} from "./instant";
+export type { CivilDate, DurationParts, InstantParts } from "./instant";
 
 export {
   allowsSie,
@@ -35,6 +47,8 @@ export type { GameFacts, RuleViolation, ValueBreakdown } from "./rules/ScoreCalc
 export { append, declarerSide, insertAt, isRunning, losers, remove, replace, winners } from "./evening/Evening";
 export type { GameSides } from "./evening/Evening";
 export { ENTRY_ISSUES, EveningCalculator, Ranking } from "./evening/EveningCalculator";
+export { EveningEdit, eveningDetailsOf, MAX_LOCATION_LENGTH } from "./evening/EveningEdit";
+export type { EveningDetails } from "./evening/EveningEdit";
 export type { EntryIssue, EntryResult, EveningState } from "./evening/EveningCalculator";
 export { SettleUp } from "./evening/SettleUp";
 export type { Transfer } from "./evening/SettleUp";

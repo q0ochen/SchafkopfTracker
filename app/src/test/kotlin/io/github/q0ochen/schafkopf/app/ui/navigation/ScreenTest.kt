@@ -12,6 +12,7 @@ class ScreenTest {
             Screen.Start,
             Screen.NewEvening,
             Screen.Board("a"),
+            Screen.EditEvening("a"),
             Screen.GameForm("a", null),
             Screen.GameForm("a", "e1"),
             Screen.Closing("a"),

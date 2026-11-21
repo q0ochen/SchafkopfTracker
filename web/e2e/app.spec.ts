@@ -156,6 +156,94 @@ test("Regeln dieses Abends ändern rechnet neu", async ({ page }) => {
   await expect(standing(page, "Anna")).toContainText("+0,20");
 });
 
+test("Abend bearbeiten: Datum, Ort, Sitzordnung und erster Geber; Spiele und Beträge bleiben", async ({ page }) => {
+  await nameDefaultPlayers(page);
+  await startEvening(page);
+  await enterGame(page, { players: ["Anna", "Cilli"], won: true });
+  await expect(page.getByText("Spiel 2 · Geber: Bert")).toBeVisible();
+
+  // Im Menü zwischen „Abschluss“ und „Regeln dieses Abends“.
+  await page.getByRole("button", { name: "Mehr" }).click();
+  await expect(page.locator(".more-menu-list .menu-item")).toHaveText([
+    "Statistik dieses Abends",
+    "Abschluss",
+    "Abend bearbeiten",
+    "Regeln dieses Abends",
+    "Abend beenden",
+    "Abend löschen",
+  ]);
+  await page.getByRole("button", { name: "Abend bearbeiten" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Abend bearbeiten" })).toBeVisible();
+  await expect(page.getByText("Eingetragene Spiele und Beträge bleiben unverändert. Wer gibt, ergibt sich aus Sitzordnung und erstem Geber.")).toBeVisible();
+  await expect(page.getByText("Die Änderungen gelten für alle in der gemeinsamen Runde.")).toBeHidden();
+
+  // Ohne Änderung ist „Speichern“ gesperrt; Leerraum im Ort ist keine Änderung.
+  const save = page.getByRole("button", { name: "Speichern" });
+  await expect(save).toBeDisabled();
+  const location = page.getByLabel("Ort (freiwillig)");
+  await location.fill("   ");
+  await expect(save).toBeDisabled();
+  await expectAccessible(page);
+
+  // Ein Tag nach heute lässt sich nicht wählen.
+  const date = page.getByLabel("Datum");
+  const today = await date.getAttribute("max");
+  expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  await expect(date).toHaveValue(today ?? "");
+  await date.fill("2999-01-01");
+  await expect(date).toHaveValue(today ?? "");
+  await expect(save).toBeDisabled();
+
+  await date.fill("2025-11-15");
+  await location.fill("  Beim Huber ");
+  await page.getByRole("button", { name: "Bert einen Platz nach vorn" }).click();
+  await page.getByRole("radio", { name: /^Cilli/ }).click();
+  await expect(page.getByRole("radio", { name: /^Cilli/ })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("list", { name: "Sitzordnung" }).getByRole("listitem")).toHaveText([/^1Bert/, /^2Anna/, /^3Cilli/, /^4Done/]);
+  await expect(save).toBeEnabled();
+  await expectAccessible(page);
+  // Doppelt angetippt wird nur einmal gespeichert und nur ein Schritt zurückgegangen (sonst stünde die Startseite da).
+  // Beide Klicks kommen im selben Takt, also sicher, bevor der Bildschirm wechselt.
+  await save.evaluate((button: HTMLButtonElement) => {
+    button.click();
+    button.click();
+  });
+
+  // Zurück im Abend: das neue Datum im Titel, die neue Sitzordnung, der Geber neu berechnet, die Beträge wie vorher.
+  await expect(page.getByRole("heading", { level: 1, name: /^Abend vom .*15\. Nov\. 2025$/ })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Stand" }).getByRole("listitem")).toHaveCount(4);
+  await expect(page.getByRole("region", { name: "Stand" }).getByRole("listitem").first()).toContainText("Bert");
+  await expect(page.getByText("Spiel 2 · Geber: Done")).toBeVisible();
+  await expect(standing(page, "Anna")).toContainText("+0,10");
+  await expect(standing(page, "Cilli")).toContainText("+0,10");
+  await expect(standing(page, "Bert")).toContainText("−0,10");
+  await expect(page.getByText("1 · Rufspiel · Anna mit Cilli")).toBeVisible();
+
+  // Zurück ohne Speichern verwirft, ohne zu fragen.
+  await page.getByRole("button", { name: "Mehr" }).click();
+  await page.getByRole("button", { name: "Abend bearbeiten" }).click();
+  await expect(page.getByLabel("Datum")).toHaveValue("2025-11-15");
+  await expect(page.getByLabel("Ort (freiwillig)")).toHaveValue("Beim Huber");
+  await expect(page.getByRole("radio", { name: /^Cilli/ })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("button", { name: "Speichern" })).toBeDisabled();
+  await page.getByLabel("Ort (freiwillig)").fill("Daheim");
+  await page.getByRole("button", { name: "Zurück", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: /^Abend vom / })).toBeVisible();
+
+  // Die Startseite zeigt den neuen Ort, auch nach dem Neuladen.
+  await openApp(page);
+  await expect(page.getByRole("list", { name: "Alle Abende" }).getByText(/15\. Nov\. 2025 · Beim Huber/)).toBeVisible();
+  await waitUntilSaved(page);
+  await page.reload();
+  await expect(page.getByRole("list", { name: "Alle Abende" }).getByText(/15\. Nov\. 2025 · Beim Huber/)).toBeVisible();
+});
+
+test("Abend bearbeiten: einen Abend, den es nicht gibt, gibt es nicht", async ({ page }) => {
+  await openApp(page, "/abend/gibt-es-nicht/bearbeiten");
+  await expect(page.getByRole("heading", { level: 1, name: "Abend bearbeiten" })).toBeVisible();
+  await expect(page.getByText("Diesen Abend gibt es nicht mehr.")).toBeVisible();
+});
+
 test("Spieler löschen: ohne Abend mit Rückfrage, mit Abend nur archivieren", async ({ page }) => {
   await openApp(page, "/spieler");
   await page.getByLabel("Neuer Spieler").fill("Gast");

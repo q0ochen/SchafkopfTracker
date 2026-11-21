@@ -2,11 +2,12 @@
  * Logik des Bildschirms „Neuer Abend“ – verhaltensgleich zur Android-App (`ui/newevening/NewEveningViewModel.kt`),
  * hier als reine Funktionen über der Auswahl des Nutzers.
  */
+import { MAX_LOCATION_LENGTH } from "../core/evening/EveningEdit";
+import { kotlinTrim } from "../core/kotlin";
 import type { Evening, Player, PlayerId, RuleSet } from "../core/model";
 
 /** Am Tisch sitzen genau vier. */
 export const PLAYERS_AT_TABLE = 4;
-export const MAX_LOCATION_LENGTH = 40;
 
 /**
  * Was der Nutzer bisher gewählt hat.
@@ -90,16 +91,26 @@ export function seatNewPlayer(view: NewEveningView, chosen: NewEveningSelection,
   return { ...current, seating: [...current.seating, player] };
 }
 
+/**
+ * Die Sitzordnung, in der ein Spieler mit seinem Nachbarn den Platz tauscht: einen Platz nach vorn (−1) oder hinten
+ * (+1). Am Rand oder für jemanden, der nicht am Tisch sitzt, bleibt sie, wie sie ist (dieselbe Liste). Auch für
+ * „Abend bearbeiten“.
+ */
+export function movedInSeating(seating: readonly PlayerId[], player: PlayerId, delta: number): readonly PlayerId[] {
+  const from = seating.indexOf(player);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= seating.length) return seating;
+  const moved = [...seating];
+  moved[from] = moved[to];
+  moved[to] = player;
+  return moved;
+}
+
 /** Verschiebt einen Spieler in der Sitzordnung um einen Platz nach vorn (−1) oder hinten (+1). */
 export function moveSeat(view: NewEveningView, chosen: NewEveningSelection, player: PlayerId, delta: number): NewEveningSelection {
   const current = startingFromShown(view, chosen);
-  const from = current.seating.indexOf(player);
-  const to = from + delta;
-  if (from < 0 || to < 0 || to >= current.seating.length) return current;
-  const seating = [...current.seating];
-  seating[from] = seating[to];
-  seating[to] = player;
-  return { ...current, seating };
+  const seating = movedInSeating(current.seating, player, delta);
+  return seating === current.seating ? current : { ...current, seating };
 }
 
 export function setFirstDealer(chosen: NewEveningSelection, player: PlayerId): NewEveningSelection {
@@ -123,7 +134,7 @@ export function createEvening(view: NewEveningView, rules: RuleSet, id: string, 
     id,
     startedAt,
     finishedAt: null,
-    location: view.location.trim(),
+    location: kotlinTrim(view.location),
     seating: [...view.seating],
     firstDealer: dealer,
     rules,

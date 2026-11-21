@@ -5,7 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { type ImportPreview, importResultOf, planImport, readBackup, runImport, writeBackup } from "../format/backupFormat";
 import { JsonFormatError } from "../format/errors";
-import { canonicalInstant, formatInstant, parseInstantValue, tryParseInstant } from "../format/instantText";
+import { formatInstant } from "../../core/instant";
+import { canonicalInstant, parseInstantValue, tryParseInstant } from "../format/instantText";
 import { type JsonElement, parseToJsonElement } from "../format/jsonTree";
 import {
   decodeEvening,

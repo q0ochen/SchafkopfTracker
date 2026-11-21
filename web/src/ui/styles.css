@@ -230,6 +230,12 @@ textarea {
   background: var(--surface-3);
 }
 
+/* Gesperrt (zum Beispiel „einen Platz nach vorn“ beim Ersten der Sitzordnung): wie die übrigen Knöpfe gedämpft. */
+.icon-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .icon {
   flex: none;
 }

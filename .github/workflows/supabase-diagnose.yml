@@ -1,0 +1,149 @@
+# Prüft die Anmeldung der gemeinsamen Runde im echten Supabase-Projekt, ohne etwas zu ändern: ob die Einstellungen der
+# Anmeldung stimmen, welche Fehler die Anmeldung in den letzten Stunden gemeldet hat und wie weit die Anmeldeversuche
+# laut Datenbank gekommen sind.
+#
+# Das Repository ist öffentlich und damit auch diese Ausgabe. Deshalb gibt der Workflow keine geheimen Werte aus (vom
+# Client-Secret nur, ob es die richtige Form hat), entfernt aus Fehlermeldungen E-Mail-Adressen, IP-Adressen, Kennungen
+# und lange Codes und nennt aus der Datenbank nur Zahlen und Uhrzeiten.
+#
+# Braucht dasselbe wie „Supabase Deploy“: Secrets SUPABASE_ACCESS_TOKEN und SUPABASE_DB_PASSWORD, Variable
+# SUPABASE_PROJECT_REF. Einstellungen und Protokoll lassen sich nur mit einem Access Token lesen, das die Rechte
+# „auth_config_read“ und „analytics_logs_read“ hat; fehlen sie, gibt es dazu nur eine Warnung.
+name: Supabase-Diagnose
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/**"]
+    paths: [".github/workflows/supabase-diagnose.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Anmeldung prüfen
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Einstellungen der Anmeldung
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN oder SUPABASE_PROJECT_REF fehlt (siehe docs/EINRICHTUNG-RUNDE.md, Schritt 4)."
+            exit 1
+          fi
+          code=$(curl -sS -o auth.json -w '%{http_code}' -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/config/auth")
+          if [ "$code" != "200" ]; then
+            # Fehlermeldungen der Schnittstelle enthalten keine geheimen Werte.
+            echo "::warning::Einstellungen nicht lesbar (HTTP $code): $(jq -r '.message // .error // .' auth.json 2>/dev/null | head -c 300)"
+            rm -f auth.json
+            exit 0
+          fi
+          # Nur Prüfergebnisse; vom Secret nie den Wert.
+          jq -r '
+            def yn: if . == true then "ja" elif . == false then "nein" else "unbekannt (\(.))" end;
+            def ws: test("\\s");
+            "Site URL:                    \(.site_url // "-")",
+            "Erlaubte Rückkehr-Adressen:  \(.uri_allow_list // "-")",
+            "Neue Konten erlaubt:         \(if .disable_signup == null then "unbekannt" else (.disable_signup | not | yn) end)",
+            "Anmeldung per E-Mail an:     \(.external_email_enabled | yn)",
+            "Anonyme Anmeldung an:        \(.external_anonymous_users_enabled | yn)",
+            "Google eingeschaltet:        \(.external_google_enabled | yn)",
+            ( (.external_google_client_id // "") as $ids
+              | ($ids | split(",") | map(select(length > 0))) as $list
+              | "Google Client-IDs:           \($list | length) Stück; alle mit .apps.googleusercontent.com am Ende: \($list | all(endswith(".apps.googleusercontent.com")) | yn); Leerzeichen darin: \($ids | ws | yn)" ),
+            ( (.external_google_secret // "") as $s
+              | if $s == "" then "Google Client-Secret:        fehlt"
+                elif ($s | test("^[0-9a-f]{64}$")) then "Google Client-Secret:        vorhanden (Supabase liefert es nur verschlüsselt, Form nicht prüfbar)"
+                else "Google Client-Secret:        vorhanden; beginnt mit GOCSPX-: \($s | startswith("GOCSPX-") | yn); Länge \($s | length) (üblich 35); Leerzeichen darin: \($s | ws | yn); sieht aus wie eine Client-ID: \($s | endswith(".apps.googleusercontent.com") | yn)"
+                end )
+          ' auth.json
+          rm -f auth.json
+
+      - name: Fehler der Anmeldung (letzte 6 Stunden)
+        run: |
+          set -euo pipefail
+          start=$(date -u -d '-6 hours' +%Y-%m-%dT%H:%M:%SZ)
+          end=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          code=$(curl -sS -G -o logs.json -w '%{http_code}' -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --data-urlencode "sql=select timestamp, event_message from auth_logs order by timestamp desc limit 500" \
+            --data-urlencode "iso_timestamp_start=$start" --data-urlencode "iso_timestamp_end=$end" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/analytics/endpoints/logs.all")
+          if [ "$code" != "200" ]; then
+            echo "::warning::Protokoll nicht lesbar (HTTP $code): $(jq -r '.message // .error // .' logs.json 2>/dev/null | head -c 300)"
+            rm -f logs.json
+            exit 0
+          fi
+          jq -r '
+            def redact:
+              tostring
+              | gsub("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"; "<E-Mail>")
+              | gsub("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"; "<ID>")
+              | gsub("\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b"; "<IP>")
+              | gsub("\\b(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{1,4}\\b"; "<IP>")
+              | gsub("[A-Za-z0-9_+=-]{24,}"; "<…>");
+            def entry:
+              (.event_message | tostring) as $raw
+              | (try ($raw | fromjson) catch {msg: $raw})
+              | if type == "object" then . else {msg: tostring} end;
+            if .error != null then "Fehler der Abfrage: \(.error | tostring | redact)" else
+            (.result // []) as $rows
+            | ($rows | map(. as $row | ($row | entry) + {at: (($row.timestamp // 0) / 1000000 | floor | todate)})) as $all
+            | "Einträge im Protokoll: \($all | length)",
+              "Anfragen je Pfad und Status:",
+              ( $all | map(select(.path != null)) | group_by((.path | tostring | split("?")[0]) + " " + (.status // "-" | tostring))
+                | map("  \(.[0].path | tostring | split("?")[0]) → \(.[0].status // "-"): \(length)×") | .[] ),
+              "Geglückte Anmeldungen: \($all | map(select((.auth_event.action // .action // "") == "login")) | length)",
+              "Fehler und Warnungen (neueste zuerst, höchstens 40):",
+              ( $all
+                | map(select((.level // "") == "error" or (.level // "") == "warning" or ((.status // 0) | tonumber? // 0) >= 400
+                    or ((.level == null) and ((.msg // "") | tostring | test("error|fail|invalid|denied"; "i")))))
+                | .[:40][]
+                | "  \(.at)  \(.path // "-" | tostring | split("?")[0])  \(.status // "-")  \(.level // "-")  msg=\(.msg // "-" | redact)  error=\(.error // "-" | redact)" )
+            end
+          ' logs.json
+          rm -f logs.json
+
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.1
+
+      # Jeder Anmeldeversuch legt in auth.flow_state eine Zeile an. Kommt Google zu Supabase zurück und klappt dort alles,
+      # trägt Supabase das Konto ein (user_id); erst die App löst den Code danach ein und beendet den Versuch.
+      # Versuche ohne Konto sind also bei Supabase gescheitert (zum Beispiel am Client-Secret), Versuche mit Konto in der App.
+      - name: Anmeldeversuche laut Datenbank (nur Zahlen)
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" > /dev/null
+          if [ ! -f supabase/.temp/pooler-url ]; then
+            echo "::error::Keine Adresse für die Verbindung zur Datenbank gefunden."
+            ls supabase/.temp || true
+            exit 1
+          fi
+          export PGPASSWORD="$SUPABASE_DB_PASSWORD"
+          psql "$(cat supabase/.temp/pooler-url)" -X -q -t -A -F ': ' -v ON_ERROR_STOP=1 <<'SQL'
+          select 'Anmeldeversuche der letzten 24 Stunden', count(*)::text
+            from auth.flow_state where created_at > now() - interval '24 hours'
+          union all
+          select '  davon bei Supabase geglückt (Konto eingetragen)', count(*)::text
+            from auth.flow_state where created_at > now() - interval '24 hours' and user_id is not null
+          union all
+          select '  Uhrzeiten (UTC) der Versuche', coalesce(string_agg(to_char(created_at at time zone 'UTC', 'HH24:MI') ||
+              case when user_id is null then ' ohne Konto' else ' mit Konto' end, ', ' order by created_at), '-')
+            from auth.flow_state where created_at > now() - interval '24 hours'
+          union all
+          select 'Konten insgesamt', count(*)::text from auth.users
+          union all
+          select 'Konten mit Google', count(*)::text from auth.identities where provider = 'google'
+          union all
+          select 'Sitzungen insgesamt', count(*)::text from auth.sessions;
+          SQL

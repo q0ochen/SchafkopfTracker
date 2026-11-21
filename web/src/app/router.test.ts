@@ -6,6 +6,7 @@ describe("Router", () => {
     { name: "start" },
     { name: "newEvening" },
     { name: "board", eveningId: "abc" },
+    { name: "editEvening", eveningId: "abc" },
     { name: "gameForm", eveningId: "abc", entryId: null },
     { name: "gameForm", eveningId: "abc", entryId: "e-1" },
     { name: "rules", eveningId: null },
@@ -22,6 +23,12 @@ describe("Router", () => {
 
   it("liest jede Adresse so, wie sie geschrieben wurde", () => {
     for (const route of routes) expect(parseRoute(`#${pathOf(route)}`)).toEqual(route);
+  });
+
+  it("„Abend bearbeiten“ liegt unter dem Abend", () => {
+    expect(pathOf({ name: "editEvening", eveningId: "a/b" })).toBe("/abend/a%2Fb/bearbeiten");
+    expect(parseRoute("#/abend/abc/bearbeiten")).toEqual({ name: "editEvening", eveningId: "abc" });
+    expect(parseRoute("#/abend/abc/bearbeiten/x")).toEqual({ name: "start" });
   });
 
   it("kodiert Kennungen mit Sonderzeichen", () => {
@@ -63,6 +70,7 @@ describe("Router", () => {
   it("kennt den übergeordneten Bildschirm", () => {
     expect(parentOf({ name: "gameForm", eveningId: "a", entryId: null })).toEqual({ name: "board", eveningId: "a" });
     expect(parentOf({ name: "closing", eveningId: "a" })).toEqual({ name: "board", eveningId: "a" });
+    expect(parentOf({ name: "editEvening", eveningId: "a" })).toEqual({ name: "board", eveningId: "a" });
     expect(parentOf({ name: "rules", eveningId: "a" })).toEqual({ name: "board", eveningId: "a" });
     expect(parentOf({ name: "rules", eveningId: null })).toEqual({ name: "start" });
     expect(parentOf({ name: "statistics", eveningId: null })).toEqual({ name: "start" });

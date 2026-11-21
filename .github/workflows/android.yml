@@ -82,7 +82,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import glob, sys, xml.etree.ElementTree as ET
-          minimum = {"domain": 684, "data": 278, "database": 24, "app": 192}
+          minimum = {"domain": 697, "data": 278, "database": 24, "app": 205}
           ok = True
           for module, least in minimum.items():
               files = glob.glob(f"{module}/build/test-results/**/*.xml", recursive=True)
@@ -135,6 +135,17 @@ jobs:
         with:
           name: Bildschirmfotos
           path: app/build/outputs/roborazzi/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # Bei Fehlschlägen die Ergebnisse aller Tests (mit den ganzen Meldungen) zum Nachlesen.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Testergebnisse
+          path: |
+            */build/test-results/
+            */build/reports/tests/
           retention-days: 14
           if-no-files-found: ignore
 

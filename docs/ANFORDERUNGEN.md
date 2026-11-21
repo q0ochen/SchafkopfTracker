@@ -20,6 +20,11 @@ Statistik über alle Abende, sichert die Daten und lässt sich auch von der Uhr 
 - Zu Beginn des Abends wird die Sitzreihenfolge festgelegt (für die Geberfolge und die Statistik).
 - Ein Abend hat beliebig viele Spiele. Jedes Spiel lässt sich jederzeit ändern oder löschen; alle Stände und
   Statistiken passen sich sofort an.
+- „Abend bearbeiten“ (Wunsch des Nutzers vom 21.11.2026: „Wichtig wäre auf jeden Fall, dass man das Datum
+  nachträglich ändern kann und eventuell auch die Location“): Datum, Ort, Sitzordnung und erster Geber lassen sich
+  nachträglich ändern, auch bei beendeten Abenden. Die Spieler am Tisch lassen sich nicht austauschen, denn die
+  eingetragenen Spiele nennen sie; das Regelwerk hat wie bisher einen eigenen Bildschirm. In der gemeinsamen Runde wird
+  nur übernommen, was auf diesem Handy geändert wurde (docs/ARCHITEKTUR.md, Abschnitt 2 „Abend“ und 4.1).
 
 ## 3. Spielarten und Abrechnung
 

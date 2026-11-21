@@ -97,6 +97,18 @@ supabase db push            # nur die noch nicht angewendeten Migrationen
 
 Er läuft nie von selbst. Nach jeder neuen Migration muss er einmal gestartet werden.
 
+Am 20.11.2026 brach der erste Lauf im echten Projekt mit „IPv6 is not supported on your current network“ ab; der
+nächste Lauf eine Viertelstunde später ging ohne Änderung durch. Tritt das wieder auf, den Lauf einfach noch einmal
+starten.
+
+**Fehlersuche bei der Anmeldung:** Der Workflow „Supabase-Diagnose“ (`.github/workflows/supabase-diagnose.yml`, nur
+lesend) zählt mit dem Datenbank-Passwort die Anmeldeversuche in `auth.flow_state`: Versuche „ohne Konto“ sind bei
+Supabase gescheitert (meist am Google Client-Secret), Versuche „mit Konto“ erst in der App. Dazu Konten und Sitzungen.
+Einstellungen und Protokoll der Anmeldung liest er nur, wenn das Access Token die Rechte `auth_config_read` und
+`analytics_logs_read` hat; sonst gibt es dazu nur eine Warnung. Die Ausgabe ist öffentlich und deshalb bereinigt (nur
+Zahlen, Uhrzeiten und Fehlermeldungen ohne Adressen, Kennungen und Codes). Er läuft von Hand und bei Änderungen der
+Datei auf den Zweigen `claude/…`.
+
 ### 4. Werte für die Apps
 
 Öffentlich und unkritisch: die Projekt-URL `https://<projekt-ref>.supabase.co` und der **Publishable Key**

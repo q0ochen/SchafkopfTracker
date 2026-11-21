@@ -25,8 +25,16 @@ fun ComposeTestRule.waitForText(text: String, timeoutMillis: Long = 30_000) {
         } catch (_: AssertionError) {
             listOf("(kein Bildschirm)")
         }
-        throw AssertionError("„$text“ ist nach $timeoutMillis ms nicht erschienen. Auf dem Bildschirm steht: $seen", e)
+        throw AssertionError("„$text“ ist nach $timeoutMillis ms nicht erschienen. Auf dem Bildschirm steht: $seen. ${memory()}", e)
     }
+}
+
+/** Wie voll der Speicher der Test-JVM gerade ist (in MB); ist er fast voll, war die JVM vermutlich mit Aufräumen beschäftigt. */
+private fun memory(): String {
+    val runtime = Runtime.getRuntime()
+    val mb = 1024 * 1024
+    val used = (runtime.totalMemory() - runtime.freeMemory()) / mb
+    return "Speicher: $used von ${runtime.maxMemory() / mb} MB belegt."
 }
 
 /** Alle Texte unterhalb eines Knotens, in der Reihenfolge des Baums. */

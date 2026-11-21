@@ -34,6 +34,11 @@ async function shot(page: Page, name: string, fullPage = false): Promise<void> {
   await page.screenshot({ path: `${directory}/${test.info().project.name}-${name}.png`, fullPage });
 }
 
+/** Ans Ende der Seite scrollen, damit über einer festen Leiste unten das Letzte zu sehen ist. */
+async function scrollToEnd(page: Page): Promise<void> {
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight }));
+}
+
 test("Bildschirme eines Abends", async ({ page }) => {
   await nameDefaultPlayers(page);
   await openApp(page);
@@ -60,6 +65,18 @@ test("Bildschirme eines Abends", async ({ page }) => {
   await shot(page, "05-abend");
   await page.getByRole("button", { name: "Mehr" }).click();
   await shot(page, "06-menue");
+  await page.getByRole("button", { name: "Abend bearbeiten" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Abend bearbeiten" })).toBeVisible();
+  // Der Abend war ans Ende gescrollt; der neue Bildschirm springt erst nach dem Zeichnen nach oben.
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await shot(page, "06b-abend-bearbeiten");
+  await page.getByLabel("Ort (freiwillig)").fill("Beim Huber");
+  await page.getByRole("button", { name: "Bert einen Platz nach vorn" }).click();
+  // Unten die Hinweise und „Speichern“ (ein Foto der ganzen Seite zeigte die feste Leiste mitten darüber).
+  await scrollToEnd(page);
+  await shot(page, "06c-abend-bearbeiten-geaendert");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await page.getByRole("button", { name: "Mehr" }).click();
   await page.getByRole("button", { name: "Abend beenden" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Abschluss" })).toBeVisible();
   await shot(page, "07-abschluss", true);
@@ -162,6 +179,12 @@ test.describe("mit Server", () => {
     await enterGame(page, { players: ["Ost", "West"], won: false });
     await expect(page.getByText("Doppelt eingetragen?")).toBeVisible();
     await shot(page, "33-abend-doppelt-eingetragen");
+    await page.getByRole("button", { name: "Mehr" }).click();
+    await page.getByRole("button", { name: "Abend bearbeiten" }).click();
+    await expect(page.getByText("Die Änderungen gelten für alle in der gemeinsamen Runde.")).toBeVisible();
+    await scrollToEnd(page);
+    await shot(page, "33b-abend-bearbeiten-mit-runde");
+    await page.getByRole("button", { name: "Zurück", exact: true }).click();
 
     // Spieler mit festem Namen auf dem Handy, das nicht der Ersteller ist.
     await openApp(two, "/spieler");

@@ -1,6 +1,8 @@
 package io.github.q0ochen.schafkopf.domain.golden
 
 import io.github.q0ochen.schafkopf.domain.evening.EveningCalculator
+import io.github.q0ochen.schafkopf.domain.evening.EveningDetails
+import io.github.q0ochen.schafkopf.domain.evening.EveningEdit
 import io.github.q0ochen.schafkopf.domain.evening.GameEntry
 import io.github.q0ochen.schafkopf.domain.evening.Ranking
 import io.github.q0ochen.schafkopf.domain.evening.SettleUp
@@ -110,6 +112,7 @@ internal object WebGolden {
             "merges" to RoundGoldenCases.mergeCases().map(::mergeCase),
             "duplicates" to RoundGoldenCases.duplicateCases().map(::duplicateCase),
             "invites" to RoundGoldenCases.inviteCases().map(::inviteCase),
+            "edits" to EditGoldenCases.cases().map(::editCase),
         )
         return buildString {
             append("{\n")
@@ -219,6 +222,22 @@ internal object WebGolden {
         put("local", GoldenJson.evening(case.local))
         put("remote", GoldenJson.evening(case.remote))
         put("merged", GoldenJson.evening(EveningMerge.merge3(case.base, case.local, case.remote)))
+    }
+
+    /** „Abend bearbeiten“: der Abend, der Stand beim Öffnen, das Bearbeitete und das Ergebnis von `EveningEdit.apply`. */
+    private fun editCase(case: EditCase): Pair<String, JsonObject> = case.id to buildJsonObject {
+        put("id", case.id)
+        put("current", GoldenJson.evening(case.current))
+        put("original", details(case.original))
+        put("edited", details(case.edited))
+        put("result", GoldenJson.evening(EveningEdit.apply(case.current, case.original, case.edited)))
+    }
+
+    private fun details(details: EveningDetails): JsonObject = buildJsonObject {
+        put("startedAt", details.startedAt.toString())
+        put("location", details.location)
+        put("seating", GoldenJson.players(details.seating))
+        put("firstDealer", details.firstDealer.value)
     }
 
     /** Gemeinsame Runde: ein Abend und die Kennungen der vermutlich doppelt eingetragenen Spiele. */

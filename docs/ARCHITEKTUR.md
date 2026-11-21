@@ -120,6 +120,17 @@ falschen Summen:
   Zahlenbereich; er wird dann nicht gebucht).
 - `SettleUp.transfers` („wer zahlt wem“) wirft nie und rechnet ohne Überlauf; `SettleUp.isBalanced` sagt, ob die
   Salden aufgehen.
+- Nachträglich ändern (`EveningEdit.apply(current, original, edited)` mit `EveningDetails`: Beginn, Ort, Sitzordnung,
+  erster Geber; Port in `web/src/core/evening/EveningEdit.ts`, Golden-Abschnitt `edits`): Übernommen wird nur, was
+  zwischen `original` (Stand beim Öffnen von „Abend bearbeiten“) und `edited` geändert wurde; alles andere bleibt wie
+  in `current`, denn in der gemeinsamen Runde kann ein anderes Handy den Abend inzwischen geändert haben. Ein neuer
+  Beginn verschiebt ein vorhandenes Ende um dieselbe Zeitspanne, wie `Instant.plus(Duration)`: erst die Sekunden,
+  dann die Nanosekunden; verlässt ein Schritt den Bereich von `Instant`, bleibt das Ende;
+  die Einträge behalten ihre Zeiten. Der Ort wird ohne Leerraum an den Rändern (Kotlins `trim`) auf höchstens 40
+  Zeichen gekürzt und danach noch einmal getrimmt. Eine Sitzordnung gilt nur, wenn sie genau die Spieler am Tisch
+  enthält, jeden einmal; ein erster Geber nur, wenn er danach am Tisch sitzt. Wer am Tisch sitzt, die Einträge und das
+  Regelwerk ändert diese Funktion nie (das Regelwerk hat einen eigenen Bildschirm). Beträge hängen weder von der
+  Sitzordnung noch vom ersten Geber ab; neu berechnet wird nur, wer gibt.
 
 ### Statistik (`StatisticEngine`, Issues #10 bis #13)
 
@@ -249,7 +260,7 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 
 - MVVM: je Bildschirm ein ViewModel mit `StateFlow` als Zustand; die Oberfläche liest nur diesen Zustand.
 - Navigation: eigener Stapel aus `Screen`-Werten (`Navigator`), je Eintrag ein eigener ViewModel-Speicher.
-- Bildschirme: Start, Neuer Abend, Abend, Spiel eintragen, Abschluss, Statistik (ein Abend oder alle Abende, oben
+- Bildschirme: Start, Neuer Abend, Abend, Abend bearbeiten (4.1), Spiel eintragen, Abschluss, Statistik (ein Abend oder alle Abende, oben
   wählbar; Vermögensverlauf als selbst gezeichnetes Liniendiagramm mit Tabelle als Alternative; Spielarten als
   Balkendiagramm `GameModeChart` mit eigenem Maßstab je Spielart, `BarScale`), Spieler, Einstellungen, Regelwerk,
   Sicherung, Abend-Kommentator.
@@ -261,6 +272,30 @@ Kopfzeile `x-goog-api-key` wird von OkHttp nicht geschwärzt).
 - Teilen: Abschluss und Statistik als Text (`ACTION_SEND`) und als Bild (Compose-Ansicht über `GraphicsLayer` als PNG
   im Cache, weitergegeben über `FileProvider`, nur der Ordner `cache/geteilt`).
 - Texte der Oberfläche stehen in `res/values/strings*.xml`; Beträge formatiert ausschließlich `:app`.
+
+### 4.1 Abend bearbeiten (Android-App und Web-App gleich, Texte wörtlich)
+
+- Menü des Abends, in dieser Reihenfolge: „Statistik dieses Abends“, „Abschluss“, **„Abend bearbeiten“**, „Regeln
+  dieses Abends“, „Abend beenden“ bzw. „Abend wieder öffnen“, „Abend löschen“. Für laufende und beendete Abende.
+- Bildschirm „Abend bearbeiten“. Beim Öffnen wird der Abend einmal gelesen; das ist `original` für
+  `EveningEdit.apply`. Gibt es ihn nicht (mehr): „Diesen Abend gibt es nicht mehr.“
+- **Datum:** Überschrift „Datum“. Android zeigt das Datum wie im Titel des Abends und daneben den Knopf „Datum
+  ändern“; er öffnet die Datumsauswahl mit „Übernehmen“ und „Abbrechen“. Die Web-App nimmt ein Datumsfeld des Browsers
+  mit der Beschriftung „Datum“. Tage nach heute lassen sich nicht wählen. Die Uhrzeit des Beginns bleibt (dieselbe
+  Ortszeit am neuen Tag); ist der Tag derselbe wie vorher, bleibt der Beginn genau, wie er war.
+- **Ort:** Feld „Ort (freiwillig)“, höchstens 40 Zeichen.
+- **Sitzordnung und erster Geber** wie bei „Neuer Abend“: Überschrift „Sitzordnung im Uhrzeigersinn“, darunter „In
+  dieser Reihenfolge wechselt der Geber. Antippen legt fest, wer zuerst gibt.“; je Spieler eine Zeile „1. ‹Name›“ mit
+  Auswahlknopf, beim ersten Geber „gibt zuerst“, und die Pfeile „‹Name› einen Platz nach vorn“ bzw. „‹Name› einen Platz
+  nach hinten“. Die Spieler selbst lassen sich hier nicht austauschen.
+- Darunter: „Eingetragene Spiele und Beträge bleiben unverändert. Wer gibt, ergibt sich aus Sitzordnung und erstem
+  Geber.“ Mit verbundener gemeinsamer Runde zusätzlich: „Die Änderungen gelten für alle in der gemeinsamen Runde.“
+- Unten der Knopf „Speichern“ (mindestens 56 dp hoch), nur aktiv, wenn sich etwas geändert hat. Der Ort zählt als
+  geändert, wenn `cleanLocation` des Entwurfs anders ist als `cleanLocation` des ursprünglichen Orts; sonst geht der
+  ursprüngliche Ort unverändert als `edited.location` hinein (so überschreibt ein bloß getrimmter Ort nie, was ein
+  anderes Handy inzwischen eingetragen hat). Speichern übernimmt die Änderungen mit
+  `EveningEdit.apply` über den Editor des Abends (in der Web-App über das Speichern des Abends) und kehrt zum Abend
+  zurück; doppeltes Antippen speichert nur einmal. Zurück ohne Speichern verwirft die Änderungen ohne Rückfrage.
 
 ## 5. Tests
 
@@ -302,7 +337,7 @@ Home-Bildschirm“), braucht keinen Server und wird von `main` aus auf GitHub Pa
 | Golden-Tests | Kotlin-Tests (`WebGoldenTest` in `:domain`, `WebFormatGoldenTest` in `:data`) lassen den echten Kotlin-Code viele Fälle rechnen und schreiben die Ergebnisse nach `web/src/core/golden/kotlin-golden.json` bzw. `web/src/data/golden/kotlin-format-golden.json`. Die TypeScript-Tests vergleichen jedes Feld. Ändert sich der Kotlin-Code, schlägt der Kotlin-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port angepasst ist. |
 | Speicher | IndexedDB (`web/src/data/repository.ts`): je Abend, für die Spielerliste und für die Einstellungen ein JSON-Text im Dateiformat der Android-App. Nichts verlässt das Gerät. |
 | Gleiche Spieler | Die vorbelegte Runde hat dieselben Kennungen wie in der Android-App (`spieler-1` bis `spieler-4`). |
-| Oberfläche | Logik der Bildschirme als reine Funktionen nach dem Vorbild der ViewModels (`web/src/ui/gameForm.ts`, `newEvening.ts`, `board.ts`), Oberflächen-Tests mit Playwright in iPhone-Größe und Prüfung mit axe. Spielerfarben aus einer auf Farbfehlsichtigkeit geprüften Palette, als Punkt neben dem Namen. |
+| Oberfläche | Logik der Bildschirme als reine Funktionen nach dem Vorbild der ViewModels (`web/src/ui/gameForm.ts`, `newEvening.ts`, `board.ts`, `editEvening.ts`), Oberflächen-Tests mit Playwright in iPhone-Größe und Prüfung mit axe. Spielerfarben aus einer auf Farbfehlsichtigkeit geprüften Palette, als Punkt neben dem Namen. |
 | Leitplanken | Dieselben wie oben, sinngemäß: nur freie Bibliotheken (`preact`, `idb`), keine Analyse, Content-Security-Policy ohne fremde Quellen, Start ohne Netz über den Service Worker. Die KI-Zusammenfassung gibt es in der Web-App nicht. |
 
 

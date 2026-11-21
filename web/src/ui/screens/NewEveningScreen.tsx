@@ -1,12 +1,12 @@
 /* „Neuer Abend“: vier Spieler wählen, Sitzordnung und ersten Geber festlegen, Ort eintragen, starten. */
 import { useMemo, useState } from "preact/hooks";
 import { MAX_NAME_LENGTH } from "../../app/players";
-import { ChoiceTile, Hint, Icon, SectionHeading, TopBar } from "../components";
+import { MAX_LOCATION_LENGTH } from "../../core/evening/EveningEdit";
+import { ChoiceTile, Hint, SeatingList, SectionHeading, TopBar } from "../components";
 import { useAppState, useServices } from "../context";
 import {
   createEvening,
   EMPTY_SELECTION,
-  MAX_LOCATION_LENGTH,
   moveSeat,
   newEveningView,
   seatNewPlayer,
@@ -102,48 +102,13 @@ export function NewEveningScreen() {
         ) : (
           <>
             <Hint>In dieser Reihenfolge wechselt der Geber. Antippen legt fest, wer zuerst gibt.</Hint>
-            <ol class="list" aria-label="Sitzordnung">
-              {view.seating.map((id, index) => {
-                const isDealer = id === view.firstDealer;
-                return (
-                  <li key={id} class={isDealer ? "seat first-dealer" : "seat"}>
-                    <button
-                      type="button"
-                      class="seat-main"
-                      role="radio"
-                      aria-checked={isDealer}
-                      onClick={() => setSelection((current) => setFirstDealer(current, id))}
-                    >
-                      <span class="seat-number" aria-hidden="true">
-                        {index + 1}
-                      </span>
-                      <span>
-                        {name(id)}
-                        {isDealer ? <span class="badge">gibt zuerst</span> : null}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      class="icon-button"
-                      aria-label={`${name(id)} einen Platz nach vorn`}
-                      disabled={index === 0}
-                      onClick={() => setSelection((current) => moveSeat(view, current, id, -1))}
-                    >
-                      <Icon name="up" />
-                    </button>
-                    <button
-                      type="button"
-                      class="icon-button"
-                      aria-label={`${name(id)} einen Platz nach hinten`}
-                      disabled={index === view.seating.length - 1}
-                      onClick={() => setSelection((current) => moveSeat(view, current, id, 1))}
-                    >
-                      <Icon name="down" />
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
+            <SeatingList
+              seating={view.seating}
+              firstDealer={view.firstDealer}
+              name={name}
+              onFirstDealer={(id) => setSelection((current) => setFirstDealer(current, id))}
+              onMove={(id, delta) => setSelection((current) => moveSeat(view, current, id, delta))}
+            />
           </>
         )}
 

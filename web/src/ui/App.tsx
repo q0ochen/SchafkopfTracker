@@ -5,6 +5,7 @@ import type { ThemeMode } from "../core/model";
 import { ServicesContext, useAppState, useServices, type Services } from "./context";
 import { BoardScreen } from "./screens/BoardScreen";
 import { ClosingScreen } from "./screens/ClosingScreen";
+import { EditEveningScreen } from "./screens/EditEveningScreen";
 import { GameFormScreen } from "./screens/GameFormScreen";
 import { InviteScreen } from "./screens/InviteScreen";
 import { NewEveningScreen } from "./screens/NewEveningScreen";
@@ -24,6 +25,8 @@ function Screen({ route }: { route: Route }) {
       return <NewEveningScreen />;
     case "board":
       return <BoardScreen eveningId={route.eveningId} />;
+    case "editEvening":
+      return <EditEveningScreen eveningId={route.eveningId} />;
     case "gameForm":
       return <GameFormScreen eveningId={route.eveningId} entryId={route.entryId} />;
     case "rules":

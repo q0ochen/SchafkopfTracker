@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 684, `data` 278, `database` 24, `app` 192, Web 560 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 39 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 697, `data` 278, `database` 24, `app` 205, Web 601 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 42 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -171,10 +171,9 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-`main` enthält alles bis Pull Request #24 (16.11.2026, 20:33). Die gemeinsame Runde (Zweig
-`claude/gracious-keller-48tcn0`, seit dem 19.11.2026) ist am 20.11.2026 auf Wunsch des Nutzers („Ja pull request
-anlegen“) als Pull Request nach `main` angelegt; ob er schon zusammengeführt ist, zeigt GitHub. `entwicklung` ist noch
-auf dem älteren Stand.
+`main` enthält alles bis Pull Request #25 (gemeinsame Runde; am 20.11.2026 auf Wunsch des Nutzers angelegt, „Ja pull
+request anlegen“, und von ihm um 18:40 zusammengeführt; alle Läufe danach grün, Testversion, F-Droid-Paketquelle und
+Web-App neu veröffentlicht). `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -314,7 +313,7 @@ Als Nächstes (neben der gemeinsamen Runde, siehe unten): Client-ID für Google 
 schickt, dann die Anmeldung auf einem echten Handy erproben; Rückmeldungen der Tester; abstimmen, welche der Issues
 #1 bis #19 als erledigt gelten.
 
-## Stand am 19.11.2026: Gemeinsame Runde (gebaut, Server noch nicht eingerichtet)
+## Stand am 19.11.2026: Gemeinsame Runde (gebaut, Server seit dem 20.11.2026 eingerichtet)
 
 Der Nutzer hat am 19.11.2026 in einer Sprachnachricht zwei Ideen genannt (gemeinsame Runde „so ähnlich wie bei Drink
 With Me“, Spracheingabe) und um ein Brainstorming gebeten. Termin: Bis zum 12.12.2026 soll die App „einigermaßen gut“
@@ -371,20 +370,25 @@ Umgesetzt am 19.11.2026 auf dem Zweig `claude/gracious-keller-48tcn0`:
 - **Anleitung für den Nutzer:** `docs/EINRICHTUNG-RUNDE.md` (eigenes Supabase-Projekt in Frankfurt, Google-Client vom
   Typ „Webanwendung“, zwei Secrets und drei Variablen bei GitHub, Test zu zweit, „vor jedem Spielabend“).
 
-**Der Server ist noch nicht eingerichtet.** Ohne die GitHub-Variablen `SUPABASE_URL` und `SUPABASE_PUBLISHABLE_KEY`
-(öffentlich, kein Geheimnis; Android liest sie beim Bauen der Testversion, sonst `app/supabase.properties`; Web als
-`VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY`) bleibt die Funktion abgeschaltet („Der Server ist noch nicht
-eingerichtet.“). Sobald der Nutzer „Supabase ist eingerichtet“ meldet:
+**Der Server ist seit dem 20.11.2026 eingerichtet** (vom Nutzer selbst; er hatte gefragt, ob Claude das über die
+Chrome-Erweiterung erledigen kann, aber eine Cloud-Sitzung erreicht die Erweiterung nicht, empfohlen war deshalb eine
+Sitzung in der Claude-Desktop-App auf seinem PC). Projekt-Referenz in der GitHub-Variablen
+`SUPABASE_PROJECT_REF`; `SUPABASE_URL` und `SUPABASE_PUBLISHABLE_KEY` sind gesetzt (öffentlich, kein Geheimnis; Android
+liest sie beim Bauen der Testversion, sonst `app/supabase.properties`; Web als `VITE_SUPABASE_URL` und
+`VITE_SUPABASE_PUBLISHABLE_KEY`). „Supabase Deploy“: Lauf 1 brach mit „IPv6 is not supported“ ab, Lauf 2 ging ohne
+Änderung durch. Danach hat der Nutzer „Android“ und „Web-App“ von Hand neu gestartet; beide grün.
 
-1. Der Stand muss in `main` liegen (der Pull Request dafür ist seit dem 20.11.2026 angelegt; nachsehen, ob er
-   zusammengeführt ist). „Supabase Deploy“ hat nur `workflow_dispatch` und lässt sich deshalb erst starten, wenn die
-   Datei in `main` liegt.
-2. „Supabase Deploy“ starten (wendet die Migrationen an; braucht die Secrets `SUPABASE_ACCESS_TOKEN` und
-   `SUPABASE_DB_PASSWORD` und die Variable `SUPABASE_PROJECT_REF`), danach „Android“ und „Web-App“ neu laufen lassen.
-3. Mit dem Nutzer den Test zu zweit aus der Anleitung durchgehen.
+- Die Anmeldung scheiterte danach immer mit „Die Anmeldung hat nicht geklappt.“, auch in Safari: Das Google
+  Client-Secret bei Supabase passte nicht. Gefunden am 21.11.2026 mit dem neuen Workflow „Supabase-Diagnose“ (alle
+  Versuche „ohne Konto“) und einer Test-Anmeldung, die auf einer 404-Seite außerhalb der App endet (dort steht die
+  Antwort des Servers in der Adresse). Nachdem der Nutzer ein neues Secret eingetragen hatte: „Ja, es klappt“ (in
+  Safari und in der App vom Home-Bildschirm; danach zwei Sitzungen auf dem Server). Das befürchtete Problem der App
+  vom Home-Bildschirm (getrennter Speicher) trat dabei nicht auf.
+- Das Access Token des Nutzers hat nur Rechte für die Datenbank (`analytics_logs_read` und `auth_config_read` fehlen);
+  die Diagnose liest deshalb über das Datenbank-Passwort aus `auth.flow_state` (siehe `supabase/README.md`).
+- Noch offen: der Test zu zweit aus der Anleitung (Runde anlegen, beitreten, gegenseitig eintragen).
 
-**Nicht geprüft:** die Anmeldung mit Google selbst (in der Probe melden sich Testkonten mit Passwort an), echte
-Geräte, Safari auf einem iPhone, das echte Supabase-Projekt des Nutzers.
+**Nicht geprüft:** echte Android-Geräte mit dem echten Server, der Abgleich zwischen zwei echten Handys.
 
 Gut zu wissen für die nächste Sitzung:
 
@@ -402,7 +406,13 @@ Gut zu wissen für die nächste Sitzung:
   davon 11, die der Web-App 5.
 - Auf GitHub aufgefallen am 19.11.2026: (1) Der Bildschirmtest der Start-Seite lief einmal (einer von fünf Läufen)
   in die Wartefrist; hier nicht nachstellbar. `waitForText` nennt jetzt in der Fehlermeldung, was auf dem Bildschirm
-  stand: Tritt es wieder auf, zuerst diese Meldung lesen. (2) Der Tag „testversion“ ließ sich nicht verschieben
+  stand: Tritt es wieder auf, zuerst diese Meldung lesen. Am 21.11.2026 trat es wieder auf (Lauf 43, der nächste
+  Lauf mit fast gleichem Stand war grün); die Meldung fehlte im Protokoll, weil Gradle nur den Namen des Fehlers
+  ausgab. Seitdem schreibt `app/build.gradle.kts` die ganze Meldung ins Protokoll, und `android.yml` lädt bei
+  Fehlschlägen die Testergebnisse hoch (Artefakt „Testergebnisse“). Gleich der nächste Lauf (46) zeigte: Die Startseite
+  stand noch auf „wird geladen“, die Daten kamen in 30 s nicht an. Die Test-JVM hatte nur Gradles 512 MB, und hier war
+  der Speicher während der Bildschirmtests zeitweise zu 99 % belegt; seitdem bekommen die Tests von `app` 2 GB, und
+  `waitForText` nennt bei einem Fehlschlag auch die Speicherbelegung. (2) Der Tag „testversion“ ließ sich nicht verschieben
   (HTTP 403), wenn der Stand eine Workflow-Datei änderte und beim Veröffentlichen schon ein neuerer Stand auf dem
   Zweig lag; die Testversion wird jetzt trotzdem ersetzt.
 - Die Spracheingabe ist verworfen. Falls sie wieder aufkommt: Kern wäre ein Parser Text → `GameDraft` mit Kölner
@@ -410,6 +420,28 @@ Gut zu wissen für die nächste Sitzung:
 - Der Nutzer berichtet, dass das App-Symbol auf seinem iPhone den Browser öffnet (bei welcher der beiden Web-Apps,
   ist offen). Unsere Web-App ist auf `display: standalone` eingestellt; vermutlich war beim Hinzufügen „Als Web-App
   öffnen“ aus. Auf einem echten iPhone nicht geprüft.
+
+## Stand am 21.11.2026: Abend bearbeiten
+
+Wunsch des Nutzers (21.11.2026): im Menü des Abends einen Punkt, um den Abend nachträglich zu bearbeiten, „Wichtig
+wäre auf jeden Fall, dass man das Datum nachträglich ändern kann und eventuell auch die Location“; welche Änderungen
+sonst sinnvoll sind, überließ er Claude, „im Rahmen, dass die App stabil bleibt“ (vier Leute tragen in denselben
+Abend ein).
+
+- Umgesetzt in Android-App und Web-App: Datum (keine Tage nach heute; die Uhrzeit bleibt), Ort, Sitzordnung und
+  erster Geber. Nicht änderbar: die Spieler am Tisch (die Einträge nennen sie), die Einträge selbst; das Regelwerk hat
+  weiter „Regeln dieses Abends“. Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 2 („Abend“, `EveningEdit.apply`) und 4.1
+  (Texte wörtlich, Menüreihenfolge).
+- Stabil in der gemeinsamen Runde: Gespeichert wird nur, was auf diesem Gerät gegenüber dem Stand beim Öffnen
+  geändert wurde; die Felder des Abends führt `EveningMerge.merge3` ohnehin einzeln zusammen.
+- Kotlin: `domain/evening/EveningEdit.kt`, `app/ui/editevening/` (Bildschirmfotos 60 bis 62). Web: Port
+  `web/src/core/evening/EveningEdit.ts` (Golden-Abschnitt `edits`, 70 Fälle, auch Zeitpunkte am Rand von `Instant`),
+  `web/src/ui/editEvening.ts`, `EditEveningScreen.tsx`, Adresse `#/abend/<id>/bearbeiten`; die Web-App baute ein
+  Helfer. Nebenbei: `formatInstant` liegt jetzt im Kern der Web-App (das Dateiformat nutzt es), und „Neuer Abend“
+  trimmt den Ort in der Web-App wie Kotlin.
+- Testnamen in `app` ohne Umlaute: Klassendateien von Lambdas mit Umlauten im Namen scheiterten hier beim Kompilieren
+  (Dateinamen ohne UTF-8).
+- Nicht geprüft: echte Geräte; wie das Datumsfeld der Web-App in Safari auf dem iPhone aussieht.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 

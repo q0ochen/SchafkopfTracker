@@ -11,7 +11,12 @@ Adresse: **https://q0ochen.github.io/SchafkopfTracker/** (GitHub Pages, kostenlo
 - **Neuer Abend**: vier Spieler wählen (Vorschlag: wie letztes Mal), Sitzordnung, erster Geber, Ort.
 - **Abend**: Stand je Spieler mit Platz und Geber, alle Einträge mit Beträgen, große Knöpfe „Spiel eintragen“,
   „Zusammengeworfen“, „6 Nixer – Bock“ und „Rückgängig“ (mit „Wiederherstellen“). Menü: Statistik, Abschluss,
-  Regeln dieses Abends, beenden/wieder öffnen, löschen. Der Bildschirm bleibt an, solange der Abend läuft.
+  Abend bearbeiten, Regeln dieses Abends, beenden/wieder öffnen, löschen. Der Bildschirm bleibt an, solange der
+  Abend läuft.
+- **Abend bearbeiten**: Datum (dieselbe Uhrzeit am neuen Tag, kein Tag nach heute), Ort, Sitzordnung und erster
+  Geber nachträglich ändern. Eingetragene Spiele und Beträge bleiben; wer gibt, wird neu berechnet. Gespeichert wird
+  nur, was hier geändert wurde (`EveningEdit.apply`), damit in der gemeinsamen Runde nichts überschrieben wird, was ein
+  anderes Handy inzwischen geändert hat.
 - **Spiel eintragen/ändern**: Spielart, wer spielt (Über Kreuz: ein Tipp wählt das Paar), gelegt, Kontra/Retour,
   Laufende, Tout/Sie, Ausgang, Bock, Farbe, Spielwert mit Rechenweg; „Gewonnen“/„Verloren“ speichert sofort.
 - **Abschluss**: Endstand, „Wer zahlt wem“, als Text teilen.

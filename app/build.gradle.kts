@@ -108,6 +108,20 @@ android {
             all { test ->
                 // Bildschirmfotos werden bei jedem Lauf neu geschrieben (app/build/outputs/roborazzi).
                 test.systemProperty("roborazzi.test.record", "true")
+                // Robolectric, Compose und die Bildschirmfotos brauchen mehr als die 512 MB, die Gradle Tests sonst
+                // gibt: Am 21.11.2026 war der Speicher während der Bildschirmtests zeitweise zu 99 % belegt. Auf den
+                // langsameren Rechnern von GitHub lief dann der Test der Startseite in die Wartefrist (Daten nach 30 s
+                // noch nicht da), weil die JVM vor allem mit Aufräumen beschäftigt war.
+                test.maxHeapSize = "2g"
+                // Scheitert ein Test, steht die ganze Meldung im Protokoll, auf GitHub also im Lauf selbst. Bei
+                // `waitForText` sagt sie, was stattdessen auf dem Bildschirm stand (der Bildschirmtest der Startseite
+                // lief am 19. und 21.11.2026 je einmal in die Wartefrist, ohne dass sich das nachstellen ließ).
+                test.testLogging {
+                    events("failed")
+                    exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+                    showCauses = true
+                    showStackTraces = true
+                }
             }
         }
     }
