@@ -442,6 +442,24 @@ test("„Abend löschen?“ sagt mit Runde, dass der Abend für alle gelöscht w
   await expect.poll(() => fake.server.evenings(round.id).length, SYNC).toBe(0);
 });
 
+test("„Abend bearbeiten“ sagt mit Runde, dass die Änderungen für alle gelten; sie kommen beim Server an", async ({ page }) => {
+  await foundRound(page, fake);
+  await openRunningEvening(page);
+  await page.getByRole("button", { name: "Mehr" }).click();
+  await page.getByRole("button", { name: "Abend bearbeiten" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Abend bearbeiten" })).toBeVisible();
+  await expect(page.getByText("Die Änderungen gelten für alle in der gemeinsamen Runde.")).toBeVisible();
+  await expectAccessible(page);
+
+  await page.getByLabel("Ort (freiwillig)").fill("Beim Huber");
+  await page.getByRole("button", { name: "Süd einen Platz nach hinten" }).click();
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByRole("button", { name: "Spiel eintragen" })).toBeVisible();
+  const [round] = await fake.session(KONTO_1.userId).myRounds();
+  await expect.poll(() => fake.server.evenings(round.id)[0]?.location, SYNC).toBe("Beim Huber");
+  expect(fake.server.evenings(round.id)[0]?.seating).toEqual(["spieler-1", "spieler-2", "spieler-4", "spieler-3"]);
+});
+
 test("Sicherung einlesen mit Runde: Hinweis, dass es bei allen erscheint; die Namen bleiben die der Runde", async ({ page }) => {
   await foundRound(page, fake);
   // Eine Sicherung von früher: dieselben Spieler unter anderen Namen und ein Abend, den die Runde noch nicht kennt.

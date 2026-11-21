@@ -235,6 +235,66 @@ export function ChoiceRow<T>({
   );
 }
 
+// ---------------------------------------------------------------- Sitzordnung
+
+/**
+ * Die Sitzordnung im Uhrzeigersinn („Neuer Abend“ und „Abend bearbeiten“): je Spieler eine Zeile mit seinem Platz.
+ * Antippen macht ihn zum ersten Geber („gibt zuerst“), die Pfeile rücken ihn einen Platz nach vorn oder hinten.
+ */
+export function SeatingList({
+  seating,
+  firstDealer,
+  name,
+  onFirstDealer,
+  onMove,
+}: {
+  seating: readonly string[];
+  firstDealer: string | null;
+  name: (player: string) => string;
+  onFirstDealer: (player: string) => void;
+  /** −1: einen Platz nach vorn, +1: einen Platz nach hinten. */
+  onMove: (player: string, delta: number) => void;
+}) {
+  return (
+    <ol class="list" aria-label="Sitzordnung">
+      {seating.map((id, index) => {
+        const isDealer = id === firstDealer;
+        return (
+          <li key={id} class={isDealer ? "seat first-dealer" : "seat"}>
+            <button type="button" class="seat-main" role="radio" aria-checked={isDealer} onClick={() => onFirstDealer(id)}>
+              <span class="seat-number" aria-hidden="true">
+                {index + 1}
+              </span>
+              <span>
+                {name(id)}
+                {isDealer ? <span class="badge">gibt zuerst</span> : null}
+              </span>
+            </button>
+            <button
+              type="button"
+              class="icon-button"
+              aria-label={`${name(id)} einen Platz nach vorn`}
+              disabled={index === 0}
+              onClick={() => onMove(id, -1)}
+            >
+              <Icon name="up" />
+            </button>
+            <button
+              type="button"
+              class="icon-button"
+              aria-label={`${name(id)} einen Platz nach hinten`}
+              disabled={index === seating.length - 1}
+              onClick={() => onMove(id, 1)}
+            >
+              <Icon name="down" />
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 // ---------------------------------------------------------------- Einstellungen
 
 /** Schalter mit Beschriftung (ganze Zeile antippbar). */

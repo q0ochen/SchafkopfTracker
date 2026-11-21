@@ -8,6 +8,7 @@ export type Route =
   | { readonly name: "start" }
   | { readonly name: "newEvening" }
   | { readonly name: "board"; readonly eveningId: EveningId }
+  | { readonly name: "editEvening"; readonly eveningId: EveningId }
   | { readonly name: "gameForm"; readonly eveningId: EveningId; readonly entryId: EntryId | null }
   | { readonly name: "rules"; readonly eveningId: EveningId | null }
   | { readonly name: "statistics"; readonly eveningId: EveningId | null }
@@ -61,6 +62,7 @@ export function parseRoute(hash: string): Route {
   if ((m = match(`/abend/${SEGMENT}/regeln`))) return { name: "rules", eveningId: m[0] };
   if ((m = match(`/abend/${SEGMENT}/statistik`))) return { name: "statistics", eveningId: m[0] };
   if ((m = match(`/abend/${SEGMENT}/abschluss`))) return { name: "closing", eveningId: m[0] };
+  if ((m = match(`/abend/${SEGMENT}/bearbeiten`))) return { name: "editEvening", eveningId: m[0] };
   return { name: "start" };
 }
 
@@ -74,6 +76,8 @@ export function pathOf(route: Route): string {
       return "/neu";
     case "board":
       return `/abend/${e(route.eveningId)}`;
+    case "editEvening":
+      return `/abend/${e(route.eveningId)}/bearbeiten`;
     case "gameForm":
       return route.entryId === null
         ? `/abend/${e(route.eveningId)}/spiel`
@@ -100,6 +104,7 @@ export function parentOf(route: Route): Route {
   switch (route.name) {
     case "gameForm":
     case "closing":
+    case "editEvening":
       return { name: "board", eveningId: route.eveningId };
     case "rules":
     case "statistics":
