@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 699, `data` 296, `database` 24, `app` 229, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 53 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 723, `data` 296, `database` 24, `app` 251, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 53 Oberflächen-Tests je Playwright-Projekt, Server 578 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -587,9 +587,35 @@ irgendwo auftauchen“.
 - Gut zu wissen: Wer eine Runde verlässt oder sich abmeldet, behält die Abende als Kopie; legt er danach eine neue
   Runde an, kommen diese Kopien mit in die neue Runde (8.9, „Alle Abende und Spieler dieses Geräts kommen mit“). Das
   ist vermutlich beim Nutzer passiert.
-- Zweiter Wunsch des Nutzers am selben Abend: Auf der Startseite „Gemeinsame Runden“ mit einer Auswahlliste der
-  Runden, in denen man schon war, um zwischen ihnen zu wechseln; die Namen sollen sich nicht doppeln. Noch nicht
-  gebaut; die Rückfrage dazu steht beim Nutzer.
+- Zweiter Wunsch des Nutzers am selben Abend: „wenn man die Runden, in denen man einmal war, … erneut auswählen
+  könnte“, „es müsste dann gemeinsame Runden heißen im Hauptbildschirm und dort müsste dann eine Dropdown-Liste zu den
+  Runden … existieren“, und „sicherzustellen, dass sich die Namen nicht doppeln“. Umgesetzt als **Runden wechseln**
+  (gewählt, weil es zu „in eine andere Runde einloggen“ passt; nicht gefragt, dem Nutzer im Bericht erklärt):
+  - Ein Gerät hält weiter nur EINE Runde. Wechseln = die verbundene Runde vollständig abgleichen, dann das Gerät
+    leeren und die andere Runde laden; die Abende der bisherigen bleiben auf dem Server (Vertrag 8.1, 8.7, 8.9).
+    Beitreten und „Neue Runde anlegen“ gehen jetzt auch mit verbundener Runde; eine neue Runde beginnt dann leer.
+    Was nach dem Abgleich noch wartet (etwa ein Abend, den der Server ablehnt), ginge verloren: Die Rückfrage nennt
+    die Zahl.
+  - Startseite: „Gemeinsame Runden“ mit der Auswahl „Runde“ (nur verbunden, angemeldet, mit mindestens einer weiteren
+    Runde), Rückfrage „Zur Runde ‹Ziel› wechseln?“. Bildschirm „Gemeinsame Runden“ (vorher „Gemeinsame Runde“):
+    verbunden zusätzlich Einladungskarte, „Deine anderen Runden“ (Wechseln, Verlassen), „Neue Runde anlegen“,
+    „Einladung einlösen“; Einstellungen: „Gemeinsame Runden“ mit „Runde: ‹Name›“ und Stand.
+  - Eindeutige Namen je Konto (`RoundNames`, ohne Groß/Klein, bereinigt wie der Server): Vorschlag „Schafkopfrunde 2“
+    usw., „Du hast schon eine Runde mit diesem Namen.“; der Server prüft dasselbe (`create_round` → `name_taken`).
+    Gleichnamige Runden durch Beitreten bleiben möglich; Listen und Auswahl nennen dann die Mitglieder
+    (`my_rounds.member_names`).
+  - Server: Migration `20261121200000_runde_auswahl.sql` (578 pgTAP-Tests, dazu ein Fall für zwei Geräte desselben
+    Kontos in `nebenlaeufig.sh`). **Wird erst mit „Supabase Deploy“ (von Hand, nach dem Release) auf dem echten
+    Server wirksam;** bis dahin fehlen nur die Mitgliedernamen, und die Namen prüft allein die App.
+  - Kotlin: `domain.round.RoundNames`, `RoundConnection` (`handOver`, `clearDevice`), `RoundCoordinator`
+    (`rounds`, `roundsFailed`, `refreshRounds`, `prepareSwitch`), `ui/round/RoundSwitch.kt` (Auswahl, Rückfrage,
+    `roundSelection`, `knownRounds`), `StartViewModel` (Wechsel über die Auswahl). Bildschirmfotos 67 bis 71.
+    Golden-Abschnitt `roundNames`. Tests: `RoundSwitchTest`, `RoundNamesTest` (domain), `RoundSelectionTest`,
+    `StartRoundSwitchTest` und neue Fälle in `RoundCoordinatorTest`, `RoundViewModelTest`, `RoundScreenshotTest`.
+  - Gut zu wissen: Ein Test, der auf das Ergebnis eines ViewModels wartet, muss auf die Anzeige warten (Suche nach
+    Text oder Beschreibung); `waitFor` mit einer Bedingung ohne Compose lässt den Hauptthread von Robolectric nicht
+    laufen, und das ViewModel bleibt stehen. Zwischen Leeren und Verbinden ist das Gerät kurz ohne Runde und leer.
+  - Web-App: gebaut von einem Helfer nach dem Vertrag (siehe unten, sobald zusammengeführt).
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
