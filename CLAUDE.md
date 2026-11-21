@@ -155,7 +155,7 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 699, `data` 296, `database` 24, `app` 226, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
+  `domain` 699, `data` 296, `database` 24, `app` 227, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
   laufen) und 53 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
@@ -416,9 +416,22 @@ Gut zu wissen für die nächste Sitzung:
   Fehlschlägen die Testergebnisse hoch (Artefakt „Testergebnisse“). Gleich der nächste Lauf (46) zeigte: Die Startseite
   stand noch auf „wird geladen“, die Daten kamen in 30 s nicht an. Die Test-JVM hatte nur Gradles 512 MB, und hier war
   der Speicher während der Bildschirmtests zeitweise zu 99 % belegt; seitdem bekommen die Tests von `app` 2 GB, und
-  `waitForText` nennt bei einem Fehlschlag auch die Speicherbelegung. (2) Der Tag „testversion“ ließ sich nicht verschieben
+  `waitForText` nennt bei einem Fehlschlag auch die Speicherbelegung. Am Speicher lag es aber nicht: In Lauf 55
+  (21.11.2026 abends) scheiterten beide Tests, die auf die Abende der Startseite warten
+  (`start_mit_geplantem_abend_dunkel`, `start_mit_laufendem_abend`), bei 293 von 2048 MB. Hier trat es danach in 2 von 4
+  vollen Läufen auf (auf zwei Kerne begrenzt), dann in 27 weiteren nicht mehr, auch nicht unter Last. Der Abzug aller
+  Threads zeigte: Nichts hängt, alle warten untätig. Nur diese beiden Tests warten auf die Abende der Startseite; der
+  Abend-Bildschirm mit fast gleichem ViewModel scheiterte nie. Die Fehlermeldung von `waitFor` nennt seitdem auch, was
+  in der Warteschlange des Hauptthreads liegt, und bei diesen beiden Tests den Stand des `StartViewModel`: Steht dort
+  `loading=false`, sind die Daten da und nur die Anzeige hängt; steht dort `loading=true`, kamen sie nie im ViewModel
+  an. Tritt es wieder auf, zuerst diese Zeilen lesen. (2) Der Tag „testversion“ ließ sich nicht verschieben
   (HTTP 403), wenn der Stand eine Workflow-Datei änderte und beim Veröffentlichen schon ein neuerer Stand auf dem
   Zweig lag; die Testversion wird jetzt trotzdem ersetzt.
+- `awaitFirst` (Tests der ViewModels in `app`) wartet auf `Dispatchers.Default`. Bis zum 21.11.2026 lief der Test danach
+  auf jenem Thread weiter (mit `UnconfinedTestDispatcher` kehrt nichts von selbst zurück), manchmal noch nach
+  `Dispatchers.resetMain()`; hier scheiterte so einmal `ClosingViewModelTest` mit „Dispatchers.Main was accessed when
+  the platform dispatcher was absent“. Jetzt geht es über den Planer von `runTest` zurück auf den Thread des Tests
+  (`AwaitTest` prüft das).
 - Die Spracheingabe ist verworfen. Falls sie wieder aufkommt: Kern wäre ein Parser Text → `GameDraft` mit Kölner
   Phonetik und Jaro-Winkler wie in DrinkWithMe (`android/core/…/voice/`); nie ohne Bestätigung buchen.
 - Der Nutzer berichtet, dass das App-Symbol auf seinem iPhone den Browser öffnet (bei welcher der beiden Web-Apps,
@@ -540,6 +553,10 @@ Aussagekräftiges Diagramm mit den Spielernamen enthalten ist“.
   nach dem Antippen (Safari verlangt das), sonst Herunterladen. Die Adresse bleibt `#/abend/<id>/abschluss`.
 - Nicht geprüft: echte Geräte, vor allem ob das Teilen-Menü auf dem iPhone das Bild annimmt (in Chromium und, auf
   GitHub, mit WebKit getestet).
+- Geprüft am 21.11.2026: „Android“ 56 und „Web-App“ 34 grün (Stand `f57c1e3`). Lauf 55 davor (nur der Android-Teil)
+  scheiterte am wackligen Test der Startseite (siehe „Gut zu wissen“). Dessen Ursache ist noch offen, die Fehlermeldung
+  ist seitdem genauer. Bei der Suche fiel ein zweiter wackliger Fall auf, der Fehler in `awaitFirst` (ebenda); der ist
+  behoben.
 - Auf dem Zweig `claude/gracious-keller-48tcn0`; Pull Request nur auf Bitte des Nutzers.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)

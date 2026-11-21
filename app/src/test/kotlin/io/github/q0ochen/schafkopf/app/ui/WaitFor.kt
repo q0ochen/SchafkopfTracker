@@ -1,5 +1,7 @@
 package io.github.q0ochen.schafkopf.app.ui
 
+import android.os.Looper
+import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -7,27 +9,70 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.onAllNodesWithText
+import org.robolectric.Shadows
+import org.robolectric.shadows.ShadowPausedMessageQueue
+import java.lang.management.ManagementFactory
 
 /**
  * Wartet, bis ein Text auf dem Bildschirm steht. Die Datenbank lädt im Hintergrund; davon weiß die Testumgebung von
  * Compose nichts, und ohne Warten tippte ein Test womöglich ins Leere oder fotografierte „Wird geladen …“.
  *
- * Erscheint der Text nicht, sagt die Fehlermeldung, was stattdessen auf dem Bildschirm stand. Die Frist ist großzügig:
- * Auf den Rechnern von GitHub blieb ein Test am 19.11.2026 einmal länger als 10 Sekunden stehen, ohne dass sich das
- * hier nachstellen ließ (auch nicht auf einem einzelnen Prozessorkern).
+ * Die Frist ist großzügig: Auf den Rechnern von GitHub blieb ein Test am 19.11.2026 einmal länger als 10 Sekunden
+ * stehen, ohne dass sich das hier nachstellen ließ (auch nicht auf einem einzelnen Prozessorkern).
  */
-fun ComposeTestRule.waitForText(text: String, timeoutMillis: Long = 30_000) {
+fun ComposeTestRule.waitForText(text: String, timeoutMillis: Long = 30_000, details: () -> String = { "" }) =
+    waitFor("„$text“", timeoutMillis, details) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+
+/**
+ * Wartet, bis [condition] gilt. Sonst sagt die Fehlermeldung, was stattdessen auf dem Bildschirm stand, wie voll der
+ * Speicher war und was jeder Thread gerade tat: Der Test der Startseite lief auf GitHub mehrmals in die Wartefrist
+ * (19. und 21.11.2026), ohne dass sich das hier nachstellen ließ; am 21.11.2026 war der Speicher dabei nur zu einem
+ * Siebtel belegt. Die Threads zeigen beim nächsten Mal, worauf die Daten warten.
+ *
+ * @param what Was erscheinen soll, für die Fehlermeldung.
+ * @param details Was die Fehlermeldung außerdem nennen soll, etwa den Zustand des ViewModels.
+ */
+fun ComposeTestRule.waitFor(
+    what: String,
+    timeoutMillis: Long = 30_000,
+    details: () -> String = { "" },
+    condition: () -> Boolean,
+) {
     try {
-        waitUntil(timeoutMillis) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis, condition)
     } catch (e: ComposeTimeoutException) {
         val seen = try {
             onAllNodes(isRoot(), useUnmergedTree = true).fetchSemanticsNodes().flatMap(::textsOf)
         } catch (_: AssertionError) {
             listOf("(kein Bildschirm)")
         }
-        throw AssertionError("„$text“ ist nach $timeoutMillis ms nicht erschienen. Auf dem Bildschirm steht: $seen. ${memory()}", e)
+        val extra = runCatching(details).getOrElse { "(nicht lesbar: $it)" }
+        throw AssertionError(
+            "$what ist nach $timeoutMillis ms nicht erschienen. Auf dem Bildschirm steht: $seen. ${memory()} $extra\n" +
+                "${mainQueue()}\n${threads()}",
+            e,
+        )
     }
 }
+
+/**
+ * Was in der Warteschlange des Hauptthreads liegt. Robolectric führt eine Nachricht erst aus, wenn ihre Zeit auf der
+ * angehaltenen Uhr erreicht ist; eine Nachricht „in der Zukunft“ wartet also, bis jemand die Uhr vorstellt.
+ */
+private fun mainQueue(): String = runCatching {
+    val looper = Looper.getMainLooper()
+    val now = SystemClock.uptimeMillis()
+    val messages = synchronized(looper.queue) {
+        val queue = Shadows.shadowOf(looper.queue) as ShadowPausedMessageQueue
+        generateSequence(queue.head) { Shadows.shadowOf(it).next }.take(MAX_MESSAGES).map { message ->
+            val what = message.callback?.javaClass?.name ?: "${message.target?.javaClass?.name} (what=${message.what})"
+            "${message.`when` - now} ms: $what"
+        }.toList()
+    }
+    "Hauptthread: Uhr $now ms, ${messages.size} Nachrichten" + messages.joinToString("") { "\n    $it" }
+}.getOrElse { "Hauptthread: nicht lesbar ($it)" }
+
+private const val MAX_MESSAGES = 30
 
 /** Wie voll der Speicher der Test-JVM gerade ist (in MB); ist er fast voll, war die JVM vermutlich mit Aufräumen beschäftigt. */
 private fun memory(): String {
@@ -36,6 +81,21 @@ private fun memory(): String {
     val used = (runtime.totalMemory() - runtime.freeMemory()) / mb
     return "Speicher: $used von ${runtime.maxMemory() / mb} MB belegt."
 }
+
+/** Alle Threads der Test-JVM mit Zustand, Sperre (worauf und bei wem sie warten) und den obersten Aufrufen. */
+private fun threads(maxFrames: Int = 20): String =
+    ManagementFactory.getThreadMXBean().dumpAllThreads(true, true)
+        .sortedBy { it.threadName }
+        .joinToString("\n", prefix = "Threads:\n") { info ->
+            buildString {
+                append('"').append(info.threadName).append("\" ").append(info.threadState)
+                info.lockName?.let { append(", wartet auf ").append(it) }
+                info.lockOwnerName?.let { append(" (gehalten von \"").append(it).append("\")") }
+                info.stackTrace.take(maxFrames).forEach { append("\n        at ").append(it) }
+                if (info.stackTrace.size > maxFrames) append("\n        …")
+                info.lockedSynchronizers.forEach { append("\n        hält ").append(it) }
+            }
+        }
 
 /** Alle Texte unterhalb eines Knotens, in der Reihenfolge des Baums. */
 private fun textsOf(node: SemanticsNode): List<String> {

@@ -38,6 +38,7 @@ import io.github.q0ochen.schafkopf.app.ui.gameform.GameFormScreen
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
 import io.github.q0ochen.schafkopf.app.ui.newevening.NewEveningScreen
 import io.github.q0ochen.schafkopf.app.ui.start.StartScreen
+import io.github.q0ochen.schafkopf.app.ui.start.StartViewModel
 import io.github.q0ochen.schafkopf.app.ui.theme.SchafkopfTheme
 import io.github.q0ochen.schafkopf.domain.evening.BockReason
 import io.github.q0ochen.schafkopf.domain.evening.BockTriggerEntry
@@ -66,6 +67,7 @@ import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.koin.androidx.compose.koinViewModel
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.stopKoin
 import org.robolectric.RobolectricTestRunner
@@ -189,7 +191,14 @@ class ScreenshotTest {
     @Test
     fun start_mit_laufendem_abend() {
         seed()
-        show(ready = "Wirtshaus zur Post") { StartScreen(Navigator()) }
+        var viewModel: StartViewModel? = null
+        show {
+            viewModel = koinViewModel()
+            StartScreen(Navigator())
+        }
+        compose.waitForText("Wirtshaus zur Post") {
+            "ViewModel: ${viewModel?.state?.value?.let { "loading=${it.loading}, ${it.evenings.size} Abende" }}"
+        }
         capture("01_start")
     }
 
