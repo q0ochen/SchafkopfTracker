@@ -171,9 +171,9 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-`main` enthält alles bis Pull Request #25 (gemeinsame Runde; am 20.11.2026 auf Wunsch des Nutzers angelegt, „Ja pull
-request anlegen“, und von ihm um 18:40 zusammengeführt; alle Läufe danach grün, Testversion, F-Droid-Paketquelle und
-Web-App neu veröffentlicht). `entwicklung` ist noch auf dem älteren Stand.
+`main` enthält alles bis Pull Request #26 („Abend bearbeiten“, am 21.11.2026 zusammengeführt); #25 (gemeinsame Runde)
+war am 20.11.2026 auf Wunsch des Nutzers angelegt („Ja pull request anlegen“) und von ihm um 18:40 zusammengeführt
+worden. Der gesammelte Release vom 21.11.2026 (siehe unten) folgt als eigener Pull Request. `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -510,8 +510,10 @@ Kreditkarte; Leitplanke „kein Geld ausgeben“).
   wie gewollt übersprungen. Lauf 50 (nur die Umstellung) scheiterte, weil Robolectric seine Android-Laufzeit nicht
   herunterladen konnte (`MavenArtifactFetcher`, FileNotFoundException), also außerhalb des Codes; tritt das wieder auf,
   Lauf einmal neu starten.
-- Alles liegt auf `claude/gracious-keller-48tcn0` und wartet mit der Korrektur des Rückpfeils auf den gesammelten
-  Release; Pull Request nur auf Bitte des Nutzers.
+- **Gesammelter Release:** Pull Request nach `main` am 21.11.2026 auf Wunsch des Nutzers angelegt („pull request anlegen
+  ja“), mit Rückpfeil-Korrektur, Veröffentlichen nur von `main`, geplanten Abenden und Ortsvorschlägen. Nach dem
+  Zusammenführen veröffentlichen GitHub Pages, Testversion und F-Droid-Paketquelle neu; was danach auf den Zweig
+  kommt, braucht einen neuen Pull Request.
 - **Nicht geprüft:** echte Geräte; ob der Browser auf dem iPhone den Dienst abfragen darf (CORS): Die Antwort ohne
   `Origin` hatte keine CORS-Kopfzeile, was bei Photon (Javalin) normal ist; eine Probe mit `Origin` wurde hier nicht
   zugelassen. Kommen in der Web-App auf dem iPhone keine Vorschläge, sondern immer „Ortsvorschläge gibt es nur mit
