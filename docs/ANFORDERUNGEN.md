@@ -16,7 +16,7 @@ Statistik über alle Abende, sichert die Daten und lässt sich auch von der Uhr 
 - Spieler lassen sich umbenennen, archivieren (erscheinen nicht mehr in der Auswahl, alte Abende bleiben) und
   löschen (#21). Löschen geht nur bei Spielern, die in keinem Abend vorkommen; sonst verlöre ein Abend seine Namen.
   Ein neuer Spieler bekommt die erste freie Farbe.
-- Ein Abend hat ein Datum, ein freies Textfeld für den Spielort (keine Karten-Anbindung) und eine Liste von Spielen.
+- Ein Abend hat ein Datum, ein freies Textfeld für den Spielort und eine Liste von Spielen.
 - Zu Beginn des Abends wird die Sitzreihenfolge festgelegt (für die Geberfolge und die Statistik).
 - Ein Abend hat beliebig viele Spiele. Jedes Spiel lässt sich jederzeit ändern oder löschen; alle Stände und
   Statistiken passen sich sofort an.
@@ -25,6 +25,15 @@ Statistik über alle Abende, sichert die Daten und lässt sich auch von der Uhr 
   nachträglich ändern, auch bei beendeten Abenden. Die Spieler am Tisch lassen sich nicht austauschen, denn die
   eingetragenen Spiele nennen sie; das Regelwerk hat wie bisher einen eigenen Bildschirm. In der gemeinsamen Runde wird
   nur übernommen, was auf diesem Handy geändert wurde (docs/ARCHITEKTUR.md, Abschnitt 2 „Abend“ und 4.1).
+- Abend vorab anlegen (Wunsch des Nutzers vom 21.11.2026: „damit man bereits vorab den Abend anlegen kann, bevor man
+  sich überhaupt in der Kneipe getroffen hat“): „Neuer Abend“ hat ein Datum, vorbelegt mit heute; jeder Tag ist
+  wählbar, auch beim Bearbeiten. Liegt er nach heute, ist der Abend „geplant“: Er steht in der Liste mit dieser Marke
+  und nie in der Karte „Abend läuft“; am Tag selbst läuft er (docs/ARCHITEKTUR.md, 4.2).
+- Ortsvorschläge (Wunsch des Nutzers vom 21.11.2026: „Ich gebe beispielsweise Klinikum Bamberg ein und mir erscheint
+  als Dropdown automatisch die anklickbare Adresse und Postleitzahl“): Beim Tippen des Orts schlägt die App Orte aus
+  OpenStreetMap vor (Name, Straße, Postleitzahl und Ort); Antippen übernimmt den Vorschlag. Entschieden am 21.11.2026:
+  Suche per Name ohne Standort des Handys, OpenStreetMap statt Google (kostenlos, ohne Konto). Ohne Internet bleibt
+  das Feld ein freies Textfeld (docs/ARCHITEKTUR.md, 4.3).
 
 ## 3. Spielarten und Abrechnung
 

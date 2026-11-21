@@ -20,8 +20,12 @@ data class EveningDetails(
     val firstDealer: PlayerId,
 ) {
     companion object {
-        /** Höchstlänge des Orts in Zeichen, wie auf dem Bildschirm „Neuer Abend“. */
-        const val MAX_LOCATION_LENGTH = 40
+        /**
+         * Höchstlänge des Orts in Zeichen, wie auf dem Bildschirm „Neuer Abend“. Seit dem 21.11.2026 100 statt 40,
+         * damit ein Ortsvorschlag mit Adresse und Postleitzahl hineinpasst (docs/ARCHITEKTUR.md, Abschnitt 4.3). Das
+         * Dateiformat prüft die Länge nicht; ältere Versionen lesen längere Orte deshalb ohne Weiteres.
+         */
+        const val MAX_LOCATION_LENGTH = 100
 
         fun of(evening: Evening): EveningDetails =
             EveningDetails(evening.startedAt, evening.location, evening.seating, evening.firstDealer)

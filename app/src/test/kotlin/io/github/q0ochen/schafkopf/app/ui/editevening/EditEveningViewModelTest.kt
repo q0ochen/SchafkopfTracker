@@ -7,6 +7,8 @@ import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.ports.InMemoryEveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.InMemoryPlayerRepository
+import io.github.q0ochen.schafkopf.domain.ports.PlaceSearch
+import io.github.q0ochen.schafkopf.domain.ports.PlaceSuggestion
 import io.github.q0ochen.schafkopf.domain.rules.RuleSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -61,6 +64,12 @@ class EditEveningViewModelTest {
     private val players = InMemoryPlayerRepository(listOf(a, b, c, d).mapIndexed { index, player -> Player(player, "Spieler ${index + 1}", colorIndex = index) })
     private val evenings = InMemoryEveningRepository(listOf(evening))
     private val linked = MutableStateFlow(false)
+    private val searched = mutableListOf<String>()
+    private val post = PlaceSuggestion("Gasthof Post", "Hauptstraße 1, 96049 Bamberg", "Gasthof Post, Hauptstraße 1, 96049 Bamberg")
+    private val placeSearch = PlaceSearch { query ->
+        searched += query
+        listOf(post)
+    }
 
     @Before
     fun useTestDispatcher() = Dispatchers.setMain(dispatcher)
@@ -69,7 +78,7 @@ class EditEveningViewModelTest {
     fun resetDispatcher() = Dispatchers.resetMain()
 
     private suspend fun TestScope.loaded(eveningId: EveningId = id): EditEveningViewModel {
-        val viewModel = EditEveningViewModel(eveningId, evenings, players, EveningEditor(evenings, clock) { "neu" }, clock, linked)
+        val viewModel = EditEveningViewModel(eveningId, evenings, players, EveningEditor(evenings, clock) { "neu" }, clock, linked, placeSearch)
         backgroundScope.launch { viewModel.state.collect {} }
         withTimeout(5_000) { viewModel.state.first { !it.loading } }
         return viewModel
@@ -81,7 +90,6 @@ class EditEveningViewModelTest {
     fun `zeigt den Abend und laesst ohne Aenderung nicht speichern`() = runTest(dispatcher) {
         val state = loaded().state.value
         assertEquals(LocalDate.of(2026, 11, 20), state.date)
-        assertEquals(LocalDate.of(2026, 11, 21), state.today)
         assertEquals(evening.startedAt, state.startedAt)
         assertEquals("Wirtshaus", state.location)
         assertEquals(listOf(a, b, c, d), state.seating)
@@ -112,11 +120,19 @@ class EditEveningViewModelTest {
     }
 
     @Test
-    fun `Tage nach heute lassen sich nicht waehlen, derselbe Tag aendert nichts`() = runTest(dispatcher) {
+    fun `auch Tage nach heute lassen sich waehlen`() = runTest(dispatcher) {
         val viewModel = loaded()
-        viewModel.setDate(LocalDate.of(2026, 11, 22))
-        assertEquals(LocalDate.of(2026, 11, 20), viewModel.state.value.date)
+        viewModel.setDate(LocalDate.of(2026, 12, 12))
+        assertEquals(LocalDate.of(2026, 12, 12), viewModel.state.value.date)
+        assertEquals(Instant.parse("2026-12-12T18:30:00Z"), viewModel.state.value.startedAt)
+        viewModel.save {}
+        advanceUntilIdle()
+        assertEquals(Instant.parse("2026-12-12T18:30:00Z"), stored().startedAt)
+    }
 
+    @Test
+    fun `derselbe Tag aendert nichts`() = runTest(dispatcher) {
+        val viewModel = loaded()
         viewModel.setDate(LocalDate.of(2026, 11, 21))
         assertEquals(LocalDate.of(2026, 11, 21), viewModel.state.value.date)
         viewModel.setDate(LocalDate.of(2026, 11, 20))
@@ -138,10 +154,31 @@ class EditEveningViewModelTest {
     }
 
     @Test
-    fun `der Ort wird auf 40 Zeichen begrenzt`() = runTest(dispatcher) {
+    fun `der Ort wird auf 100 Zeichen begrenzt`() = runTest(dispatcher) {
         val viewModel = loaded()
-        viewModel.setLocation("x".repeat(60))
-        assertEquals(40, viewModel.state.value.location.length)
+        viewModel.setLocation("x".repeat(160))
+        assertEquals(100, viewModel.state.value.location.length)
+    }
+
+    @Test
+    fun `nach dem Tippen kommen Ortsvorschlaege, antippen uebernimmt den ganzen Vorschlag`() = runTest(dispatcher) {
+        val viewModel = loaded()
+        // Beim Öffnen wird für den vorhandenen Ort nicht gesucht.
+        advanceTimeBy(1_000)
+        assertEquals(emptyList<String>(), searched)
+
+        viewModel.setLocation("Gasthof P")
+        advanceTimeBy(401)
+        assertEquals(listOf("Gasthof P"), searched)
+        assertEquals(listOf(post), viewModel.state.value.places.suggestions)
+
+        viewModel.pickPlace(post)
+        assertEquals(post.text, viewModel.state.value.location)
+        assertTrue(viewModel.state.value.places.suggestions.isEmpty())
+        viewModel.save {}
+        advanceUntilIdle()
+        assertEquals(post.text, stored().location)
+        assertEquals(listOf("Gasthof P"), searched)
     }
 
     @Test

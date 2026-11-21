@@ -8,10 +8,11 @@ rechnet aus, wer wie viel bekommt oder zahlt. Am Ende des Abends stehen Gewinner
 
 ## Android-Testversion
 
-Die Testversion wird bei jeder Änderung automatisch gebaut, getestet und im Emulator probehalber installiert. Neue
-Testversionen lassen sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten. Internet braucht
-die App nur für drei freiwillige Zusätze: die gemeinsame Runde (alle tragen vom eigenen Handy ein), den
-Abend-Kommentator (sendet erst nach Zustimmung) und die Sicherung in Google Drive.
+Neue Testversionen erscheinen gesammelt: Korrekturen werden erst einzeln geprüft und dann zusammen freigegeben. Jede
+Testversion ist vorher automatisch gebaut, getestet und im Emulator probehalber installiert. Neue Testversionen lassen
+sich einfach drüber installieren; die eingetragenen Abende bleiben erhalten. Internet braucht
+die App nur für freiwillige Zusätze: die gemeinsame Runde (alle tragen vom eigenen Handy ein), den Abend-Kommentator
+(sendet erst nach Zustimmung), die Sicherung in Google Drive und die Ortsvorschläge beim Ort (aus OpenStreetMap).
 
 ### In F-Droid (empfohlen)
 
@@ -94,6 +95,8 @@ funktioniert auch ohne Empfang; abgeglichen wird im Hintergrund.
 | Spiel eintragen: Rufspiel, Über Kreuz, Farbsolo, Wenz, Geier; gelegt, Laufende, Schneider, Schwarz, Bock | Testversion |
 | Abrechnung in ganzen Cent, jedes Spiel ein Nullsummenspiel, jede Eingabe nachträglich änderbar | fertig, getestet |
 | Abend-Liste mit laufendem Stand, Plätzen, Geber und Bock-Zähler | fertig |
+| Abend vorab anlegen (Datum in der Zukunft, „geplant“); Datum, Ort, Sitzordnung und ersten Geber nachträglich ändern | Android-App und Web-App |
+| Ortsvorschläge beim Ort aus OpenStreetMap: Name, Straße und Postleitzahl zum Antippen | Android-App und Web-App |
 | Dunkles Design als Standard, große Tippflächen, Bedienung mit Screenreader | fertig |
 | Statistik für einen Abend und über alle Abende: Kontostand und Verlauf, Analyse je Spielart, „Sollte-er-es-lassen?“-Index, Bock-König, Solo-Spezialist, Mauerblümchen, Lieblingspartner | Rechenwerk fertig, getestet |
 | Statistik-Bildschirm mit Diagrammen (Vermögensverlauf, Balken je Spielart), Abschluss mit „Wer zahlt wem“, Teilen als Text | Android-App und Web-App |
@@ -107,7 +110,9 @@ funktioniert auch ohne Empfang; abgeglichen wird im Hintergrund.
 | Wear-OS-App | aufgeschoben bis zu einer Ausgabe ohne F-Droid |
 
 Alles liegt nur auf dem Gerät, außer man tritt einer gemeinsamen Runde bei oder schaltet die Sicherung in Google
-Drive oder den Abend-Kommentator mit Sprachmodell selbst ein. Keine Werbung, keine Auswertung des Nutzungsverhaltens.
+Drive oder den Abend-Kommentator mit Sprachmodell selbst ein. Für die Ortsvorschläge geht nur der eingetippte Ort an
+photon.komoot.io (Suche in OpenStreetMap), ohne Standort und ohne Kennung. Keine Werbung, keine Auswertung des
+Nutzungsverhaltens.
 
 ## Regeln und Abrechnung
 

@@ -3,20 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EveningEdit } from "../core/evening/EveningEdit";
 import type { Evening } from "../core/model";
 import { RuleSets } from "../core/rules/RuleSet";
-import {
-  changed,
-  draftOf,
-  editedDetails,
-  localDateOf,
-  moveSeat,
-  setDate,
-  setFirstDealer,
-  setLocation,
-  startEditing,
-  startOnDay,
-} from "./editEvening";
-
-const TODAY = "2026-11-21";
+import { changed, draftOf, editedDetails, moveSeat, setDate, setFirstDealer, setLocation, startEditing } from "./editEvening";
 
 function evening(startedAt: string, location = "Wirtshaus"): Evening {
   return {
@@ -56,39 +43,32 @@ describe("Abend bearbeiten: Ausgangsstand", () => {
     expect(editedDetails(original, draft)).toEqual(original);
   });
 
-  it("zeigt das Ortsdatum; Tage, die ein Datumsfeld nicht kennt, bleiben leer", () => {
-    expect(localDateOf("2026-11-20T22:59:59.999Z")).toBe("2026-11-20");
-    expect(localDateOf("2026-11-20T23:00:00Z")).toBe("2026-11-21");
-    expect(localDateOf("2026-07-01T21:59:00Z")).toBe("2026-07-01");
-    expect(localDateOf("2026-07-01T22:00:00Z")).toBe("2026-07-02");
-    expect(localDateOf("0099-06-01T12:00:00Z")).toBe("0099-06-01");
-    expect(localDateOf("-0001-12-30T12:00:00Z")).toBe("");
-    expect(localDateOf("+1000000000-12-31T23:59:59.999999999Z")).toBe("");
-  });
 });
 
 describe("Abend bearbeiten: Eingaben", () => {
   const { original, draft } = startEditing(evening("2026-11-20T18:30:00Z"));
 
-  it("nimmt einen früheren Tag oder heute, aber keinen Tag nach heute", () => {
-    expect(setDate(draft, "2026-11-14", TODAY).date).toBe("2026-11-14");
-    expect(setDate(draft, TODAY, TODAY).date).toBe(TODAY);
-    expect(setDate(draft, "2026-11-22", TODAY)).toBe(draft);
-    expect(setDate(draft, "2027-01-01", TODAY)).toBe(draft);
-    expect(setDate(draft, "0001-01-01", TODAY).date).toBe("0001-01-01");
+  it("nimmt jeden Tag, auch einen nach heute (dann ist der Abend geplant)", () => {
+    expect(setDate(draft, "2026-11-14").date).toBe("2026-11-14");
+    expect(setDate(draft, "2026-11-21").date).toBe("2026-11-21");
+    expect(setDate(draft, "2026-11-22").date).toBe("2026-11-22");
+    expect(setDate(draft, "2027-01-01").date).toBe("2027-01-01");
+    expect(setDate(draft, "0001-01-01").date).toBe("0001-01-01");
+    expect(setDate(draft, "9999-12-31").date).toBe("9999-12-31");
   });
 
   it("übergeht, was kein Datum ist, auch ein geleertes Feld", () => {
     for (const text of ["", "2026-02-29", "2026-02-30", "2026-13-01", "2026-00-10", "2026-11-00", "0000-01-01", "14.11.2026", "2026-1-14"]) {
-      expect(setDate(draft, text, TODAY), text).toBe(draft);
+      expect(setDate(draft, text), text).toBe(draft);
     }
-    expect(setDate(draft, "2024-02-29", TODAY).date).toBe("2024-02-29");
+    expect(setDate(draft, "2024-02-29").date).toBe("2024-02-29");
     // Derselbe Tag noch einmal ändert nichts.
-    expect(setDate(draft, "2026-11-20", TODAY)).toBe(draft);
+    expect(setDate(draft, "2026-11-20")).toBe(draft);
   });
 
-  it("kürzt den Ort auf 40 Zeichen", () => {
-    expect(setLocation(draft, `  ${"x".repeat(50)}`).location).toHaveLength(40);
+  it("kürzt den Ort auf 100 Zeichen", () => {
+    expect(setLocation(draft, `  ${"x".repeat(120)}`).location).toHaveLength(100);
+    expect(setLocation(draft, "Klinikum Bamberg, Buger Straße 80, 96049 Bamberg").location).toBe("Klinikum Bamberg, Buger Straße 80, 96049 Bamberg");
     expect(setLocation(draft, "Beim Huber").location).toBe("Beim Huber");
   });
 
@@ -115,12 +95,12 @@ describe("Abend bearbeiten: geändert und Speichern", () => {
 
   it("meldet jede Art von Änderung", () => {
     expect(changed(original, draft)).toBe(false);
-    expect(changed(original, setDate(draft, "2026-11-14", TODAY))).toBe(true);
+    expect(changed(original, setDate(draft, "2026-11-14"))).toBe(true);
     expect(changed(original, setLocation(draft, "Daheim"))).toBe(true);
     expect(changed(original, moveSeat(draft, "spieler-2", -1))).toBe(true);
     expect(changed(original, setFirstDealer(draft, "spieler-2"))).toBe(true);
     // Zurückgestellt ist es wieder unverändert.
-    expect(changed(original, setDate(setDate(draft, "2026-11-14", TODAY), "2026-11-20", TODAY))).toBe(false);
+    expect(changed(original, setDate(setDate(draft, "2026-11-14"), "2026-11-20"))).toBe(false);
     expect(changed(original, moveSeat(moveSeat(draft, "spieler-2", -1), "spieler-2", 1))).toBe(false);
   });
 
@@ -147,48 +127,39 @@ describe("Abend bearbeiten: geändert und Speichern", () => {
 
   it("behält den Beginn genau, wenn der Tag gleich bleibt, auch mit Bruchteilen", () => {
     const exact = startEditing(evening("2026-11-20T18:30:00.123456789Z"));
-    const there = setDate(exact.draft, "2026-11-14", TODAY);
-    const back = setDate(there, "2026-11-20", TODAY);
+    const there = setDate(exact.draft, "2026-11-14");
+    const back = setDate(there, "2026-11-20");
     expect(editedDetails(exact.original, back).startedAt).toBe("2026-11-20T18:30:00.123456789Z");
     expect(editedDetails(exact.original, setLocation(exact.draft, "Daheim")).startedAt).toBe("2026-11-20T18:30:00.123456789Z");
   });
 
   it("nimmt am neuen Tag dieselbe Ortszeit, Bruchteile eingeschlossen", () => {
     const exact = startEditing(evening("2026-11-20T18:30:00.123456789Z"));
-    expect(editedDetails(exact.original, setDate(exact.draft, "2026-11-13", TODAY)).startedAt).toBe("2026-11-13T18:30:00.123456789Z");
+    expect(editedDetails(exact.original, setDate(exact.draft, "2026-11-13")).startedAt).toBe("2026-11-13T18:30:00.123456789Z");
     // Nach Mitternacht Ortszeit begonnen (00:30 am 21.11.): 00:30 am gewählten Tag.
     const late = startEditing(evening("2026-11-20T23:30:00Z"));
     expect(late.draft.date).toBe("2026-11-21");
-    expect(editedDetails(late.original, setDate(late.draft, "2026-11-14", TODAY)).startedAt).toBe("2026-11-13T23:30:00Z");
+    expect(editedDetails(late.original, setDate(late.draft, "2026-11-14")).startedAt).toBe("2026-11-13T23:30:00Z");
   });
 
-  it("hält die Ortszeit über die Umstellung der Sommerzeit hinweg", () => {
-    // 19:00 Winterzeit (UTC+1) wird 19:00 Sommerzeit (UTC+2) und umgekehrt.
-    expect(startOnDay("2026-03-28T18:00:00Z", "2026-03-29")).toBe("2026-03-29T17:00:00Z");
-    expect(startOnDay("2026-07-04T17:00:00Z", "2026-11-14")).toBe("2026-11-14T18:00:00Z");
-    expect(startOnDay("2026-10-24T17:00:00Z", "2026-10-25")).toBe("2026-10-25T18:00:00Z");
-    // 02:30 gibt es am 29.03.2026 nicht: Es wird 03:30 Sommerzeit.
-    expect(startOnDay("2026-03-28T01:30:00Z", "2026-03-29")).toBe("2026-03-29T01:30:00Z");
-    expect(new Date("2026-03-29T01:30:00Z").getHours()).toBe(3);
-    // 02:30 gibt es am 25.10.2026 zweimal: Es gilt das frühere (noch Sommerzeit).
-    expect(startOnDay("2026-10-24T00:30:00Z", "2026-10-25")).toBe("2026-10-25T00:30:00Z");
-    expect(new Date("2026-10-25T00:30:00Z").getHours()).toBe(2);
+  it("nimmt auch einen Tag nach heute mit derselben Ortszeit", () => {
+    const opened = startEditing(evening("2026-11-20T18:30:00Z"));
+    const planned = setDate(opened.draft, "2026-12-12");
+    expect(changed(opened.original, planned)).toBe(true);
+    expect(editedDetails(opened.original, planned).startedAt).toBe("2026-12-12T18:30:00Z");
   });
 
-  it("übergeht kein Datum und beginnt bei unlesbarem Beginn um Mitternacht", () => {
-    expect(startOnDay("2026-11-20T18:30:00Z", "")).toBeNull();
-    expect(startOnDay("2026-11-20T18:30:00Z", "2026-02-30")).toBeNull();
-    expect(startOnDay("+1000000000-12-31T23:59:59.999999999Z", "2026-11-14")).toBe("2026-11-13T23:00:00Z");
+  it("beginnt bei unlesbarem Beginn um Mitternacht", () => {
     const broken = startEditing(evening("+1000000000-12-31T23:59:59.999999999Z"));
     expect(broken.draft.date).toBe("");
     expect(changed(broken.original, broken.draft)).toBe(false);
-    expect(editedDetails(broken.original, setDate(broken.draft, "2026-11-14", TODAY)).startedAt).toBe("2026-11-13T23:00:00Z");
+    expect(editedDetails(broken.original, setDate(broken.draft, "2026-11-14")).startedAt).toBe("2026-11-13T23:00:00Z");
   });
 
   it("speichert mit EveningEdit.apply nur, was hier geändert wurde", () => {
     const opened = evening("2026-11-20T18:30:00Z");
     const { original, draft: start } = startEditing(opened);
-    let draft = setDate(start, "2026-11-14", TODAY);
+    let draft = setDate(start, "2026-11-14");
     draft = moveSeat(draft, "spieler-3", -1);
     draft = setFirstDealer(draft, "spieler-4");
     // Inzwischen hat ein anderes Handy den Ort geändert und ein Spiel eingetragen.

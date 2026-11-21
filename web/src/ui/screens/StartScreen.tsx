@@ -1,4 +1,7 @@
-/* Startseite: laufender Abend, „Neuer Abend“, Statistik, Spieler, Einstellungen und alle Abende. */
+/*
+ * Startseite: laufender Abend, „Neuer Abend“, Statistik, Spieler, Einstellungen und alle Abende. Ein geplanter Abend
+ * (docs/ARCHITEKTUR.md 4.2) steht nur in der Liste, mit der Marke „geplant“.
+ */
 import { useMemo } from "preact/hooks";
 import { isRunning } from "../../core/evening/Evening";
 import { EveningCalculator } from "../../core/evening/EveningCalculator";
@@ -6,6 +9,7 @@ import type { Evening } from "../../core/model";
 import { Amount, TopBar } from "../components";
 import { useAppState, useNames, useServices } from "../context";
 import { formatDate, plural } from "../format";
+import { isPlanned, localDateOf } from "../localDate";
 import { RoundRow } from "../round";
 
 interface Standing {
@@ -15,19 +19,26 @@ interface Standing {
   readonly rank: number;
 }
 
+/**
+ * Kurzfassung eines Abends für die Startseite.
+ *
+ * @property planned Geplant (nicht beendet, Tag nach heute): Marke „geplant“ statt „läuft“, nie in „Abend läuft“.
+ */
 interface EveningCard {
   readonly evening: Evening;
   readonly running: boolean;
+  readonly planned: boolean;
   readonly games: number;
   readonly standings: readonly Standing[];
 }
 
-function card(evening: Evening, names: ReadonlyMap<string, string>): EveningCard {
+/** @param today Das Ortsdatum von heute („JJJJ-MM-TT“). */
+function card(evening: Evening, names: ReadonlyMap<string, string>, today: string): EveningCard {
   const computed = EveningCalculator.compute(evening);
   const standings = evening.seating
     .map((id) => ({ id, name: names.get(id) ?? "?", balance: computed.balances.get(id) ?? 0, rank: computed.ranks.get(id) ?? 0 }))
     .sort((a, b) => a.rank - b.rank);
-  return { evening, running: isRunning(evening), games: computed.gamesPlayed, standings };
+  return { evening, running: isRunning(evening), planned: isPlanned(evening, today), games: computed.gamesPlayed, standings };
 }
 
 /** Datum, Zahl der Spiele und die Rangliste eines Abends. */
@@ -38,7 +49,7 @@ function EveningSummary({ item }: { item: EveningCard }) {
     <>
       <span class="card-title">
         {item.evening.location.trim() === "" ? date : `${date} · ${item.evening.location}`}
-        {item.running ? <span class="badge">läuft</span> : null}
+        {item.planned ? <span class="badge">geplant</span> : item.running ? <span class="badge">läuft</span> : null}
       </span>
       <span class="card-line hint">{plural(item.games, "Spiel", "Spiele")}</span>
       {item.standings.map((standing) => (
@@ -66,11 +77,13 @@ function InstallHint() {
 }
 
 export function StartScreen() {
-  const { router } = useServices();
+  const { store, router } = useServices();
   const { evenings, unreadableEvenings } = useAppState();
   const names = useNames();
-  const cards = useMemo(() => evenings.map((evening) => card(evening, names)), [evenings, names]);
-  const running = cards.find((it) => it.running);
+  const today = localDateOf(store.clock.now());
+  const cards = useMemo(() => evenings.map((evening) => card(evening, names, today)), [evenings, names, today]);
+  // „Abend läuft“ zeigt nie einen geplanten Abend, auch wenn er in der Liste ganz oben steht (der neueste zuerst).
+  const running = cards.find((it) => it.running && !it.planned);
 
   return (
     <div class="screen">

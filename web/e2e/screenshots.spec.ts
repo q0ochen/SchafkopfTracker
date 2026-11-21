@@ -3,7 +3,7 @@
  * screenshots --project handy`. Ohne SCREENSHOT_DIR werden die Tests übersprungen.
  */
 import { mkdir } from "node:fs/promises";
-import { devices, expect, test, type Page } from "@playwright/test";
+import { devices, type Page } from "@playwright/test";
 import type { Evening, Player } from "../src/core/model";
 import { RuleSets } from "../src/core/rules/RuleSet";
 import { writeBackup } from "../src/data/format";
@@ -24,7 +24,7 @@ import {
   signIn,
   SYNC,
 } from "./roundSupport";
-import { enterGame, nameDefaultPlayers, openApp, startEvening } from "./support";
+import { answerPlaces, enterGame, expect, nameDefaultPlayers, openApp, PHOTON_REQUESTS, photonAnswer, startEvening, test } from "./support";
 
 const directory = process.env.SCREENSHOT_DIR ?? "";
 test.skip(directory === "", "nur mit SCREENSHOT_DIR");
@@ -100,6 +100,44 @@ test("Bildschirme eines Abends", async ({ page }) => {
   await page.getByRole("button", { name: "Abbrechen" }).click();
   await page.getByRole("button", { name: "Anna bearbeiten" }).click();
   await shot(page, "14-spieler-mit-abend");
+});
+
+test("Neuer Abend: Datum, geplanter Abend und Ortsvorschläge", async ({ page }) => {
+  await answerPlaces(
+    page,
+    photonAnswer(
+      { name: "Klinikum Bamberg", street: "Buger Straße", housenumber: "80", postcode: "96049", city: "Bamberg", countrycode: "DE" },
+      { name: "Klinikum am Bruderwald", street: "Buger Straße", housenumber: "80", postcode: "96049", city: "Bamberg", countrycode: "DE" },
+      { name: "Klinikum Bamberg", city: "Bamberg", district: "Bug", countrycode: "DE" },
+      { name: "Klinik Sonnenhof", postcode: "5020", city: "Salzburg", country: "Österreich", countrycode: "AT" },
+    ),
+  );
+  await nameDefaultPlayers(page);
+  await startEvening(page);
+  await openApp(page);
+  await page.getByRole("button", { name: "Neuer Abend" }).click();
+  const date = page.getByLabel("Datum");
+  await date.fill(`${Number((await date.inputValue()).slice(0, 4)) + 1}-06-15`);
+  await page.getByLabel("Ort (freiwillig)").fill("Klinikum");
+  await expect(page.getByRole("list", { name: "Ortsvorschläge" })).toBeVisible();
+  // Datum nach heute (Hinweis „geplant“, Knopf „Abend anlegen“) und die Vorschläge unter dem Feld „Ort“.
+  await shot(page, "02b-neuer-abend-geplant-ortsvorschlaege");
+  await page.getByRole("list", { name: "Ortsvorschläge" }).getByRole("button").first().click();
+  await page.getByRole("button", { name: "Abend anlegen" }).click();
+  await expect(page.getByRole("button", { name: "Spiel eintragen" })).toBeVisible();
+  await openApp(page);
+  await shot(page, "02c-start-mit-geplantem-abend", true);
+
+  // Ohne Internet: nur der Hinweis, im hellen Erscheinungsbild.
+  await openApp(page, "/einstellungen");
+  await page.getByRole("group", { name: "Erscheinungsbild" }).getByRole("button", { name: "hell" }).click();
+  await page.unroute(PHOTON_REQUESTS);
+  await openApp(page);
+  await page.getByRole("button", { name: "Neuer Abend" }).click();
+  await page.getByLabel("Ort (freiwillig)").fill("Gasthaus Post");
+  await expect(page.getByText("Ortsvorschläge gibt es nur mit Internet.")).toBeVisible();
+  await scrollToEnd(page);
+  await shot(page, "02d-neuer-abend-ohne-internet-hell");
 });
 
 test("Gemeinsame Runde ohne Server", async ({ page }) => {

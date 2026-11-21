@@ -18,9 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,11 +25,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,16 +42,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.q0ochen.schafkopf.R
+import io.github.q0ochen.schafkopf.app.ui.common.EveningDateDialog
 import io.github.q0ochen.schafkopf.app.ui.common.SectionHeading
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
 import io.github.q0ochen.schafkopf.app.ui.common.formatDate
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
+import io.github.q0ochen.schafkopf.app.ui.place.PlaceSuggestionList
+import io.github.q0ochen.schafkopf.domain.ports.PlaceSuggestion
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneOffset
 
 /**
  * „Abend bearbeiten“ (docs/ARCHITEKTUR.md, Abschnitt 4.1): Datum, Ort, Sitzordnung und erster Geber. Gespeichert wird
@@ -94,6 +88,7 @@ fun EditEveningScreen(eveningId: String, navigator: Navigator) {
                 state = state,
                 onPickDate = { pickDate = true },
                 onLocation = viewModel::setLocation,
+                onPickPlace = viewModel::pickPlace,
                 onMove = viewModel::move,
                 onFirstDealer = viewModel::setFirstDealer,
                 modifier = Modifier.padding(padding),
@@ -102,11 +97,9 @@ fun EditEveningScreen(eveningId: String, navigator: Navigator) {
     }
 
     val date = state.date
-    val today = state.today
-    if (pickDate && date != null && today != null) {
-        DateDialog(
+    if (pickDate && date != null) {
+        EveningDateDialog(
             selected = date,
-            latest = today,
             onDismiss = { pickDate = false },
             onPicked = {
                 pickDate = false
@@ -128,6 +121,7 @@ private fun EditEveningForm(
     state: EditEveningUiState,
     onPickDate: () -> Unit,
     onLocation: (String) -> Unit,
+    onPickPlace: (PlaceSuggestion) -> Unit,
     onMove: (PlayerId, Int) -> Unit,
     onFirstDealer: (PlayerId) -> Unit,
     modifier: Modifier = Modifier,
@@ -162,6 +156,7 @@ private fun EditEveningForm(
                 .fillMaxWidth()
                 .padding(top = 12.dp),
         )
+        PlaceSuggestionList(state = state.places, onPick = onPickPlace)
 
         SectionHeading(stringResource(R.string.new_seating_heading))
         Text(
@@ -223,36 +218,3 @@ private fun EditEveningForm(
         }
     }
 }
-
-/** Datumsauswahl; Tage nach [latest] lassen sich nicht wählen. Die Auswahl rechnet in UTC-Mitternacht. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DateDialog(selected: LocalDate, latest: LocalDate, onDismiss: () -> Unit, onPicked: (LocalDate) -> Unit) {
-    val latestMillis = latest.utcMillis()
-    val pickerState = rememberDatePickerState(
-        initialSelectedDateMillis = selected.utcMillis(),
-        selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis <= latestMillis
-
-            override fun isSelectableYear(year: Int): Boolean = year <= latest.year
-        },
-    )
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = { pickerState.selectedDateMillis?.let { onPicked(localDateOf(it)) } ?: onDismiss() },
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text(stringResource(R.string.edit_date_apply)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.common_cancel)) }
-        },
-    ) {
-        DatePicker(state = pickerState)
-    }
-}
-
-private fun LocalDate.utcMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-
-private fun localDateOf(utcMillis: Long): LocalDate = Instant.ofEpochMilli(utcMillis).atZone(ZoneOffset.UTC).toLocalDate()

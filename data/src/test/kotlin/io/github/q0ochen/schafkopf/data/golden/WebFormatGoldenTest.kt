@@ -141,6 +141,7 @@ internal object WebFormatGolden {
         sections["readSettings"] = readSettingsCases()
         sections["readBackups"] = readBackupCases(bases)
         sections["isJsonObject"] = isJsonObjectCases()
+        sections["places"] = PlaceGoldenCases.cases()
         return render(sections)
     }
 

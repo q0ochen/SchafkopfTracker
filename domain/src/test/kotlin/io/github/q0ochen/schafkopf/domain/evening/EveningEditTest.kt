@@ -84,15 +84,17 @@ class EveningEditTest {
         val result = EveningEdit.apply(evening, original, original.copy(location = "  Beim Huber  "))
         assertEquals("Beim Huber", result.location)
 
-        val long = "x".repeat(39) + "  yyy"
-        assertEquals("x".repeat(39), EveningEdit.apply(evening, original, original.copy(location = long)).location)
+        val max = EveningDetails.MAX_LOCATION_LENGTH
+        val long = "x".repeat(max - 1) + "  yyy"
+        assertEquals("x".repeat(max - 1), EveningEdit.apply(evening, original, original.copy(location = long)).location)
         assertEquals("", EveningEdit.apply(evening, original, original.copy(location = "   ")).location)
     }
 
     @Test
-    fun `cleanLocation entfernt Leerraum wie Kotlin und kuerzt auf 40 Zeichen`() {
+    fun `cleanLocation entfernt Leerraum wie Kotlin und kuerzt auf 100 Zeichen`() {
+        assertEquals(100, EveningDetails.MAX_LOCATION_LENGTH)
         assertEquals("Ort", EveningEdit.cleanLocation("\tOrt\n"))
-        assertEquals(EveningDetails.MAX_LOCATION_LENGTH, EveningEdit.cleanLocation("y".repeat(60)).length)
+        assertEquals(EveningDetails.MAX_LOCATION_LENGTH, EveningEdit.cleanLocation("y".repeat(160)).length)
         // U+FEFF zählt in Kotlin nicht als Leerraum.
         assertEquals("﻿Ort", EveningEdit.cleanLocation("﻿Ort "))
     }

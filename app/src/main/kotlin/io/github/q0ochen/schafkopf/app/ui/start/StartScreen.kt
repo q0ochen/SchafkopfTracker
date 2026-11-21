@@ -169,7 +169,7 @@ private fun EveningSummary(evening: EveningCard) {
             )
             if (evening.running) {
                 Text(
-                    text = stringResource(R.string.start_evening_running_badge),
+                    text = stringResource(if (evening.planned) R.string.start_evening_planned_badge else R.string.start_evening_running_badge),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,

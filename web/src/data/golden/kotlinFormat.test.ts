@@ -21,6 +21,7 @@ import {
   isJsonObject,
 } from "../format/storageCodec";
 import type { Evening, Player } from "../../core/model";
+import { placeSuggestions, UnusablePlaceAnswerError } from "../place/photon";
 import {
   applyDiff,
   type BackupExpect,
@@ -181,6 +182,27 @@ describe("Lesen wie die Android-App", () => {
       null,
     );
     expect(result.stream.first, result.stream.summary).toEqual([]);
+  });
+});
+
+describe("Ortsvorschläge wie die Android-App (Photon, docs/ARCHITEKTUR.md 4.3)", () => {
+  it("macht aus jeder Antwort dieselben Vorschläge oder lehnt sie ebenso ab", () => {
+    const mismatches = new Mismatches();
+    for (const item of golden.places) {
+      let actual: unknown;
+      try {
+        actual = { suggestions: placeSuggestions(item.json) };
+      } catch (error) {
+        if (!(error instanceof UnusablePlaceAnswerError)) throw error;
+        actual = { error: true };
+      }
+      mismatches.check(item.id, actual, item.error === true ? { error: true } : { suggestions: item.suggestions }, item.json);
+    }
+    expect(mismatches.first, mismatches.summary).toEqual([]);
+    expect(golden.places.length).toBeGreaterThan(60);
+    // Die Fälle decken Vorschläge, leere Antworten und Fehler ab.
+    expect(golden.places.filter((item) => item.error === true).length).toBeGreaterThan(5);
+    expect(golden.places.filter((item) => (item.suggestions?.length ?? 0) > 1).length).toBeGreaterThan(10);
   });
 });
 

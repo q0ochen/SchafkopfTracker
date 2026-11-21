@@ -1,6 +1,52 @@
-/* Hilfen für die Oberflächen-Tests: Namen vergeben, Abend starten, Spiele eintragen, Barrierefreiheit prüfen. */
+/*
+ * Hilfen für die Oberflächen-Tests: Namen vergeben, Abend starten, Spiele eintragen, Barrierefreiheit prüfen. Alle
+ * Tests nehmen `test` und `expect` von hier: So erreicht kein Test den echten Dienst für Ortsvorschläge.
+ */
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page } from "@playwright/test";
+import { test as base, expect, type BrowserContext, type Page, type Route } from "@playwright/test";
+
+/** Alle Anfragen an Photon, den Dienst für Ortsvorschläge (docs/ARCHITEKTUR.md, 4.3). */
+export const PHOTON_REQUESTS = "https://photon.komoot.io/**";
+
+/**
+ * Bricht jede Anfrage an Photon ab, wie ohne Netz. Gilt für jeden Browser, den `test` öffnet; ein weiterer Browser
+ * (`browser.newContext`) braucht es eigens. Einzelne Tests beantworten die Anfragen mit {@link answerPlaces}.
+ */
+export async function blockPlaceSearch(context: BrowserContext): Promise<void> {
+  await context.route(PHOTON_REQUESTS, (route) => route.abort("internetdisconnected"));
+}
+
+/** Wie `test` von Playwright, nur dass Anfragen an Photon nie hinausgehen ({@link blockPlaceSearch}). */
+export const test = base.extend({
+  context: async ({ context }, use) => {
+    await blockPlaceSearch(context);
+    await use(context);
+  },
+});
+
+export { expect };
+
+/** Eine Antwort von Photon (GeoJSON) mit genau diesen `properties` je Treffer. */
+export function photonAnswer(...properties: ReadonlyArray<Record<string, string>>): string {
+  return JSON.stringify({ type: "FeatureCollection", features: properties.map((it) => ({ type: "Feature", properties: it })) });
+}
+
+/**
+ * Beantwortet die Anfragen dieser Seite an Photon mit `body` (wie der echte Dienst mit CORS-Kopfzeile) und schreibt
+ * Adresse und Kopfzeilen jeder Anfrage in die zurückgegebene Liste.
+ */
+export async function answerPlaces(page: Page, body: string): Promise<Array<{ url: string; headers: Record<string, string> }>> {
+  const requested: Array<{ url: string; headers: Record<string, string> }> = [];
+  await page.route(PHOTON_REQUESTS, async (route: Route) => {
+    requested.push({ url: route.request().url(), headers: route.request().headers() });
+    await route.fulfill({
+      status: 200,
+      headers: { "access-control-allow-origin": "*", "content-type": "application/json;charset=utf-8" },
+      body,
+    });
+  });
+  return requested;
+}
 
 export const NAMES = ["Anna", "Bert", "Cilli", "Done"] as const;
 

@@ -45,19 +45,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.q0ochen.schafkopf.R
+import io.github.q0ochen.schafkopf.app.ui.common.EveningDateDialog
 import io.github.q0ochen.schafkopf.app.ui.common.SectionHeading
 import io.github.q0ochen.schafkopf.app.ui.common.SubScreenTopBar
-import org.koin.androidx.compose.koinViewModel
+import io.github.q0ochen.schafkopf.app.ui.common.formatDate
 import io.github.q0ochen.schafkopf.app.ui.navigation.Navigator
 import io.github.q0ochen.schafkopf.app.ui.navigation.Screen
+import io.github.q0ochen.schafkopf.app.ui.place.PlaceSuggestionList
+import org.koin.androidx.compose.koinViewModel
 
-/** Neuer Abend: vier Spieler wählen, Sitzordnung und ersten Geber festlegen, starten. */
+/**
+ * Neuer Abend: vier Spieler wählen, Sitzordnung und ersten Geber festlegen, Datum (auch in der Zukunft,
+ * docs/ARCHITEKTUR.md, 4.2) und Ort (mit Vorschlägen, 4.3), starten.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NewEveningScreen(navigator: Navigator) {
     val viewModel: NewEveningViewModel = koinViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     var newName by rememberSaveable { mutableStateOf("") }
+    var pickDate by rememberSaveable { mutableStateOf(false) }
     val names = state.players.associate { it.id to it.name }
 
     Scaffold(
@@ -74,10 +81,10 @@ fun NewEveningScreen(navigator: Navigator) {
                         .heightIn(min = 56.dp),
                 ) {
                     Text(
-                        text = if (state.missing > 0) {
-                            stringResource(R.string.new_need_four, state.missing)
-                        } else {
-                            stringResource(R.string.new_start)
+                        text = when {
+                            state.missing > 0 -> stringResource(R.string.new_need_four, state.missing)
+                            state.planned -> stringResource(R.string.new_create)
+                            else -> stringResource(R.string.new_start)
                         },
                         style = MaterialTheme.typography.titleMedium,
                     )
@@ -198,6 +205,25 @@ fun NewEveningScreen(navigator: Navigator) {
                 }
             }
 
+            SectionHeading(stringResource(R.string.edit_date_heading))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = state.date?.let { formatDate(it) }.orEmpty(),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(onClick = { pickDate = true }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.edit_date_change))
+                }
+            }
+            if (state.planned) {
+                Text(
+                    text = stringResource(R.string.new_date_planned_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
             OutlinedTextField(
                 value = state.location,
                 onValueChange = viewModel::setLocation,
@@ -208,6 +234,7 @@ fun NewEveningScreen(navigator: Navigator) {
                     .fillMaxWidth()
                     .padding(top = 12.dp),
             )
+            PlaceSuggestionList(state = state.places, onPick = viewModel::pickPlace)
 
             Text(
                 text = stringResource(R.string.new_rules_label, state.rulesName),
@@ -216,5 +243,17 @@ fun NewEveningScreen(navigator: Navigator) {
                 modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
             )
         }
+    }
+
+    val date = state.date
+    if (pickDate && date != null) {
+        EveningDateDialog(
+            selected = date,
+            onDismiss = { pickDate = false },
+            onPicked = {
+                pickDate = false
+                viewModel.setDate(it)
+            },
+        )
     }
 }

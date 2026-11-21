@@ -44,6 +44,7 @@
     <string name="start_players">Spieler</string>
     <string name="start_settings">Einstellungen</string>
     <string name="start_evening_running_badge">läuft</string>
+    <string name="start_evening_planned_badge">geplant</string>
     <plurals name="games_count">
         <item quantity="one">%1$d Spiel</item>
         <item quantity="other">%1$d Spiele</item>
@@ -67,6 +68,8 @@
     <string name="new_location">Ort (freiwillig)</string>
     <string name="new_rules_label">Regeln: %1$s</string>
     <string name="new_start">Abend starten</string>
+    <string name="new_create">Abend anlegen</string>
+    <string name="new_date_planned_hint">Der Abend ist geplant. Bis zu diesem Tag steht er unter „Abende“ als „geplant“.</string>
     <string name="new_need_four">Noch %1$d auswählen</string>
 
     <!-- Abend -->
@@ -105,6 +108,10 @@
     <string name="edit_date_apply">Übernehmen</string>
     <string name="edit_hint_unchanged">Eingetragene Spiele und Beträge bleiben unverändert. Wer gibt, ergibt sich aus Sitzordnung und erstem Geber.</string>
     <string name="edit_hint_round">Die Änderungen gelten für alle in der gemeinsamen Runde.</string>
+
+    <!-- Ortsvorschläge (docs/ARCHITEKTUR.md, Abschnitt 4.3) -->
+    <string name="place_attribution">Vorschläge: © OpenStreetMap-Mitwirkende, über photon.komoot.io</string>
+    <string name="place_offline">Ortsvorschläge gibt es nur mit Internet.</string>
     <string name="board_balance_description">%1$s: Stand %2$s, Platz %3$d</string>
 
     <!-- Bockrunde auslösen -->

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { defineConfig, loadEnv } from "vite";
 import { basePathFromWebAppUrl, DEFAULT_WEB_APP_URL } from "./scripts/base-path.mjs";
 import { contentSecurityPolicyPlugin, serviceWorkerPlugin } from "./scripts/vite-plugins.mjs";
+import { PHOTON_ORIGIN } from "./src/data/place/photonService.ts";
 import { readRoundConfig } from "./src/round/config.ts";
 
 export default defineConfig(({ mode }) => {
@@ -37,8 +38,9 @@ export default defineConfig(({ mode }) => {
     },
     preview: { port: 4173, strictPort: true },
     plugins: [
-      // Mit gemeinsamer Runde darf die App außer mit sich selbst nur mit deren Server sprechen.
-      contentSecurityPolicyPlugin({ connect: round === null ? [] : [new URL(round.url).origin] }),
+      // Außer mit sich selbst spricht die App nur mit Photon (Ortsvorschläge, docs/ARCHITEKTUR.md 4.3; in jedem Build)
+      // und, mit gemeinsamer Runde, mit deren Server.
+      contentSecurityPolicyPlugin({ connect: [PHOTON_ORIGIN, ...(round === null ? [] : [new URL(round.url).origin])] }),
       serviceWorkerPlugin({ entry: "src/sw/sw.ts" }),
     ],
     test: {

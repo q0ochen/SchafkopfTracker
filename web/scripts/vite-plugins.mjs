@@ -6,8 +6,8 @@ import { build } from "vite";
 
 /**
  * Content-Security-Policy als <meta> (nur im Build; der Entwicklungsserver braucht Inline-Skripte).
- * Ohne gemeinsame Runde spricht die Web-App mit keinem Server: Erlaubt sind nur Dateien der eigenen Herkunft. Mit
- * ihr kommt genau die Herkunft ihres Servers dazu (`connect`).
+ * Erlaubt sind Dateien der eigenen Herkunft; Anfragen gehen außerdem nur an die Herkünfte in `connect` (immer Photon
+ * für die Ortsvorschläge, mit gemeinsamer Runde dazu ihr Server, siehe vite.config.ts).
  * @param {{ connect?: readonly string[] }} [options]
  * @returns {import("vite").Plugin}
  */

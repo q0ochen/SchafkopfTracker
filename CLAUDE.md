@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 697, `data` 278, `database` 24, `app` 205, Web 601 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 42 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 699, `data` 296, `database` 24, `app` 225, Web 664 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 49 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -171,9 +171,9 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-`main` enthält alles bis Pull Request #25 (gemeinsame Runde; am 20.11.2026 auf Wunsch des Nutzers angelegt, „Ja pull
-request anlegen“, und von ihm um 18:40 zusammengeführt; alle Läufe danach grün, Testversion, F-Droid-Paketquelle und
-Web-App neu veröffentlicht). `entwicklung` ist noch auf dem älteren Stand.
+`main` enthält alles bis Pull Request #26 („Abend bearbeiten“, am 21.11.2026 zusammengeführt); #25 (gemeinsame Runde)
+war am 20.11.2026 auf Wunsch des Nutzers angelegt („Ja pull request anlegen“) und von ihm um 18:40 zusammengeführt
+worden. Der gesammelte Release vom 21.11.2026 (siehe unten) folgt als eigener Pull Request. `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -193,7 +193,7 @@ iPhone user können wir gern wieder eine Web-App als Zwischenlösung bauen“) a
 - **Android-Testversion:** dauerhafte Speicherung (`FileStorage`), öffentlicher Test-Schlüssel `app/debug.keystore`,
   `versionCode` 1000 + Laufnummer. Workflow `android.yml`: Tests, Release-APK, Installationstest im Emulator,
   Release `testversion` (Download ohne Anmeldung) und eigene F-Droid-Paketquelle auf dem Zweig `fdroid-repo`
-  (`docs/F-DROID.md`). Veröffentlicht wird bei jedem Push auf `main`, `entwicklung` und `claude/…`. Die
+  (`docs/F-DROID.md`). Veröffentlicht wird seit dem 21.11.2026 nur noch von `main` (siehe „Stand am 21.11.2026“). Die
   Paketquelle entsteht erst, wenn der Nutzer das Secret `FDROID_REPO_KEYSTORE` gesetzt hat (Schlüsseldatei am
   15.11.2026 an ihn übergeben; liegt nirgends im Repository).
 - Doppeltippen auf „Gewonnen“ bzw. „Abend starten“ legte in der Android-App ein Spiel bzw. einen Abend doppelt an;
@@ -387,6 +387,10 @@ liest sie beim Bauen der Testversion, sonst `app/supabase.properties`; Web als `
 - Das Access Token des Nutzers hat nur Rechte für die Datenbank (`analytics_logs_read` und `auth_config_read` fehlen);
   die Diagnose liest deshalb über das Datenbank-Passwort aus `auth.flow_state` (siehe `supabase/README.md`).
 - Noch offen: der Test zu zweit aus der Anleitung (Runde anlegen, beitreten, gegenseitig eintragen).
+- Der Zustimmungsbildschirm bei Google steht offenbar noch auf „Testen“: Am 21.11.2026 wollte der Nutzer einen
+  weiteren Testnutzer anlegen (Google Auth Platform → Zielgruppe, `console.cloud.google.com/auth/audience`). Dann kann
+  sich nur anmelden, wer dort eingetragen ist; andere bekommen bei Google „Zugriff blockiert“ (`access_denied`).
+  Die Anleitung sieht „In Produktion“ vor (dem Nutzer am 21.11.2026 als Alternative genannt).
 
 **Nicht geprüft:** echte Android-Geräte mit dem echten Server, der Abgleich zwischen zwei echten Handys.
 
@@ -442,6 +446,78 @@ Abend ein).
 - Testnamen in `app` ohne Umlaute: Klassendateien von Lambdas mit Umlauten im Namen scheiterten hier beim Kompilieren
   (Dateinamen ohne UTF-8).
 - Nicht geprüft: echte Geräte; wie das Datumsfeld der Web-App in Safari auf dem iPhone aussieht.
+- Pull Request #26 (Abend bearbeiten) auf Wunsch des Nutzers angelegt („Ja, Pull request anlegen“) und von ihm am
+  21.11.2026 zusammengeführt (`767cb88` auf `main`).
+
+Danach meldete der Nutzer (21.11.2026, Bildschirmfoto der Web-App auf dem iPhone): „Sobald man auf "weiterspielen"
+drückt und in den neuen Bildschirm gelangt kann man nicht mehr auf den Rückpfeil drücken“.
+
+- In Chromium nicht nachzustellen (auch nicht mit doppeltem Antippen). Vermutete Ursache: iOS stellt die App vom
+  Home-Bildschirm nach dem Neuladen (etwa nach einer Weile im Hintergrund) am letzten Bildschirm samt Zustand wieder
+  her, aber ohne die Schritte davor; dann bewegt `history.back()` nichts.
+- Behoben in `web/src/app/router.ts` (Vertrag `docs/ARCHITEKTUR.md`, Abschnitt 7, „Navigation“): Hat der Browser nach
+  400 ms nichts bewegt, geht „Zurück“ zum übergeordneten Bildschirm, und der gilt ab dann als erster. Ein Bildschirm,
+  der schon offen ist, kommt nicht ein zweites Mal in die Geschichte. Tests: `router.test.ts` und zwei in
+  `e2e/app.spec.ts` (einer legt `History.prototype.back` still und scheitert ohne die Korrektur).
+- Nicht auf einem echten iPhone geprüft. Hilft es dort nicht, erreicht vermutlich das Antippen den Knopf nicht; dann
+  beim Nutzer nachfragen, ob „Zurück“ auf anderen Bildschirmen geht und ob vorher etwas eingeblendet war.
+- **Entscheidung des Nutzers (21.11.2026):** „Heb dir den Rückpfeil Fix dann aber für einen gesammelten neuen Release
+  zu verschiedenen Bugfixes auf. Es werden jetzt neue Tests kommen“. Also keinen Pull Request, bis er darum bittet;
+  die Korrekturen aus den Tests sammeln sich auf dem Zweig `claude/gracious-keller-48tcn0` (Stand dort: `8cbe734`).
+  Die Web-App erreicht das ohnehin erst über `main`. Für Android hat der Nutzer am 21.11.2026 ebenso entschieden
+  („Ja, erst mit dem Release“): Seitdem veröffentlicht `android.yml` Testversion und F-Droid-Paketquelle nur noch von
+  `main` (Push oder „Run workflow“); Arbeitszweige werden nur geprüft. In F-Droid steht seit dem 21.11.2026 die
+  Testversion 49 (= `main` mit Pull Request #26).
+
+## Stand am 21.11.2026 (nachmittags): Abend vorab anlegen und Ortsvorschläge
+
+Wünsche des Nutzers (21.11.2026): „Es muss auch möglich sein, das Datum für den Abend in der Zukunft anzulegen, damit
+man bereits vorab den Abend anlegen kann, bevor man sich überhaupt in der Kneipe getroffen hat“, und den Ort „über die
+Google Locations“ festsetzen, „so wie das zum Beispiel bei WhatsApp ist … Ich gebe beispielsweise Klinikum Bamberg ein
+und mir erscheint als Dropdown automatisch die anklickbare Adresse und Postleitzahl“. Auf Rückfrage entschieden: „Erst
+nur per Name“ (kein Standort des Handys) und OpenStreetMap statt Google (Google verlangt ein Rechnungskonto mit
+Kreditkarte; Leitplanke „kein Geld ausgeben“).
+
+- **Geplante Abende** (Vertrag `docs/ARCHITEKTUR.md`, 4.2): „Neuer Abend“ hat ein Datum (vorbelegt heute, jeder Tag
+  wählbar); nach heute: Hinweis „Der Abend ist geplant. …“ und Knopf „Abend anlegen“. „Abend bearbeiten“ erlaubt jetzt
+  auch Tage nach heute. Geplant = nicht beendet und Tag des Beginns nach heute (`Evening.isPlanned`); die Startseite
+  zeigt ihn nie als „Abend läuft“, in der Liste mit der Marke „geplant“; am Tag selbst läuft er. Gespeichert wird
+  dafür nichts Neues. Kotlin: `ui/common/EveningDateDialog.kt` (gemeinsame Datumsauswahl), `NewEveningViewModel`,
+  `StartViewModel` (bekommt die `Clock`).
+- **Ortsvorschläge** (Vertrag 4.3): Photon von komoot (`https://photon.komoot.io/api/?q=…&lang=de&limit=8`, ohne
+  Schlüssel), ab 3 Zeichen 400 ms nach der letzten Eingabe, es zählt nur die letzte Antwort; Liste mit Name und
+  Adresse, darunter „Vorschläge: © OpenStreetMap-Mitwirkende, über photon.komoot.io“; ohne Netz „Ortsvorschläge gibt
+  es nur mit Internet.“. Ein Ort hat jetzt bis zu 100 statt 40 Zeichen (das Dateiformat prüft die Länge nicht).
+  Kotlin: Port `domain.ports.PlaceSearch`, `data/place` (`PhotonPlaces` rein, `PhotonPlaceSearch` mit OkHttp, 10 s
+  Frist), `app/ui/place` (`PlaceSuggestions` steuert, `PlaceSuggestionList` zeigt). Golden-Abschnitt `places` in
+  `web/src/data/golden/kotlin-format-golden.json` (71 Fälle, darunter eine echte Antwort vom 21.11.2026 in
+  `data/src/test/resources/place/`). Die Cloud-Umgebung „SchafkopfTracker“ erlaubt seit dem 21.11.2026 auf Vorschlag
+  von Claude (vom Nutzer bestätigt) zusätzlich `photon.komoot.io`; die echte Antwort hatte genau das erwartete Format.
+- **Tests der Android-App:** Ortsvorschläge kommen dort aus `TestPlaceSearch` (nie aus dem Netz). `TestSchafkopfApp`
+  schließt die Datenbank eines Tests erst 15 s nach dem Ende von Koin und beendet ein übrig gebliebenes Koin: Am
+  21.11.2026 fragte ein ViewModel nach Testende die schon geschlossene Datenbank ab, die Ausnahme landete im nächsten
+  Test, und danach scheiterten 39 Tests mit „A Koin Application has already been started“. Bildschirmfotos 63 bis 66
+  (`PlanAndPlaceScreenshotTest`).
+- **Web-App** (gebaut von einem Helfer, von Claude durchgesehen und geprüft): `web/src/data/place/photon.ts` (Port von
+  `PhotonPlaces`; liest die Antwort wie Kotlin mit dem Nachbau von kotlinx, `parseToJsonElement`, und trimmt mit
+  `kotlinTrim`), `web/src/ui/placeSuggestions.ts` (Steuerung wie in Android), `web/src/ui/LocationField.tsx` (Feld,
+  Liste, Hinweis; rollt die Liste nur so weit ins Bild, dass das Feld sichtbar bleibt), `web/src/ui/localDate.ts`
+  (`isPlanned`, `startOnDay`). Die Content-Security-Policy erlaubt `https://photon.komoot.io`. Alle Oberflächen-Tests
+  leiten Photon um (`web/e2e/support.ts`, ohne Antwort abgebrochen; `answerPlaces` liefert Vorschläge): Kein Test
+  fragt den echten Dienst. Der Text „Über die App“ in den Einstellungen nennt jetzt die Ortsvorschläge.
+- Android veröffentlicht seitdem nur noch von `main` (siehe oben, „Ja, erst mit dem Release“). Geprüft am 21.11.2026:
+  Läufe „Android“ 51, „Web-App“ 31 und „Supabase“ 17 grün (Stand `b8fd1c2`); Testversion und Paketquelle wurden dabei
+  wie gewollt übersprungen. Lauf 50 (nur die Umstellung) scheiterte, weil Robolectric seine Android-Laufzeit nicht
+  herunterladen konnte (`MavenArtifactFetcher`, FileNotFoundException), also außerhalb des Codes; tritt das wieder auf,
+  Lauf einmal neu starten.
+- **Gesammelter Release:** Pull Request nach `main` am 21.11.2026 auf Wunsch des Nutzers angelegt („pull request anlegen
+  ja“), mit Rückpfeil-Korrektur, Veröffentlichen nur von `main`, geplanten Abenden und Ortsvorschlägen. Nach dem
+  Zusammenführen veröffentlichen GitHub Pages, Testversion und F-Droid-Paketquelle neu; was danach auf den Zweig
+  kommt, braucht einen neuen Pull Request.
+- **Nicht geprüft:** echte Geräte; ob der Browser auf dem iPhone den Dienst abfragen darf (CORS): Die Antwort ohne
+  `Origin` hatte keine CORS-Kopfzeile, was bei Photon (Javalin) normal ist; eine Probe mit `Origin` wurde hier nicht
+  zugelassen. Kommen in der Web-App auf dem iPhone keine Vorschläge, sondern immer „Ortsvorschläge gibt es nur mit
+  Internet.“, zuerst das prüfen.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 

@@ -4,10 +4,10 @@
  * Projekts werden abgefangen und von dort beantwortet – auch die Anmeldung „bei Google“, die sofort mit einem Code
  * zur App zurückkehrt.
  */
-import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from "@playwright/test";
+import type { Browser, BrowserContext, BrowserContextOptions, Page } from "@playwright/test";
 import { FakeSupabase, NETWORK_FAILURE, type FakeAccount } from "../src/round/testing/fakeSupabase";
 import { FAKE_SUPABASE_URL, ROUND_APP_URL } from "./roundConfig";
-import { enterGame, openApp, startEvening } from "./support";
+import { blockPlaceSearch, enterGame, expect, openApp, startEvening } from "./support";
 
 export const KONTO_1: FakeAccount = { userId: "konto-1", email: "konto-1@example.org" };
 export const KONTO_2: FakeAccount = { userId: "konto-2", email: "konto-2@example.org" };
@@ -72,6 +72,7 @@ export const SYNC = { timeout: 15_000 };
  */
 export async function anotherDevice(browser: Browser, fake: FakeSupabase, options: BrowserContextOptions = {}): Promise<Page> {
   const context = await browser.newContext({ ...options, baseURL: ROUND_APP_URL, serviceWorkers: "block" });
+  await blockPlaceSearch(context);
   await routeSupabase(context, fake);
   return context.newPage();
 }

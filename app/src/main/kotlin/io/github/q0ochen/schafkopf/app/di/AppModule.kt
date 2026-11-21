@@ -45,6 +45,8 @@ import io.github.q0ochen.schafkopf.data.backup.BackupService
 import io.github.q0ochen.schafkopf.data.drive.DriveBackup
 import io.github.q0ochen.schafkopf.data.drive.GoogleDriveClient
 import io.github.q0ochen.schafkopf.data.llm.defaultHttpClient
+import io.github.q0ochen.schafkopf.data.place.PhotonPlaceSearch
+import io.github.q0ochen.schafkopf.domain.ports.PlaceSearch
 import io.github.q0ochen.schafkopf.database.RoomEveningRepository
 import io.github.q0ochen.schafkopf.database.RoomPlayerRepository
 import io.github.q0ochen.schafkopf.database.RoomSettingsRepository
@@ -107,6 +109,8 @@ val appModule = module {
 
     // Abend-Kommentator: ein HTTP-Client für die ganze App, die Anbindung je nach gewähltem Dienst.
     single { defaultHttpClient() }
+    // Ortsvorschläge aus OpenStreetMap (docs/ARCHITEKTUR.md, Abschnitt 4.3).
+    single<PlaceSearch> { PhotonPlaceSearch(get()) }
     single { TextGeneratorFactory(get()) }
     single { Commentator(get(), get(), get()) }
 
@@ -163,9 +167,9 @@ val appModule = module {
         )
     }
 
-    viewModel { StartViewModel(get(), get(), get()) }
+    viewModel { StartViewModel(get(), get(), get(), get()) }
     viewModel { RoundViewModel(get(), get(), get(), autoBackupEnabled = { get<AutoBackupStore>().status.value.enabled }) }
-    viewModel { NewEveningViewModel(get(), get(), get(), get(), get()) }
+    viewModel { NewEveningViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { params -> BoardViewModel(EveningId(params.get(0)), get(), get(), get(), get(), get()) }
     viewModel { params ->
         EditEveningViewModel(
@@ -175,6 +179,7 @@ val appModule = module {
             editor = get(),
             clock = get(),
             linked = get<RoundCoordinator>().state.map { it.link != null },
+            placeSearch = get(),
         )
     }
     viewModel { params ->
