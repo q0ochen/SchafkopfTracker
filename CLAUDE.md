@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 697, `data` 278, `database` 24, `app` 205, Web 607 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 44 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 699, `data` 296, `database` 24, `app` 225, Web 664 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 49 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -498,6 +498,13 @@ Kreditkarte; Leitplanke „kein Geld ausgeben“).
   21.11.2026 fragte ein ViewModel nach Testende die schon geschlossene Datenbank ab, die Ausnahme landete im nächsten
   Test, und danach scheiterten 39 Tests mit „A Koin Application has already been started“. Bildschirmfotos 63 bis 66
   (`PlanAndPlaceScreenshotTest`).
+- **Web-App** (gebaut von einem Helfer, von Claude durchgesehen und geprüft): `web/src/data/place/photon.ts` (Port von
+  `PhotonPlaces`; liest die Antwort wie Kotlin mit dem Nachbau von kotlinx, `parseToJsonElement`, und trimmt mit
+  `kotlinTrim`), `web/src/ui/placeSuggestions.ts` (Steuerung wie in Android), `web/src/ui/LocationField.tsx` (Feld,
+  Liste, Hinweis; rollt die Liste nur so weit ins Bild, dass das Feld sichtbar bleibt), `web/src/ui/localDate.ts`
+  (`isPlanned`, `startOnDay`). Die Content-Security-Policy erlaubt `https://photon.komoot.io`. Alle Oberflächen-Tests
+  leiten Photon um (`web/e2e/support.ts`, ohne Antwort abgebrochen; `answerPlaces` liefert Vorschläge): Kein Test
+  fragt den echten Dienst. Der Text „Über die App“ in den Einstellungen nennt jetzt die Ortsvorschläge.
 - Android veröffentlicht seitdem nur noch von `main` (siehe oben, „Ja, erst mit dem Release“).
 - **Nicht geprüft:** echte Geräte; ob der Browser auf dem iPhone den Dienst abfragen darf (CORS): Die Antwort ohne
   `Origin` hatte keine CORS-Kopfzeile, was bei Photon (Javalin) normal ist; eine Probe mit `Origin` wurde hier nicht

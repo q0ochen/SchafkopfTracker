@@ -1,15 +1,15 @@
 /*
- * „Abend bearbeiten“: Datum, Ort, Sitzordnung und ersten Geber eines Abends nachträglich ändern (docs/ARCHITEKTUR.md,
- * Abschnitt 4.1). Gespeichert wird erst mit „Speichern“; zurück ohne Speichern verwirft die Änderungen.
+ * „Abend bearbeiten“: Datum (jeder Tag, auch einer nach heute), Ort (mit Ortsvorschlägen), Sitzordnung und ersten
+ * Geber eines Abends nachträglich ändern (docs/ARCHITEKTUR.md, Abschnitt 4.1). Gespeichert wird erst mit „Speichern“;
+ * zurück ohne Speichern verwirft die Änderungen.
  */
 import { useRef, useState } from "preact/hooks";
-import { EveningEdit, MAX_LOCATION_LENGTH } from "../../core/evening/EveningEdit";
+import { EveningEdit } from "../../core/evening/EveningEdit";
 import { Hint, SeatingList, SectionHeading, TopBar } from "../components";
 import { useAppState, useNames, useRoundState, useServices } from "../context";
 import {
   changed,
   editedDetails,
-  localDateOf,
   moveSeat,
   setDate,
   setFirstDealer,
@@ -18,6 +18,7 @@ import {
   type EditEveningDraft,
   type EditEveningStart,
 } from "../editEvening";
+import { LocationField } from "../LocationField";
 
 export function EditEveningScreen({ eveningId }: { eveningId: string }) {
   const { store, router } = useServices();
@@ -46,10 +47,10 @@ export function EditEveningScreen({ eveningId }: { eveningId: string }) {
   }
 
   const { original } = start;
-  const today = localDateOf(store.clock.now());
   const canSave = changed(original, draft);
   const name = (id: string) => names.get(id) ?? "?";
-  const change = (transform: (current: EditEveningDraft) => EditEveningDraft) => setDraft(transform(draft));
+  const change = (transform: (current: EditEveningDraft) => EditEveningDraft) =>
+    setDraft((current) => (current === null ? current : transform(current)));
 
   const save = () => {
     if (done.current || !canSave) return;
@@ -70,32 +71,18 @@ export function EditEveningScreen({ eveningId }: { eveningId: string }) {
           <input
             id="evening-date"
             type="date"
-            max={today}
             value={draft.date}
             onInput={(event) => {
               const input = event.currentTarget as HTMLInputElement;
-              const next = setDate(draft, input.value, today);
-              // Ein Tag nach heute oder ein geleertes Feld zählt nicht: Das Feld zeigt wieder den gewählten Tag.
+              const next = setDate(draft, input.value);
+              // Ein geleertes Feld oder etwas, das kein Datum ist, zählt nicht: Das Feld zeigt wieder den gewählten Tag.
               if (input.value !== next.date) input.value = next.date;
               setDraft(next);
             }}
           />
         </div>
 
-        <div class="text-field">
-          <label for="evening-location">Ort (freiwillig)</label>
-          <input
-            id="evening-location"
-            type="text"
-            autoComplete="off"
-            maxLength={MAX_LOCATION_LENGTH}
-            value={draft.location}
-            onInput={(event) => {
-              const value = (event.currentTarget as HTMLInputElement).value;
-              change((current) => setLocation(current, value));
-            }}
-          />
-        </div>
+        <LocationField id="evening-location" value={draft.location} onChange={(value) => change((current) => setLocation(current, value))} />
 
         <SectionHeading>Sitzordnung im Uhrzeigersinn</SectionHeading>
         <Hint>In dieser Reihenfolge wechselt der Geber. Antippen legt fest, wer zuerst gibt.</Hint>

@@ -7,8 +7,8 @@
  * bleibt so.
  */
 import { EveningEdit, eveningDetailsOf, MAX_LOCATION_LENGTH, type EveningDetails } from "../core/evening/EveningEdit";
-import { formatInstant, instantParts, instantToEpochMillis } from "../core/instant";
-import type { Evening, InstantText, PlayerId } from "../core/model";
+import type { Evening, PlayerId } from "../core/model";
+import { localDateOf, normalizedLocalDate, startOnDay } from "./localDate";
 import { movedInSeating } from "./newEvening";
 
 /** Was der Nutzer bisher eingestellt hat; beim Öffnen genau der Stand des Abends. */
@@ -29,69 +29,6 @@ export interface EditEveningStart {
   readonly draft: EditEveningDraft;
 }
 
-/** Ein Tag im Kalender, Monat und Tag ab 1. */
-interface LocalDay {
-  readonly year: number;
-  readonly month: number;
-  readonly day: number;
-}
-
-const LOCAL_DATE = /^(\d{4,})-(\d{2})-(\d{2})$/;
-
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
-}
-
-function localDateText({ year, month, day }: LocalDay): string {
-  return `${String(year).padStart(4, "0")}-${pad2(month)}-${pad2(day)}`;
-}
-
-/** Ein Datum „JJJJ-MM-TT“ (ab dem Jahr 1, wie es ein Datumsfeld liefert); `null`, wenn es keines ist. */
-function parseLocalDate(text: string): LocalDay | null {
-  const match = LOCAL_DATE.exec(text);
-  if (!match) return null;
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  if (year < 1 || month < 1 || month > 12) return null;
-  // Der Tag 0 des Folgemonats ist der letzte dieses Monats (in UTC gerechnet, damit keine Zeitzone hineinspielt).
-  const lastDay = new Date(0);
-  lastDay.setUTCFullYear(year, month, 0);
-  return day >= 1 && day <= lastDay.getUTCDate() ? { year, month, day } : null;
-}
-
-function compareDays(a: LocalDay, b: LocalDay): number {
-  return a.year - b.year || a.month - b.month || a.day - b.day;
-}
-
-/**
- * Der Tag eines Zeitpunkts als Ortsdatum „JJJJ-MM-TT“ in der Zeitzone des Browsers. Leer, wenn ein Datumsfeld diesen
- * Tag nicht zeigen kann (vor dem Jahr 1 oder außerhalb des Bereichs von `Date`).
- */
-export function localDateOf(instant: InstantText): string {
-  const date = new Date(instantToEpochMillis(instant));
-  if (Number.isNaN(date.getTime()) || date.getFullYear() < 1) return "";
-  return localDateText({ year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() });
-}
-
-/**
- * Derselbe Beginn an einem anderen Tag `date` („JJJJ-MM-TT“): dieselbe Ortszeit in der Zeitzone des Browsers, auch
- * über eine Umstellung der Sommerzeit hinweg; Bruchteile unter einer Millisekunde bleiben. Gerechnet wird mit den
- * Settern von `Date` für die Ortszeit: Fällt die Uhrzeit an dem Tag aus (die Stunde, die bei der Umstellung auf die
- * Sommerzeit fehlt), rückt sie um diese Stunde vor; gibt es sie zweimal (Umstellung auf die Winterzeit), gilt die
- * frühere. Lässt sich der bisherige Beginn nicht als `Date` darstellen (beschädigte Daten), beginnt der Abend um
- * Mitternacht. `null`, wenn `date` kein Datum ist.
- */
-export function startOnDay(startedAt: InstantText, date: string): InstantText | null {
-  const day = parseLocalDate(date);
-  if (day === null) return null;
-  const local = new Date(instantToEpochMillis(startedAt));
-  const subMillis = Number.isNaN(local.getTime()) ? 0 : instantParts(startedAt).nano % 1_000_000;
-  local.setFullYear(day.year, day.month - 1, day.day);
-  const millis = local.getTime();
-  if (Number.isNaN(millis)) return null;
-  const seconds = Math.floor(millis / 1000);
-  return formatInstant({ epochSecond: BigInt(seconds), nano: (millis - seconds * 1000) * 1_000_000 + subMillis });
-}
-
 /** Der Entwurf beim Öffnen: genau die Angaben des Abends, der Beginn als Ortsdatum. */
 export function draftOf(original: EveningDetails): EditEveningDraft {
   return {
@@ -109,15 +46,12 @@ export function startEditing(evening: Evening): EditEveningStart {
 }
 
 /**
- * Wählt einen anderen Tag. Tage nach `today` (ebenfalls „JJJJ-MM-TT“, das Ortsdatum von heute) und alles, was kein
- * Datum ist (auch ein geleertes Feld), bleiben unbeachtet.
+ * Wählt einen anderen Tag, auch einen nach heute (dann ist der Abend geplant, docs/ARCHITEKTUR.md 4.2; bis zum
+ * 21.11.2026 waren Tage nach heute gesperrt). Was kein Datum ist (auch ein geleertes Feld), bleibt unbeachtet.
  */
-export function setDate(draft: EditEveningDraft, date: string, today: string): EditEveningDraft {
-  const day = parseLocalDate(date);
-  const latest = parseLocalDate(today);
-  if (day === null || latest === null || compareDays(day, latest) > 0) return draft;
-  const text = localDateText(day);
-  return text === draft.date ? draft : { ...draft, date: text };
+export function setDate(draft: EditEveningDraft, date: string): EditEveningDraft {
+  const text = normalizedLocalDate(date);
+  return text === null || text === draft.date ? draft : { ...draft, date: text };
 }
 
 /** Der Ort, wie er im Feld steht, auf {@link MAX_LOCATION_LENGTH} Zeichen gekürzt (gesäubert wird beim Speichern). */

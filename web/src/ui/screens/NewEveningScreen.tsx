@@ -1,15 +1,21 @@
-/* „Neuer Abend“: vier Spieler wählen, Sitzordnung und ersten Geber festlegen, Ort eintragen, starten. */
+/*
+ * „Neuer Abend“: vier Spieler wählen, Sitzordnung und ersten Geber festlegen, Datum wählen (auch einen späteren Tag:
+ * dann ist der Abend geplant, docs/ARCHITEKTUR.md 4.2), Ort eintragen (mit Ortsvorschlägen, 4.3), starten.
+ */
 import { useMemo, useState } from "preact/hooks";
 import { MAX_NAME_LENGTH } from "../../app/players";
-import { MAX_LOCATION_LENGTH } from "../../core/evening/EveningEdit";
 import { ChoiceTile, Hint, SeatingList, SectionHeading, TopBar } from "../components";
 import { useAppState, useServices } from "../context";
+import { localDateOf } from "../localDate";
+import { LocationField } from "../LocationField";
 import {
   createEvening,
   EMPTY_SELECTION,
   moveSeat,
+  newEveningStart,
   newEveningView,
   seatNewPlayer,
+  setDate,
   setFirstDealer,
   setLocation,
   toggleSeat,
@@ -23,7 +29,8 @@ export function NewEveningScreen() {
   const [selection, setSelection] = useState<NewEveningSelection>(EMPTY_SELECTION);
   const [newName, setNewName] = useState("");
   const [nameError, setNameError] = useState(false);
-  const view = useMemo(() => newEveningView(players, evenings, selection), [players, evenings, selection]);
+  const today = localDateOf(store.clock.now());
+  const view = useMemo(() => newEveningView(players, evenings, selection, today), [players, evenings, selection, today]);
   const name = (id: string) => players.find((it) => it.id === id)?.name ?? "?";
 
   const addPlayer = (event: Event) => {
@@ -39,7 +46,7 @@ export function NewEveningScreen() {
   };
 
   const start = () => {
-    const evening = createEvening(view, settings.defaultRules, store.clock.newId(), store.clock.now());
+    const evening = createEvening(view, settings.defaultRules, store.clock.newId(), newEveningStart(selection, store.clock.now()));
     if (!evening) return;
     void store.saveEvening(evening);
     router.open({ name: "board", eveningId: evening.id }, { replace: true });
@@ -113,25 +120,40 @@ export function NewEveningScreen() {
         )}
 
         <div class="text-field">
-          <label for="location">Ort (freiwillig)</label>
+          <h2 class="section-heading">
+            <label for="evening-date">Datum</label>
+          </h2>
           <input
-            id="location"
-            type="text"
-            autoComplete="off"
-            maxLength={MAX_LOCATION_LENGTH}
-            value={view.location}
+            id="evening-date"
+            type="date"
+            value={view.date}
+            aria-describedby={view.planned ? "evening-planned" : undefined}
             onInput={(event) => {
-              const value = (event.currentTarget as HTMLInputElement).value;
-              setSelection((current) => setLocation(current, value));
+              const input = event.currentTarget as HTMLInputElement;
+              const next = setDate(selection, input.value);
+              // Ein geleertes Feld oder etwas, das kein Datum ist, zählt nicht: Das Feld zeigt wieder den gewählten Tag.
+              const shown = next.date ?? today;
+              if (input.value !== shown) input.value = shown;
+              setSelection(next);
             }}
           />
         </div>
+        {/* Immer da, damit Screenreader den Hinweis vorlesen, sobald ein späterer Tag gewählt ist. */}
+        <div aria-live="polite">
+          {view.planned ? (
+            <p id="evening-planned" class="hint">
+              Der Abend ist geplant. Bis zu diesem Tag steht er unter „Abende“ als „geplant“.
+            </p>
+          ) : null}
+        </div>
+
+        <LocationField id="location" value={view.location} onChange={(value) => setSelection((current) => setLocation(current, value))} />
         <Hint>Regeln: {settings.defaultRules.name}</Hint>
       </main>
       <div class="bottom-bar">
         <div class="bottom-bar-inner">
           <button type="button" class="button primary big" disabled={!view.canStart} onClick={start}>
-            {view.missing > 0 ? `Noch ${view.missing} auswählen` : "Abend starten"}
+            {view.missing > 0 ? `Noch ${view.missing} auswählen` : view.planned ? "Abend anlegen" : "Abend starten"}
           </button>
         </div>
       </div>

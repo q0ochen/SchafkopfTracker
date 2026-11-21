@@ -2,7 +2,6 @@
  * Die gemeinsame Runde in der Oberfläche (docs/ARCHITEKTUR.md, Abschnitt 8.9), gegen die gebaute App mit einem
  * nachgestellten Supabase-Projekt: anmelden, Runde anlegen, „Das bin ich“, einladen, beitreten, Statuszeile.
  */
-import { expect, test } from "@playwright/test";
 import { FAKE_SUPABASE_URL, ROUND_APP_URL } from "./roundConfig";
 import type { Evening, Player } from "../src/core/model";
 import { InviteLinks } from "../src/core/round/InviteLinks";
@@ -31,7 +30,7 @@ import {
   signIn,
   SYNC,
 } from "./roundSupport";
-import { enterGame, expectAccessible, openApp, startEvening, waitUntilSaved } from "./support";
+import { answerPlaces, enterGame, expect, expectAccessible, openApp, photonAnswer, startEvening, test, waitUntilSaved } from "./support";
 
 test.use({ baseURL: ROUND_APP_URL });
 
@@ -458,6 +457,23 @@ test("„Abend bearbeiten“ sagt mit Runde, dass die Änderungen für alle gelt
   const [round] = await fake.session(KONTO_1.userId).myRounds();
   await expect.poll(() => fake.server.evenings(round.id)[0]?.location, SYNC).toBe("Beim Huber");
   expect(fake.server.evenings(round.id)[0]?.seating).toEqual(["spieler-1", "spieler-2", "spieler-4", "spieler-3"]);
+});
+
+test("Ortsvorschläge gehen auch in der App mit Server: Die Content-Security-Policy erlaubt Photon und den Server", async ({ page }) => {
+  const requests = await answerPlaces(
+    page,
+    photonAnswer({ name: "Schlenkerla", street: "Dominikanerstraße", housenumber: "6", postcode: "96049", city: "Bamberg", countrycode: "DE" }),
+  );
+  await openApp(page);
+  await expect(page.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveAttribute(
+    "content",
+    /connect-src 'self' https:\/\/photon\.komoot\.io https:\/\/runde\.invalid;/,
+  );
+  await page.getByRole("button", { name: "Neuer Abend" }).click();
+  await page.getByLabel("Ort (freiwillig)").fill("Schlenkerla");
+  const list = page.getByRole("list", { name: "Ortsvorschläge" });
+  await expect(list.getByRole("button", { name: "Schlenkerla, Dominikanerstraße 6, 96049 Bamberg" })).toBeVisible();
+  expect(requests.map((it) => it.url)).toEqual(["https://photon.komoot.io/api/?q=Schlenkerla&lang=de&limit=8"]);
 });
 
 test("Sicherung einlesen mit Runde: Hinweis, dass es bei allen erscheint; die Namen bleiben die der Runde", async ({ page }) => {

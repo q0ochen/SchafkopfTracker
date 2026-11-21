@@ -1,10 +1,11 @@
 /*
  * Logik des Bildschirms „Neuer Abend“ – verhaltensgleich zur Android-App (`ui/newevening/NewEveningViewModel.kt`),
- * hier als reine Funktionen über der Auswahl des Nutzers.
+ * hier als reine Funktionen über der Auswahl des Nutzers. Datum und geplante Abende: docs/ARCHITEKTUR.md, 4.2.
  */
 import { MAX_LOCATION_LENGTH } from "../core/evening/EveningEdit";
 import { kotlinTrim } from "../core/kotlin";
-import type { Evening, Player, PlayerId, RuleSet } from "../core/model";
+import type { Evening, InstantText, Player, PlayerId, RuleSet } from "../core/model";
+import { isAfterDay, localDateOf, normalizedLocalDate, startOnDay } from "./localDate";
 
 /** Am Tisch sitzen genau vier. */
 export const PLAYERS_AT_TABLE = 4;
@@ -14,15 +15,17 @@ export const PLAYERS_AT_TABLE = 4;
  *
  * @property customized `false`, solange der Nutzer an der Sitzordnung nichts geändert hat; dann gilt der Vorschlag
  *   (die Sitzordnung des letzten Abends oder die feste Vierer-Runde).
+ * @property date Der gewählte Tag „JJJJ-MM-TT“; `null`, solange der Nutzer keinen gewählt hat (dann heute).
  */
 export interface NewEveningSelection {
   readonly customized: boolean;
   readonly seating: readonly PlayerId[];
   readonly firstDealer: PlayerId | null;
   readonly location: string;
+  readonly date: string | null;
 }
 
-export const EMPTY_SELECTION: NewEveningSelection = { customized: false, seating: [], firstDealer: null, location: "" };
+export const EMPTY_SELECTION: NewEveningSelection = { customized: false, seating: [], firstDealer: null, location: "", date: null };
 
 /** Was der Bildschirm anzeigt. */
 export interface NewEveningView {
@@ -36,15 +39,24 @@ export interface NewEveningView {
   readonly missing: number;
   readonly canStart: boolean;
   readonly canUseLast: boolean;
+  /** Der Tag des Abends „JJJJ-MM-TT“ fürs Datumsfeld; vorbelegt ist heute. */
+  readonly date: string;
+  /**
+   * Der Tag liegt nach heute: Der Abend wird geplant („Der Abend ist geplant. …“ unter dem Datum, Knopf „Abend
+   * anlegen“ statt „Abend starten“).
+   */
+  readonly planned: boolean;
 }
 
 /**
  * @param evenings Alle Abende, der neueste zuerst.
+ * @param today Das Ortsdatum von heute („JJJJ-MM-TT“).
  */
 export function newEveningView(
   allPlayers: readonly Player[],
   evenings: readonly Evening[],
   chosen: NewEveningSelection,
+  today: string,
 ): NewEveningView {
   const active = allPlayers.filter((it) => !it.archived);
   const activeIds = new Set(active.map((it) => it.id));
@@ -59,6 +71,7 @@ export function newEveningView(
   const seating = chosen.customized ? chosen.seating.filter((it) => activeIds.has(it)) : suggestion;
   const firstDealer = chosen.firstDealer !== null && seating.includes(chosen.firstDealer) ? chosen.firstDealer : (seating[0] ?? null);
   const missing = PLAYERS_AT_TABLE - seating.length;
+  const date = chosen.date ?? today;
   return {
     players: active,
     seating,
@@ -68,6 +81,8 @@ export function newEveningView(
     missing,
     canStart: missing === 0 && firstDealer !== null && seating.includes(firstDealer),
     canUseLast: lastSeating.length === PLAYERS_AT_TABLE,
+    date,
+    planned: isAfterDay(date, today),
   };
 }
 
@@ -117,8 +132,27 @@ export function setFirstDealer(chosen: NewEveningSelection, player: PlayerId): N
   return { ...chosen, firstDealer: player };
 }
 
+/** Der Ort, wie er im Feld steht, auf {@link MAX_LOCATION_LENGTH} Zeichen gekürzt (getrimmt wird beim Anlegen). */
 export function setLocation(chosen: NewEveningSelection, location: string): NewEveningSelection {
   return { ...chosen, location: location.slice(0, MAX_LOCATION_LENGTH) };
+}
+
+/**
+ * Wählt den Tag des Abends: jeden Tag, auch einen nach heute (dann ist der Abend geplant) oder einen früheren. Was kein
+ * Datum ist (auch ein geleertes Feld), bleibt unbeachtet.
+ */
+export function setDate(chosen: NewEveningSelection, date: string): NewEveningSelection {
+  const text = normalizedLocalDate(date);
+  return text === null || text === chosen.date ? chosen : { ...chosen, date: text };
+}
+
+/**
+ * Der Beginn des neuen Abends beim Antippen um `now`: Ist der gewählte Tag heute (oder keiner gewählt), genau `now`;
+ * sonst dieselbe Ortszeit wie `now`, aber an dem gewählten Tag (wie beim Ändern des Datums in „Abend bearbeiten“).
+ */
+export function newEveningStart(chosen: NewEveningSelection, now: InstantText): InstantText {
+  if (chosen.date === null || chosen.date === localDateOf(now)) return now;
+  return startOnDay(now, chosen.date) ?? now;
 }
 
 /** Übernimmt Spieler und Sitzordnung des letzten Abends. */

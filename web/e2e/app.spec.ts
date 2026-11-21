@@ -1,7 +1,20 @@
 /* Oberflächen-Tests der Web-App: ein ganzer Abend am Tisch, Sicherung, Neuladen, Barrierefreiheit. */
 import { readFile } from "node:fs/promises";
-import { expect, test } from "@playwright/test";
-import { enterGame, expectAccessible, nameDefaultPlayers, openApp, standing, startEvening, waitUntilSaved } from "./support";
+import {
+  answerPlaces,
+  blockPlaceSearch,
+  enterGame,
+  expect,
+  expectAccessible,
+  nameDefaultPlayers,
+  openApp,
+  PHOTON_REQUESTS,
+  photonAnswer,
+  standing,
+  startEvening,
+  test,
+  waitUntilSaved,
+} from "./support";
 
 test("Startseite: feste Runde vorbelegt, alles erreichbar und barrierefrei", async ({ page }) => {
   await openApp(page);
@@ -124,6 +137,7 @@ test("Sicherung speichern und auf einem anderen Gerät einlesen", async ({ page,
 
   // Neues Gerät: leerer Speicher.
   const other = await browser.newPage();
+  await blockPlaceSearch(other.context());
   await openApp(other, "/einstellungen");
   await other.locator('input[type="file"]').setInputFiles({ name: "sicherung.json", mimeType: "application/json", buffer: Buffer.from(text) });
   const dialog = other.getByRole("dialog", { name: "Sicherung einlesen?" });
@@ -185,13 +199,15 @@ test("Abend bearbeiten: Datum, Ort, Sitzordnung und erster Geber; Spiele und Bet
   await expect(save).toBeDisabled();
   await expectAccessible(page);
 
-  // Ein Tag nach heute lässt sich nicht wählen.
+  // Jeder Tag lässt sich wählen, auch einer nach heute (bis zum 21.11.2026 gesperrt); zurück auf heute ist es unverändert.
   const date = page.getByLabel("Datum");
-  const today = await date.getAttribute("max");
+  await expect(date).not.toHaveAttribute("max");
+  const today = await date.inputValue();
   expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-  await expect(date).toHaveValue(today ?? "");
   await date.fill("2999-01-01");
-  await expect(date).toHaveValue(today ?? "");
+  await expect(date).toHaveValue("2999-01-01");
+  await expect(save).toBeEnabled();
+  await date.fill(today);
   await expect(save).toBeDisabled();
 
   await date.fill("2025-11-15");
@@ -242,6 +258,162 @@ test("Abend bearbeiten: einen Abend, den es nicht gibt, gibt es nicht", async ({
   await openApp(page, "/abend/gibt-es-nicht/bearbeiten");
   await expect(page.getByRole("heading", { level: 1, name: "Abend bearbeiten" })).toBeVisible();
   await expect(page.getByText("Diesen Abend gibt es nicht mehr.")).toBeVisible();
+});
+
+/** Was Photon für „Klinikum Bamberg“ liefert (gekürzt auf die Felder, die die App liest, und ein paar andere). */
+const KLINIKUM = photonAnswer({
+  osm_key: "amenity",
+  osm_value: "hospital",
+  name: "Klinikum Bamberg",
+  street: "Buger Straße",
+  housenumber: "80",
+  postcode: "96049",
+  city: "Bamberg",
+  district: "Bug",
+  state: "Bayern",
+  country: "Deutschland",
+  countrycode: "DE",
+});
+
+test("Neuer Abend: Ortsvorschläge aus OpenStreetMap, antippen übernimmt den Ort", async ({ page }) => {
+  const requests = await answerPlaces(page, KLINIKUM);
+  await openApp(page);
+  // Die Content-Security-Policy lässt Photon in jedem Build zu.
+  await expect(page.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveAttribute("content", /connect-src 'self' https:\/\/photon\.komoot\.io;/);
+  await page.getByRole("button", { name: "Neuer Abend" }).click();
+  const location = page.getByLabel("Ort (freiwillig)");
+  await expect(location).toHaveAttribute("maxlength", "100");
+
+  await location.fill("Klinikum Bamberg");
+  const list = page.getByRole("list", { name: "Ortsvorschläge" });
+  const suggestion = list.getByRole("button", { name: "Klinikum Bamberg, Buger Straße 80, 96049 Bamberg" });
+  await expect(suggestion).toBeVisible();
+  await expect(suggestion).toContainText("Klinikum Bamberg");
+  await expect(suggestion).toContainText("Buger Straße 80, 96049 Bamberg");
+  await expect(page.getByText("Vorschläge: © OpenStreetMap-Mitwirkende, über photon.komoot.io")).toBeVisible();
+  // Gesendet wird nur der eingetippte Text, ohne Verweis auf die App.
+  expect(requests.map((it) => it.url)).toEqual(["https://photon.komoot.io/api/?q=Klinikum%20Bamberg&lang=de&limit=8"]);
+  expect(requests[0].headers.referer).toBeUndefined();
+  expect((await suggestion.boundingBox())?.height).toBeGreaterThanOrEqual(56);
+  await expectAccessible(page);
+
+  await suggestion.click();
+  await expect(location).toHaveValue("Klinikum Bamberg, Buger Straße 80, 96049 Bamberg");
+  await expect(list).toBeHidden();
+  await expect(page.getByText("Vorschläge: © OpenStreetMap-Mitwirkende, über photon.komoot.io")).toBeHidden();
+  // Für das Übernehmen wird nicht gesucht (die Wartezeit nach einer Eingabe ist 400 ms).
+  await page.waitForTimeout(800);
+  expect(requests).toHaveLength(1);
+
+  await page.getByRole("button", { name: "Abend starten" }).click();
+  await expect(page.getByRole("button", { name: "Spiel eintragen" })).toBeVisible();
+  await openApp(page);
+  await expect(page.getByRole("list", { name: "Alle Abende" })).toContainText("Klinikum Bamberg, Buger Straße 80, 96049 Bamberg");
+});
+
+test("Neuer Abend: ohne Internet nur ein Hinweis, der Ort lässt sich trotzdem eintippen", async ({ page }) => {
+  await page.route(PHOTON_REQUESTS, (route) => route.abort("internetdisconnected"));
+  await openApp(page);
+  await page.getByRole("button", { name: "Neuer Abend" }).click();
+  const location = page.getByLabel("Ort (freiwillig)");
+  await location.fill("Gasthaus Post");
+  await expect(page.getByText("Ortsvorschläge gibt es nur mit Internet.")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Ortsvorschläge" })).toHaveCount(0);
+  await expectAccessible(page);
+  // Unter drei Zeichen verschwindet der Hinweis; mit mehr kommt er nach der nächsten Suche wieder.
+  await location.fill("Ga");
+  await expect(page.getByText("Ortsvorschläge gibt es nur mit Internet.")).toBeHidden();
+  await location.fill("Gasthaus Post");
+  await expect(page.getByText("Ortsvorschläge gibt es nur mit Internet.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Abend starten" }).click();
+  await expect(page.getByRole("button", { name: "Spiel eintragen" })).toBeVisible();
+  await openApp(page);
+  await expect(page.getByRole("list", { name: "Alle Abende" })).toContainText("Gasthaus Post");
+});
+
+/** Ein Tag im nächsten Jahr („JJJJ-06-15“) zu einem Ortsdatum „JJJJ-MM-TT“. */
+function nextYearsDay(today: string): string {
+  return `${Number(today.slice(0, 4)) + 1}-06-15`;
+}
+
+test("Neuer Abend an einem späteren Tag: geplant, nicht in „Abend läuft“", async ({ page }) => {
+  await nameDefaultPlayers(page);
+  await startEvening(page);
+
+  await openApp(page);
+  await page.getByRole("button", { name: "Neuer Abend" }).click();
+  const date = page.getByLabel("Datum");
+  const today = await date.inputValue();
+  expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  await expect(page.getByRole("button", { name: "Abend starten" })).toBeVisible();
+  const planned = page.getByText("Der Abend ist geplant. Bis zu diesem Tag steht er unter „Abende“ als „geplant“.");
+  await expect(planned).toBeHidden();
+
+  await date.fill(nextYearsDay(today));
+  await expect(planned).toBeVisible();
+  await expect(page.getByRole("button", { name: "Abend anlegen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Abend starten" })).toHaveCount(0);
+  await expectAccessible(page);
+  // Fehlt noch jemand, bleibt es bei „Noch ‹n› auswählen“.
+  await page.getByRole("group", { name: "Spieler auswählen" }).getByRole("button", { name: "Bert" }).click();
+  await expect(page.getByRole("button", { name: "Noch 1 auswählen" })).toBeDisabled();
+  await page.getByRole("group", { name: "Spieler auswählen" }).getByRole("button", { name: "Bert" }).click();
+  // Zurück auf heute: wieder „Abend starten“.
+  await date.fill(today);
+  await expect(planned).toBeHidden();
+  await expect(page.getByRole("button", { name: "Abend starten" })).toBeVisible();
+
+  await date.fill(nextYearsDay(today));
+  await page.getByLabel("Ort (freiwillig)").fill("Schützenhaus");
+  await page.getByRole("button", { name: "Abend anlegen" }).click();
+  // Danach öffnet sich der Abend wie sonst, mit dem gewählten Tag im Titel.
+  await expect(page.getByRole("button", { name: "Spiel eintragen" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^Abend vom .*15\. Juni \d{4}$/ })).toBeVisible();
+
+  // Startseite: „Abend läuft“ zeigt den Abend von heute, der geplante steht nur in der Liste („geplant“ statt „läuft“).
+  await openApp(page);
+  const runningCard = page.getByRole("region", { name: "Abend läuft" });
+  await expect(runningCard).toBeVisible();
+  await expect(runningCard).not.toContainText("Schützenhaus");
+  const items = page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem");
+  await expect(items).toHaveCount(2);
+  await expect(items.first()).toContainText("Schützenhaus");
+  await expect(items.first().locator(".badge")).toHaveText("geplant");
+  await expect(items.nth(1).locator(".badge")).toHaveText("läuft");
+  await expectAccessible(page);
+
+  // Ist der Abend von heute beendet, gibt es keine Karte „Abend läuft“ (der geplante zählt nicht).
+  await runningCard.getByRole("button", { name: "Weiterspielen" }).click();
+  await page.getByRole("button", { name: "Mehr" }).click();
+  await page.getByRole("button", { name: "Abend beenden" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Abschluss" })).toBeVisible();
+  await openApp(page);
+  await expect(page.getByRole("heading", { name: "Abend läuft" })).toHaveCount(0);
+  await expect(items.first().locator(".badge")).toHaveText("geplant");
+  await expect(items.nth(1).locator(".badge")).toHaveCount(0);
+});
+
+test("Abend bearbeiten: ein Tag nach heute macht den Abend zum geplanten; Ortsvorschläge auch hier", async ({ page }) => {
+  await answerPlaces(page, KLINIKUM);
+  await startEvening(page);
+  await page.getByRole("button", { name: "Mehr" }).click();
+  await page.getByRole("button", { name: "Abend bearbeiten" }).click();
+  const date = page.getByLabel("Datum");
+  await date.fill(nextYearsDay(await date.inputValue()));
+  // Beim Öffnen wird nicht gesucht; erst nach einer Eingabe.
+  const location = page.getByLabel("Ort (freiwillig)");
+  await location.fill("Klinikum");
+  await page.getByRole("list", { name: "Ortsvorschläge" }).getByRole("button", { name: /^Klinikum Bamberg/ }).click();
+  await expect(location).toHaveValue("Klinikum Bamberg, Buger Straße 80, 96049 Bamberg");
+  await page.getByRole("button", { name: "Speichern" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: /^Abend vom .*15\. Juni \d{4}$/ })).toBeVisible();
+
+  await openApp(page);
+  await expect(page.getByRole("heading", { name: "Abend läuft" })).toHaveCount(0);
+  const item = page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem");
+  await expect(item).toContainText("Klinikum Bamberg, Buger Straße 80, 96049 Bamberg");
+  await expect(item.locator(".badge")).toHaveText("geplant");
 });
 
 test("Zurück im Abend nach „Weiterspielen“, auch doppelt angetippt", async ({ page }) => {

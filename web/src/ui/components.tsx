@@ -20,6 +20,7 @@ export type IconName =
   | "add"
   | "edit"
   | "share"
+  | "place"
   | "cloud-done"
   | "cloud-upload"
   | "cloud-off";
@@ -38,6 +39,8 @@ const ICON_PATHS: Record<Exclude<IconName, "matchbox">, string> = {
   edit: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
   share:
     "M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11A2.99 2.99 0 0 0 21 5a3 3 0 1 0-5.91.7L8.04 9.81A3 3 0 1 0 6 15c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65A2.92 2.92 0 1 0 18 16.08z",
+  // Ortsvorschläge (wie `Icons.Filled.Place` in der Android-App).
+  place: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z",
   // Gemeinsame Runde: Wolke mit Haken (abgeglichen), mit Pfeil nach oben (es wartet etwas), durchgestrichen (Störung).
   "cloud-done": `${CLOUD}M10 17l-3.5-3.5 1.41-1.41L10 14.17 15.18 9l1.41 1.41L10 17z`,
   "cloud-upload": `${CLOUD}M14 13v4h-4v-4H7l5-5 5 5h-3z`,

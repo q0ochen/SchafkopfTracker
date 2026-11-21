@@ -161,6 +161,15 @@ export interface GoldenFile {
   readSettings: ReadCase[];
   readBackups: BackupCase[];
   isJsonObject: Array<[string, boolean]>;
+  /** Antworttexte von Photon und die Ortsvorschläge, die Kotlin daraus macht, oder `error` (docs/ARCHITEKTUR.md, 4.3). */
+  places: PlaceCase[];
+}
+
+export interface PlaceCase {
+  id: string;
+  json: string;
+  suggestions?: Array<{ title: string; details: string; text: string }>;
+  error?: true;
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));

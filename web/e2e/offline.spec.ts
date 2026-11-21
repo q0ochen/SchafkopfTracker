@@ -1,5 +1,5 @@
 /* Die App startet auch ohne Netz (Service Worker), so wie im Wirtshaus mit schlechtem Empfang. */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support";
 
 test.use({ serviceWorkers: "allow" });
 

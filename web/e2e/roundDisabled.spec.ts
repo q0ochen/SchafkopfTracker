@@ -1,12 +1,12 @@
 /*
  * Die App ohne Server der gemeinsamen Runde (so entsteht sie ohne `VITE_SUPABASE_URL` und
- * `VITE_SUPABASE_PUBLISHABLE_KEY`): „Gemeinsame Runde“ zeigt nur den Hinweis, und nichts verlässt das Gerät.
+ * `VITE_SUPABASE_PUBLISHABLE_KEY`): „Gemeinsame Runde“ zeigt nur den Hinweis, und außer den Ortsvorschlägen verlässt
+ * nichts das Gerät.
  */
-import { expect, test } from "@playwright/test";
 import type { Evening, Player } from "../src/core/model";
 import { RuleSets } from "../src/core/rules/RuleSet";
 import { encodeEvening, encodePlayers } from "../src/data/format";
-import { expectAccessible, openApp } from "./support";
+import { expect, expectAccessible, openApp, test } from "./support";
 
 test("ohne Server zeigt „Gemeinsame Runde“ nur den Hinweis, und die App spricht mit niemandem", async ({ page, baseURL }) => {
   const foreign: string[] = [];
@@ -33,7 +33,11 @@ test("ohne Server zeigt „Gemeinsame Runde“ nur den Hinweis, und die App spri
   await expect(page.getByText("Der Server ist noch nicht eingerichtet.")).toBeVisible();
   await page.getByRole("button", { name: "Zurück" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Einstellungen" })).toBeVisible();
-  await expect(page.getByText("Es gibt keinen Server: Nichts verlässt dieses Gerät, außer du gibst eine Sicherung selbst weiter.")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Es gibt keinen eigenen Server. Nur für Ortsvorschläge geht der eingetippte Ort an photon.komoot.io (OpenStreetMap). Sonst verlässt nichts dieses Gerät, außer du gibst eine Sicherung selbst weiter.",
+    ),
+  ).toBeVisible();
 
   expect(foreign).toEqual([]);
   // Der Build enthält die Bibliothek für den Server gar nicht erst.

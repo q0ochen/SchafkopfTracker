@@ -105,7 +105,7 @@ describe("EveningEdit.apply", () => {
 
   it("der Ort wird gesäubert und gekürzt", () => {
     expect(edit(evening, { location: "  Beim Huber  " }).location).toBe("Beim Huber");
-    expect(edit(evening, { location: `${"x".repeat(39)}  yyy` }).location).toBe("x".repeat(39));
+    expect(edit(evening, { location: `${"x".repeat(MAX_LOCATION_LENGTH - 1)}  yyy` }).location).toBe("x".repeat(MAX_LOCATION_LENGTH - 1));
     expect(edit(evening, { location: "   " }).location).toBe("");
   });
 
@@ -161,16 +161,16 @@ describe("EveningEdit.apply", () => {
 });
 
 describe("EveningEdit.cleanLocation und eveningDetailsOf", () => {
-  it("cleanLocation entfernt Leerraum wie Kotlin und kürzt auf 40 Zeichen", () => {
+  it("cleanLocation entfernt Leerraum wie Kotlin und kürzt auf 100 Zeichen", () => {
     expect(EveningEdit.cleanLocation("\tOrt\n")).toBe("Ort");
-    expect(EveningEdit.cleanLocation("y".repeat(60))).toHaveLength(MAX_LOCATION_LENGTH);
-    expect(MAX_LOCATION_LENGTH).toBe(40);
+    expect(EveningEdit.cleanLocation("y".repeat(160))).toHaveLength(MAX_LOCATION_LENGTH);
+    expect(MAX_LOCATION_LENGTH).toBe(100);
     // U+FEFF zählt in Kotlin nicht als Leerraum, U+001C schon (in JavaScript umgekehrt).
     expect(EveningEdit.cleanLocation("﻿Ort ")).toBe("﻿Ort");
     expect(EveningEdit.cleanLocation("\u001COrt ")).toBe("Ort");
     // Erst trimmen, dann kürzen, dann noch einmal trimmen.
-    expect(EveningEdit.cleanLocation(`   ${"z".repeat(38)} abc`)).toBe(`${"z".repeat(38)} a`);
-    expect(EveningEdit.cleanLocation(`${"z".repeat(39)} abc`)).toBe("z".repeat(39));
+    expect(EveningEdit.cleanLocation(`   ${"z".repeat(98)} abc`)).toBe(`${"z".repeat(98)} a`);
+    expect(EveningEdit.cleanLocation(`${"z".repeat(99)} abc`)).toBe("z".repeat(99));
   });
 
   it("eveningDetailsOf liest die vier Angaben", () => {

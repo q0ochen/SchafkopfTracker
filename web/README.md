@@ -7,14 +7,16 @@ iPhone lässt sich in der Android-App einlesen und umgekehrt.
 
 Adresse: **https://q0ochen.github.io/SchafkopfTracker/** (GitHub Pages, kostenlos; veröffentlicht wird nur von `main`).
 
-- **Start**: laufender Abend, „Neuer Abend“, Statistik, Spieler, Einstellungen, alle Abende mit Rangliste.
-- **Neuer Abend**: vier Spieler wählen (Vorschlag: wie letztes Mal), Sitzordnung, erster Geber, Ort.
+- **Start**: laufender Abend, „Neuer Abend“, Statistik, Spieler, Einstellungen, alle Abende mit Rangliste. Ein
+  geplanter Abend (nicht beendet, sein Tag liegt nach heute) steht nur in der Liste, mit der Marke „geplant“.
+- **Neuer Abend**: vier Spieler wählen (Vorschlag: wie letztes Mal), Sitzordnung, erster Geber, Datum (vorbelegt ist
+  heute; ein späterer Tag legt den Abend als geplanten an, Knopf „Abend anlegen“), Ort mit Ortsvorschlägen.
 - **Abend**: Stand je Spieler mit Platz und Geber, alle Einträge mit Beträgen, große Knöpfe „Spiel eintragen“,
   „Zusammengeworfen“, „6 Nixer – Bock“ und „Rückgängig“ (mit „Wiederherstellen“). Menü: Statistik, Abschluss,
   Abend bearbeiten, Regeln dieses Abends, beenden/wieder öffnen, löschen. Der Bildschirm bleibt an, solange der
   Abend läuft.
-- **Abend bearbeiten**: Datum (dieselbe Uhrzeit am neuen Tag, kein Tag nach heute), Ort, Sitzordnung und erster
-  Geber nachträglich ändern. Eingetragene Spiele und Beträge bleiben; wer gibt, wird neu berechnet. Gespeichert wird
+- **Abend bearbeiten**: Datum (dieselbe Uhrzeit am neuen Tag, auch ein Tag nach heute), Ort (mit Ortsvorschlägen),
+  Sitzordnung und erster Geber nachträglich ändern. Eingetragene Spiele und Beträge bleiben; wer gibt, wird neu berechnet. Gespeichert wird
   nur, was hier geändert wurde (`EveningEdit.apply`), damit in der gemeinsamen Runde nichts überschrieben wird, was ein
   anderes Handy inzwischen geändert hat.
 - **Spiel eintragen/ändern**: Spielart, wer spielt (Über Kreuz: ein Tipp wählt das Paar), gelegt, Kontra/Retour,
@@ -27,10 +29,14 @@ Adresse: **https://q0ochen.github.io/SchafkopfTracker/** (GitHub Pages, kostenlo
   und einlesen**.
 - **Gemeinsame Runde** (nur, wenn die App mit einem Server gebaut wurde, siehe unten): Alle tragen vom eigenen
   Handy in dieselben Abende ein.
+- **Ortsvorschläge** beim Feld „Ort“ (Vertrag: `docs/ARCHITEKTUR.md`, Abschnitt 4.3): ab drei getippten Zeichen Orte
+  aus OpenStreetMap über Photon von komoot (`photon.komoot.io`, kostenlos, ohne Schlüssel). Gesendet wird nur der
+  eingetippte Text, ohne Kennung von App, Gerät oder Nutzer; ohne Netz steht nur „Ortsvorschläge gibt es nur mit
+  Internet.“ da, und der Ort lässt sich trotzdem frei eintippen.
 
-Ohne gemeinsame Runde bleibt alles auf dem Gerät (IndexedDB): kein Server, keine Werbung, keine Analyse. Die App
-startet nach dem ersten Besuch auch ohne Netz (Service Worker). Die KI-Zusammenfassung der Android-App gibt es hier
-nicht.
+Ohne gemeinsame Runde bleibt alles auf dem Gerät (IndexedDB): kein Server, keine Werbung, keine Analyse. Nur was im
+Feld „Ort“ getippt wird, geht für die Ortsvorschläge an photon.komoot.io. Die App startet nach dem ersten Besuch auch
+ohne Netz (Service Worker). Die KI-Zusammenfassung der Android-App gibt es hier nicht.
 
 ## Aufbau
 
@@ -41,6 +47,7 @@ web/
 │   └── round/       gemeinsame Runde: Zusammenführen, Abgleich, Verbinden, Server im Speicher (aus domain.round)
 ├── src/data/        Speicher im Browser (repository.ts, IndexedDB über idb)
 │   ├── format/      Dateiformat und Sicherung aus dem Kotlin-Modul data (gleiche Texte, gleiche Prüfungen)
+│   ├── place/       Ortsvorschläge über Photon (Port von data/place, Golden-Abschnitt `places`)
 │   └── golden/      vom Kotlin-Code erzeugte Erwartungen (kotlin-format-golden.json) und ihr Test
 ├── src/app/         Zustand (store.ts), Router (Anker-Adressen), Sicherung, Anbindung des Dateiformats
 ├── src/round/       gemeinsame Runde im Browser: Steuerung, Planer, Speicher (IndexedDB), Texte
@@ -62,7 +69,12 @@ web/
 - Spielerfarben: geprüfte Palette für Diagramme (Farbfehlsichtigkeit, Kontrast). Die Farbe steht als Punkt neben
   dem Namen; Text bleibt in Textfarbe. Sie weicht deshalb von den Farben der Android-App ab.
 - Laufzeit-Abhängigkeiten (frei): `preact` (MIT), `idb` (ISC) und, nur mit gemeinsamer Runde geladen,
-  `@supabase/supabase-js` (MIT). Content-Security-Policy im Build.
+  `@supabase/supabase-js` (MIT). Content-Security-Policy im Build: Anfragen gehen nur an die eigene Herkunft, an
+  `https://photon.komoot.io` (Ortsvorschläge, in jedem Build) und mit gemeinsamer Runde an deren Server.
+- Ortsvorschläge: `src/data/place/photon.ts` macht aus der Antwort von Photon die Vorschläge (gelesen wie in Kotlin
+  mit dem Nachbau von kotlinx.serialization); `src/ui/placeSuggestions.ts` steuert Warten (400 ms), Verwerfen und
+  Hinweis, `src/ui/LocationField.tsx` zeigt das Feld mit der Liste. Die Oberflächen-Tests nehmen `test` aus
+  `e2e/support.ts`: Dort geht keine Anfrage an Photon hinaus (abgebrochen wie ohne Netz oder vom Test beantwortet).
 
 ## Gemeinsame Runde
 

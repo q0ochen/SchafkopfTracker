@@ -197,11 +197,15 @@ export function SettingsScreen() {
         <Hint>Schafkopf Tracker {version} · Web-App für iPhone und Browser · freie Software (CC0 1.0)</Hint>
         {linked ? (
           <Hint>
-            Mit der gemeinsamen Runde liegen Namen, Abende und Beträge auf einem Server in Frankfurt (Supabase). Sonst verlässt
-            nichts dieses Gerät, außer du gibst eine Sicherung selbst weiter.
+            Mit der gemeinsamen Runde liegen Namen, Abende und Beträge auf einem Server in Frankfurt (Supabase). Für
+            Ortsvorschläge geht der eingetippte Ort an photon.komoot.io (OpenStreetMap). Sonst verlässt nichts dieses Gerät,
+            außer du gibst eine Sicherung selbst weiter.
           </Hint>
         ) : (
-          <Hint>Es gibt keinen Server: Nichts verlässt dieses Gerät, außer du gibst eine Sicherung selbst weiter.</Hint>
+          <Hint>
+            Es gibt keinen eigenen Server. Nur für Ortsvorschläge geht der eingetippte Ort an photon.komoot.io
+            (OpenStreetMap). Sonst verlässt nichts dieses Gerät, außer du gibst eine Sicherung selbst weiter.
+          </Hint>
         )}
       </main>
       {preview ? (
