@@ -171,9 +171,9 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-`main` enthält alles bis Pull Request #26 („Abend bearbeiten“, am 21.11.2026 zusammengeführt); #25 (gemeinsame Runde)
-war am 20.11.2026 auf Wunsch des Nutzers angelegt („Ja pull request anlegen“) und von ihm um 18:40 zusammengeführt
-worden. Der gesammelte Release vom 21.11.2026 (siehe unten) folgt als eigener Pull Request. `entwicklung` ist noch auf dem älteren Stand.
+`main` enthält alles bis Pull Request #27 (gesammelter Release vom 21.11.2026: Rückpfeil, geplante Abende,
+Ortsvorschläge; siehe unten); davor #26 („Abend bearbeiten“) und #25 (gemeinsame Runde, am 20.11.2026 auf Wunsch des
+Nutzers angelegt, „Ja pull request anlegen“, und von ihm um 18:40 zusammengeführt). `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
 
@@ -466,8 +466,8 @@ drückt und in den neuen Bildschirm gelangt kann man nicht mehr auf den Rückpfe
   die Korrekturen aus den Tests sammeln sich auf dem Zweig `claude/gracious-keller-48tcn0` (Stand dort: `8cbe734`).
   Die Web-App erreicht das ohnehin erst über `main`. Für Android hat der Nutzer am 21.11.2026 ebenso entschieden
   („Ja, erst mit dem Release“): Seitdem veröffentlicht `android.yml` Testversion und F-Droid-Paketquelle nur noch von
-  `main` (Push oder „Run workflow“); Arbeitszweige werden nur geprüft. In F-Droid steht seit dem 21.11.2026 die
-  Testversion 49 (= `main` mit Pull Request #26).
+  `main` (Push oder „Run workflow“); Arbeitszweige werden nur geprüft. In F-Droid stand bis zum
+  Release am 21.11.2026 die Testversion 49 (= `main` mit Pull Request #26), seitdem 54.
 
 ## Stand am 21.11.2026 (nachmittags): Abend vorab anlegen und Ortsvorschläge
 
@@ -510,10 +510,11 @@ Kreditkarte; Leitplanke „kein Geld ausgeben“).
   wie gewollt übersprungen. Lauf 50 (nur die Umstellung) scheiterte, weil Robolectric seine Android-Laufzeit nicht
   herunterladen konnte (`MavenArtifactFetcher`, FileNotFoundException), also außerhalb des Codes; tritt das wieder auf,
   Lauf einmal neu starten.
-- **Gesammelter Release:** Pull Request nach `main` am 21.11.2026 auf Wunsch des Nutzers angelegt („pull request anlegen
-  ja“), mit Rückpfeil-Korrektur, Veröffentlichen nur von `main`, geplanten Abenden und Ortsvorschlägen. Nach dem
-  Zusammenführen veröffentlichen GitHub Pages, Testversion und F-Droid-Paketquelle neu; was danach auf den Zweig
-  kommt, braucht einen neuen Pull Request.
+- **Gesammelter Release:** Pull Request #27 nach `main` am 21.11.2026 auf Wunsch des Nutzers angelegt („pull request
+  anlegen ja“), mit Rückpfeil-Korrektur, Veröffentlichen nur von `main`, geplanten Abenden und Ortsvorschlägen; vom
+  Nutzer um 14:42 zusammengeführt (`dda9ec5`). Läufe auf `main` grün (Android 54, Web-App 33, Supabase 19): Web-App
+  neu auf GitHub Pages, Testversion 54 im Release `testversion` und in der F-Droid-Paketquelle (daneben weiter 49).
+  Der Nutzer will danach auf dem iPhone prüfen, ob der Rückpfeil reagiert und ob Ortsvorschläge kommen (CORS).
 - **Nicht geprüft:** echte Geräte; ob der Browser auf dem iPhone den Dienst abfragen darf (CORS): Die Antwort ohne
   `Origin` hatte keine CORS-Kopfzeile, was bei Photon (Javalin) normal ist; eine Probe mit `Origin` wurde hier nicht
   zugelassen. Kommen in der Web-App auf dem iPhone keine Vorschläge, sondern immer „Ortsvorschläge gibt es nur mit
