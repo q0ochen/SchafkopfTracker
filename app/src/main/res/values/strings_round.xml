@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Gemeinsame Runde. Die Texte sind in docs/ARCHITEKTUR.md, Abschnitt 8.9 festgelegt und in der Web-App dieselben. -->
-    <string name="round_title">Gemeinsame Runde</string>
+    <string name="round_title">Gemeinsame Runden</string>
     <string name="round_entry_hint">Alle tragen vom eigenen Handy ein</string>
     <string name="round_entry_linked">Runde: %1$s</string>
 
@@ -59,6 +59,12 @@
     <string name="round_join">Beitreten</string>
     <string name="round_invite_discard">Einladung verwerfen</string>
     <string name="round_my_rounds">Deine Runden</string>
+    <string name="round_other_rounds">Deine anderen Runden</string>
+    <!-- „4 Mitglieder: Anna, Bert“: die Namen aus member_names (docs/ARCHITEKTUR.md 8.9). -->
+    <string name="round_members_names">%1$s: %2$s</string>
+    <!-- Gleichnamige Runden in der Auswahl: „Stammtisch (Anna, Bert)“. -->
+    <string name="round_choice_with_members">%1$s (%2$s)</string>
+    <string name="round_switch">Wechseln</string>
     <string name="round_use">Auf diesem Gerät verwenden</string>
     <string name="round_leave_other">Verlassen</string>
     <string name="round_leave_other_title">%1$s verlassen?</string>
@@ -70,11 +76,28 @@
     <string name="round_create_name">Name der Runde</string>
     <string name="round_create_default_name">Schafkopfrunde</string>
     <string name="round_create_hint">Alle Abende und Spieler dieses Geräts kommen mit in die Runde.</string>
+    <!-- Mit verbundener Runde beginnt eine neue Runde leer (docs/ARCHITEKTUR.md 8.7). -->
+    <string name="round_create_hint_linked">Die neue Runde beginnt leer. Die Abende von %1$s bleiben dort.</string>
     <string name="round_create">Runde anlegen</string>
     <string name="round_redeem_heading">Einladung einlösen</string>
     <string name="round_redeem_field">Link oder Code</string>
     <string name="round_sign_out">Abmelden</string>
     <string name="round_working">Einen Moment …</string>
+
+    <!-- Runden-Auswahl auf dem Start-Bildschirm und Rückfrage vor dem Wechseln (docs/ARCHITEKTUR.md 8.9) -->
+    <string name="round_choice_label">Runde</string>
+    <string name="round_choice_description">Runde: %1$s. Tippen, um eine andere Runde zu wählen.</string>
+    <string name="round_switch_title">Zur Runde %1$s wechseln?</string>
+    <string name="round_switch_join_title">Der Runde %1$s beitreten?</string>
+    <string name="round_switch_create_title">Neue Runde %1$s anlegen?</string>
+    <string name="round_switch_text">Auf diesem Gerät stehen dann die Abende und Spieler von %1$s.</string>
+    <string name="round_switch_create_text">Auf diesem Gerät beginnt dann die neue, leere Runde.</string>
+    <string name="round_switch_keeps">Die Abende von %1$s bleiben dort; du kannst jederzeit zurückwechseln.</string>
+    <plurals name="round_switch_pending">
+        <item quantity="one">1 Änderung ist noch nicht hochgeladen und geht dabei verloren.</item>
+        <item quantity="other">%1$d Änderungen sind noch nicht hochgeladen und gehen dabei verloren.</item>
+    </plurals>
+    <string name="round_switch_create">Anlegen</string>
 
     <!-- Rückfrage vor dem Beitreten oder Verwenden -->
     <string name="round_replace_title">Daten dieses Geräts ersetzen?</string>
@@ -124,6 +147,8 @@
     <string name="round_error_invalid_invite">Die Einladung ist abgelaufen oder ungültig.</string>
     <string name="round_error_no_code">Das ist kein gültiger Einladungslink.</string>
     <string name="round_error_name_taken">Den Namen gibt es in der Runde schon.</string>
+    <string name="round_error_round_name_taken">Du hast schon eine Runde mit diesem Namen.</string>
+    <string name="round_already_in_round">Du bist schon in dieser Runde.</string>
     <string name="round_error_invalid_name">Bitte einen Namen mit 1 bis 24 Zeichen eingeben.</string>
     <string name="round_error_invalid_round_name">Bitte einen Namen mit 1 bis 40 Zeichen eingeben.</string>
     <string name="round_error_player_taken">Diesen Spieler hat gerade jemand anders gewählt.</string>

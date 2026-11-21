@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -33,10 +34,13 @@ import io.github.q0ochen.schafkopf.app.ui.round.RoundActions
 import io.github.q0ochen.schafkopf.app.ui.round.RoundContent
 import io.github.q0ochen.schafkopf.app.ui.round.RoundUi
 import io.github.q0ochen.schafkopf.app.ui.round.RoundUiError
+import io.github.q0ochen.schafkopf.app.ui.round.SwitchRequest
 import io.github.q0ochen.schafkopf.app.ui.settings.PlayerEditFields
 import io.github.q0ochen.schafkopf.app.ui.settings.PlayerRow
+import io.github.q0ochen.schafkopf.app.ui.settings.SettingsScreen
 import io.github.q0ochen.schafkopf.app.ui.start.StartScreen
 import io.github.q0ochen.schafkopf.app.ui.theme.SchafkopfTheme
+import io.github.q0ochen.schafkopf.app.ui.waitFor
 import io.github.q0ochen.schafkopf.app.ui.waitForText
 import io.github.q0ochen.schafkopf.data.round.Account
 import io.github.q0ochen.schafkopf.domain.evening.Evening
@@ -184,11 +188,14 @@ class RoundScreenshotTest {
         val redeemed = ArrayList<String>()
         var joined = 0
         content(
-            RoundState(configured = true, loaded = true, account = account, pendingInvite = "0123456789abcdef0123456789abcdef"),
-            RoundUi(
-                invite = InviteInfo(round, "Schafkopfrunde", memberCount = 3, alreadyMember = false),
+            RoundState(
+                configured = true,
+                loaded = true,
+                account = account,
+                pendingInvite = "0123456789abcdef0123456789abcdef",
                 rounds = listOf(RoundSummary(RoundId("runde-2"), "Betriebsrunde", rev = 12, memberCount = 1, myPlayerId = null, isCreator = true)),
             ),
+            RoundUi(invite = InviteInfo(round, "Schafkopfrunde", memberCount = 3, alreadyMember = false)),
             RoundActions(create = { created += it }, redeem = { redeemed += it }, joinInvited = { joined++ }),
             themeMode = ThemeMode.LIGHT,
         )
@@ -329,8 +336,8 @@ class RoundScreenshotTest {
     fun liessen_sich_die_runden_nicht_laden_steht_das_da() {
         var refreshed = 0
         content(
-            RoundState(configured = true, loaded = true, account = account),
-            RoundUi(roundsFailed = true),
+            RoundState(configured = true, loaded = true, account = account, roundsFailed = true),
+            RoundUi(),
             RoundActions(refresh = { refreshed++ }),
         )
 
@@ -358,8 +365,8 @@ class RoundScreenshotTest {
         var confirmed = 0
         val other = RoundSummary(RoundId("runde-2"), "Betriebsrunde", rev = 12, memberCount = 1, myPlayerId = null, isCreator = true)
         content(
-            RoundState(configured = true, loaded = true, account = account),
-            RoundUi(rounds = listOf(other), leaving = other),
+            RoundState(configured = true, loaded = true, account = account, rounds = listOf(other)),
+            RoundUi(leaving = other),
             RoundActions(leaveRound = { asked = it }, confirmLeaveRound = { confirmed++ }),
         )
 
@@ -499,11 +506,148 @@ class RoundScreenshotTest {
         capture("54_start_mit_runde")
     }
 
+    // --- Zwischen Runden wechseln (docs/ARCHITEKTUR.md 8.7 und 8.9) ---
+
+    /**
+     * Das Konto von [linkedApp] gehört außerdem dem „Stammtisch“ von Anna an und einer zweiten „Schafkopfrunde“ von Bert
+     * (gleicher Name wie die eigene: Die Auswahl nennt bei beiden die Mitglieder).
+     */
+    private fun moreRounds(kit: RoundTestKit) = runBlocking {
+        val anna = kit.server.sessionFor("konto-anna")
+        val stammtisch = anna.createRound("Stammtisch")
+        anna.claimPlayer(stammtisch, PlayerId("anna"), "Anna", 1)
+        kit.session.joinRound(anna.createInvite(stammtisch))
+        val bert = kit.server.sessionFor("konto-bert")
+        val other = bert.createRound("Schafkopfrunde")
+        bert.claimPlayer(other, PlayerId("bert"), "Bert", 2)
+        kit.session.joinRound(bert.createInvite(other))
+        kit.coordinator.refreshRounds()
+    }
+
+    @Test
+    fun auf_der_startseite_laesst_sich_die_runde_wechseln() {
+        val kit = linkedApp(meDeals = true)
+        moreRounds(kit)
+        show { StartScreen(Navigator()) }
+        compose.waitForText("Wirtshaus zur Post")
+        val choice = "Runde: Schafkopfrunde (Ich). Tippen, um eine andere Runde zu wählen."
+        compose.waitFor("Die Auswahl der Runde") { compose.onAllNodesWithContentDescription(choice).fetchSemanticsNodes().isNotEmpty() }
+
+        // Die Auswahl zeigt den Namen; in der Zeile steht er deshalb nicht noch einmal, nur an der Karte des Abends.
+        compose.onNodeWithText("Gemeinsame Runden").assertExists()
+        compose.onAllNodesWithText("Runde: Schafkopfrunde").assertCountEquals(1)
+        compose.onNodeWithContentDescription(choice).performClick()
+        compose.waitForText("Schafkopfrunde (Bert)")
+        compose.onNodeWithText("Stammtisch").assertExists()
+        capture("67_start_auswahl_der_runden")
+
+        compose.onNodeWithText("Stammtisch").performClick()
+        compose.waitForText("Zur Runde Stammtisch wechseln?")
+        compose.onNodeWithText("Auf diesem Gerät stehen dann die Abende und Spieler von Stammtisch.").assertExists()
+        compose.onNodeWithText("Die Abende von Schafkopfrunde bleiben dort; du kannst jederzeit zurückwechseln.").assertExists()
+        capture("68_start_rueckfrage_wechseln")
+
+        compose.onNodeWithText("Wechseln").performClick()
+        // Gewartet wird auf die Anzeige (die Suche lässt den Hauptthread laufen, auf dem das ViewModel wechselt) und auf
+        // den Endstand: Zwischendurch ist das Gerät kurz leer und ohne Runde.
+        val switched = "Runde: Stammtisch. Tippen, um eine andere Runde zu wählen."
+        compose.waitFor("Die Auswahl mit dem Stammtisch") {
+            compose.onAllNodesWithContentDescription(switched).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals("Stammtisch", kit.state.link?.roundName)
+        compose.waitForText("Noch kein Abend eingetragen")
+        compose.onAllNodesWithText("Wirtshaus zur Post", substring = true).assertCountEquals(0)
+        // Der Abend ist nicht verloren, er liegt in der Runde auf dem Server.
+        assertEquals(listOf("abend-1"), kit.server.evenings(round).map { it.id.value })
+    }
+
+    @Test
+    fun die_auswahl_kommt_auch_wenn_die_anmeldung_erst_nach_dem_ersten_bild_gelesen_ist() {
+        val kit = linkedApp(meDeals = true)
+        moreRounds(kit)
+        // Wie beim Start der App: Die Anmeldung ist noch nicht gelesen, die Liste der Runden gehört dann zu niemandem.
+        val signedIn = kit.account.account.value
+        kit.account.account.value = null
+        compose.waitFor("Der Stand ohne Anmeldung") { kit.state.account == null && kit.state.rounds == null }
+        show { StartScreen(Navigator()) }
+        compose.waitForText("Gemeinsame Runden")
+        val choice = "Runde: Schafkopfrunde (Ich). Tippen, um eine andere Runde zu wählen."
+        compose.onAllNodesWithContentDescription(choice).assertCountEquals(0)
+
+        kit.account.account.value = signedIn
+
+        compose.waitFor("Die Auswahl der Runde") { compose.onAllNodesWithContentDescription(choice).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun verbunden_stehen_die_anderen_runden_und_neue_runde_anlegen_da() {
+        val others = listOf(
+            RoundSummary(round, "Schafkopfrunde", rev = 9, memberCount = 3, myPlayerId = ids[0], isCreator = true, memberNames = listOf("Kathi", "Sepp")),
+            RoundSummary(RoundId("runde-2"), "Stammtisch", rev = 4, memberCount = 2, myPlayerId = null, isCreator = false, memberNames = listOf("Anna")),
+            RoundSummary(RoundId("runde-3"), "Betriebsrunde", rev = 1, memberCount = 1, myPlayerId = null, isCreator = true),
+        )
+        val used = ArrayList<RoundSummary>()
+        val created = ArrayList<String>()
+        content(linked.copy(rounds = others), actions = RoundActions(use = { used += it }, create = { created += it }))
+
+        compose.onNodeWithText("Deine anderen Runden").performScrollTo()
+        compose.onNodeWithText("2 Mitglieder: Anna").assertExists()
+        compose.onNodeWithText("1 Mitglied").assertExists()
+        // Die verbundene Runde steht nicht unter den anderen.
+        compose.onAllNodesWithText("3 Mitglieder: Kathi, Sepp").assertCountEquals(0)
+        capture("69_runde_verbunden_andere_runden")
+
+        compose.onAllNodesWithText("Wechseln")[0].performClick()
+        assertEquals(listOf("runde-2"), used.map { it.id.value })
+        // Der Vorschlag für den Namen ist frei; der Hinweis sagt, dass die neue Runde leer beginnt.
+        compose.onNodeWithText("Die neue Runde beginnt leer. Die Abende von Schafkopfrunde bleiben dort.").performScrollTo()
+        compose.onNodeWithText("Runde anlegen").performScrollTo().performClick()
+        assertEquals(listOf("Schafkopfrunde 2"), created)
+        compose.onNodeWithText("Einladung einlösen").performScrollTo().assertExists()
+    }
+
+    @Test
+    fun die_rueckfrage_vor_einer_neuen_runde_nennt_was_verloren_ginge() {
+        var confirmed = 0
+        content(
+            linked,
+            RoundUi(switching = SwitchRequest.Create("Freitagsrunde"), switchPending = 2),
+            RoundActions(confirmSwitch = { confirmed++ }),
+            themeMode = ThemeMode.LIGHT,
+        )
+
+        compose.onNodeWithText("Neue Runde Freitagsrunde anlegen?").assertExists()
+        compose.onNodeWithText("Auf diesem Gerät beginnt dann die neue, leere Runde.").assertExists()
+        compose.onNodeWithText("Die Abende von Schafkopfrunde bleiben dort; du kannst jederzeit zurückwechseln.").assertExists()
+        compose.onNodeWithText("2 Änderungen sind noch nicht hochgeladen und gehen dabei verloren.").assertExists()
+        capture("70_runde_rueckfrage_neue_runde")
+        compose.onNodeWithText("Anlegen").performClick()
+        assertEquals(1, confirmed)
+    }
+
+    @Test
+    fun in_den_einstellungen_stehen_gemeinsame_runden_mit_runde_und_stand() {
+        linkedApp(meDeals = true)
+        show { SettingsScreen(Navigator()) }
+        compose.waitForText("Runde: Schafkopfrunde")
+
+        compose.onNodeWithText("Gemeinsame Runden").assertExists()
+        compose.onNodeWithText("Runde: Schafkopfrunde\nAbgeglichen").performScrollTo()
+        capture("71_einstellungen_mit_runde")
+    }
+
+    @Test
+    fun eine_einladung_in_die_eigene_runde_ist_ein_hinweis() {
+        content(linked, RoundUi(error = RoundUiError.AlreadyInRound))
+
+        compose.onNodeWithText("Du bist schon in dieser Runde.").assertExists()
+    }
+
     @Test
     fun ohne_runde_fuehrt_die_startseite_zur_gemeinsamen_runde() {
         ApplicationProvider.getApplicationContext<TestSchafkopfApp>()
         show { StartScreen(Navigator()) }
-        compose.waitForText("Gemeinsame Runde")
+        compose.waitForText("Gemeinsame Runden")
 
         compose.onNodeWithText("Alle tragen vom eigenen Handy ein").assertExists()
     }

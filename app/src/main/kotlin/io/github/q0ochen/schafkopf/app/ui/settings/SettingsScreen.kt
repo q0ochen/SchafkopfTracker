@@ -91,15 +91,12 @@ fun SettingsScreen(navigator: Navigator) {
             // Mit verbundener Runde stehen hier wie auf der Start-Seite ihr Name und der Stand des Abgleichs.
             val linkedRound = round.link
             LinkRow(
-                title = if (linkedRound == null) {
-                    stringResource(R.string.round_title)
-                } else {
-                    stringResource(R.string.round_entry_linked, linkedRound.roundName)
-                },
+                title = stringResource(R.string.round_title),
                 subtitle = if (linkedRound == null) {
                     stringResource(R.string.round_entry_hint)
                 } else {
-                    roundStatus(round, LocalContext.current.resources).text
+                    stringResource(R.string.round_entry_linked, linkedRound.roundName) + "\n" +
+                        roundStatus(round, LocalContext.current.resources).text
                 },
                 onClick = { navigator.open(Screen.Round) },
             )

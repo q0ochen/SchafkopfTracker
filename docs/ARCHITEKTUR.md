@@ -763,8 +763,8 @@ steht sie vorn. Ausgewählt ist die verbundene. Jeder Eintrag heißt wie die Run
 (unten); bis zum Wechsel zeigt die Auswahl weiter die verbundene Runde. Solange die App vorher abgleicht oder wechselt,
 ist die Auswahl gesperrt und darunter steht „Einen Moment …“. Fehler (Texte wie auf dem Bildschirm) und Meldungen
 stehen unter der Auswahl, bis man sie mit „OK“ wegtippt. Gelesen werden die Runden, wenn der Start-Bildschirm
-erscheint und jemand angemeldet ist, sowie nach jedem Anlegen, Beitreten, Wechseln und Verlassen; scheitert das
-Lesen, fehlt die Auswahl (ohne Fehlertext).
+erscheint und jemand angemeldet ist, sowie nach jedem Anlegen, Beitreten, Wechseln und Verlassen. Scheitert das
+Lesen, bleibt die zuletzt gelesene Liste; gab es noch keine, fehlt die Auswahl (ohne Fehlertext).
 
 **Rückfrage vor dem Wechseln** (Start-Bildschirm und „Gemeinsame Runden“, nur mit verbundener Runde): Vorher gleicht
 die App vollständig ab (Knöpfe gesperrt, „Einen Moment …“). Scheitert das, kommt statt der Rückfrage der Fehlertext;

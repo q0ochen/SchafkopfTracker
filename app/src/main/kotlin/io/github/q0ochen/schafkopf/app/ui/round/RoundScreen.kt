@@ -63,6 +63,7 @@ import io.github.q0ochen.schafkopf.app.ui.navigation.Screen
 import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.round.RoundLink
+import io.github.q0ochen.schafkopf.domain.round.RoundNames
 import io.github.q0ochen.schafkopf.domain.round.RoundSummary
 import org.koin.androidx.compose.koinViewModel
 
@@ -74,6 +75,8 @@ class RoundActions(
     val joinInvited: () -> Unit = {},
     val discardInvite: () -> Unit = {},
     val use: (RoundSummary) -> Unit = {},
+    val confirmSwitch: () -> Unit = {},
+    val cancelSwitch: () -> Unit = {},
     val leaveRound: (RoundSummary) -> Unit = {},
     val confirmLeaveRound: () -> Unit = {},
     val cancelLeaveRound: () -> Unit = {},
@@ -92,7 +95,10 @@ class RoundActions(
     val clearError: () -> Unit = {},
 )
 
-/** Gemeinsame Runde: anmelden, Runde anlegen oder beitreten, „Das bin ich“, Mitglieder, einladen, verlassen. */
+/**
+ * Gemeinsame Runden: anmelden, Runde anlegen oder beitreten, zwischen Runden wechseln, „Das bin ich“, Mitglieder,
+ * einladen, verlassen.
+ */
 @Composable
 fun RoundScreen(navigator: Navigator) {
     val viewModel: RoundViewModel = koinViewModel()
@@ -131,6 +137,8 @@ fun RoundScreen(navigator: Navigator) {
                     joinInvited = viewModel::joinInvited,
                     discardInvite = viewModel::discardInvite,
                     use = viewModel::use,
+                    confirmSwitch = viewModel::confirmSwitch,
+                    cancelSwitch = viewModel::cancelSwitch,
                     leaveRound = viewModel::askLeaveRound,
                     confirmLeaveRound = viewModel::confirmLeaveRound,
                     cancelLeaveRound = viewModel::cancelLeaveRound,
@@ -176,7 +184,7 @@ fun RoundContent(state: RoundState, ui: RoundUi, players: List<Player>, actions:
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         state.message?.let { MessageCard(text = messageText(it), onDismiss = actions.clearMessage) }
-        ui.error?.let { MessageCard(text = errorText(it), onDismiss = actions.clearError, isError = true) }
+        ui.error?.let { MessageCard(text = errorText(it), onDismiss = actions.clearError, isError = it != RoundUiError.AlreadyInRound) }
 
         val link = state.link
         when {
@@ -197,6 +205,16 @@ fun RoundContent(state: RoundState, ui: RoundUi, players: List<Player>, actions:
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
+    }
+
+    ui.switching?.let { request ->
+        SwitchDialog(
+            request = request,
+            from = state.link?.roundName.orEmpty(),
+            pending = ui.switchPending,
+            onConfirm = actions.confirmSwitch,
+            onCancel = actions.cancelSwitch,
+        )
     }
 
     if (ui.replace != null) {
@@ -290,7 +308,7 @@ fun RoundContent(state: RoundState, ui: RoundUi, players: List<Player>, actions:
 }
 
 @Composable
-private fun messageText(message: RoundMessage): String = stringResource(
+fun messageText(message: RoundMessage): String = stringResource(
     when (message) {
         RoundMessage.SIGN_IN_FAILED -> R.string.round_sign_in_failed
         RoundMessage.SIGN_IN_CANCELLED -> R.string.round_sign_in_cancelled
@@ -301,15 +319,16 @@ private fun messageText(message: RoundMessage): String = stringResource(
 )
 
 @Composable
-private fun errorText(error: RoundUiError): String = when (error) {
+fun errorText(error: RoundUiError): String = when (error) {
     RoundUiError.NoCode -> stringResource(R.string.round_error_no_code)
     RoundUiError.NoBrowser -> stringResource(R.string.round_no_browser)
+    RoundUiError.AlreadyInRound -> stringResource(R.string.round_already_in_round)
     is RoundUiError.Server -> roundErrorText(error.error, LocalContext.current.resources, error.roundName)
 }
 
 /** Eine Meldung, die stehen bleibt, bis man sie wegtippt; Screenreader lesen sie von selbst vor. */
 @Composable
-private fun MessageCard(text: String, onDismiss: () -> Unit, isError: Boolean = false) {
+fun MessageCard(text: String, onDismiss: () -> Unit, isError: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     Card(
         colors = CardDefaults.cardColors(
@@ -375,86 +394,18 @@ private fun SignedIn(state: RoundState, ui: RoundUi, actions: RoundActions) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
-    if (state.pendingInvite != null) {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(16.dp)) {
-                val invite = ui.invite
-                Text(
-                    stringResource(R.string.round_invite_card, invite?.roundName ?: "…"),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                if (invite != null) {
-                    Text(pluralStringResource(R.plurals.round_members_count, invite.memberCount, invite.memberCount))
-                }
-                BigButton(stringResource(R.string.round_join), onClick = actions.joinInvited, enabled = !ui.busy)
-                TextButton(
-                    onClick = actions.discardInvite,
-                    enabled = !ui.busy,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) { Text(stringResource(R.string.round_invite_discard)) }
-            }
-        }
-    }
+    if (state.pendingInvite != null) InviteCard(ui = ui, actions = actions)
 
-    val rounds = ui.rounds.orEmpty()
-    if (ui.roundsFailed && rounds.isEmpty()) {
-        SectionHeading(stringResource(R.string.round_my_rounds))
-        Text(stringResource(R.string.round_my_rounds_failed), style = MaterialTheme.typography.bodyLarge)
-        QuietButton(stringResource(R.string.round_retry), onClick = actions.refresh, enabled = !ui.busy)
-    }
-    if (rounds.isNotEmpty()) {
-        SectionHeading(stringResource(R.string.round_my_rounds))
-        for (round in rounds) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(16.dp)) {
-                    Text(round.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        pluralStringResource(R.plurals.round_members_count, round.memberCount, round.memberCount),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    QuietButton(stringResource(R.string.round_use), onClick = { actions.use(round) }, enabled = !ui.busy)
-                    TextButton(
-                        onClick = { actions.leaveRound(round) },
-                        enabled = !ui.busy,
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    ) { Text(stringResource(R.string.round_leave_other), color = MaterialTheme.colorScheme.error) }
-                }
-            }
-        }
-    }
-
-    SectionHeading(stringResource(R.string.round_create_heading))
-    val defaultName = stringResource(R.string.round_create_default_name)
-    var name by rememberSaveable { mutableStateOf(defaultName) }
-    OutlinedTextField(
-        value = name,
-        onValueChange = { name = it },
-        label = { Text(stringResource(R.string.round_create_name)) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-        modifier = Modifier.fillMaxWidth(),
+    RoundList(
+        heading = stringResource(R.string.round_my_rounds),
+        rounds = state.rounds.orEmpty(),
+        failed = state.roundsFailed,
+        useLabel = stringResource(R.string.round_use),
+        busy = ui.busy,
+        actions = actions,
     )
-    Text(
-        stringResource(R.string.round_create_hint),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    BigButton(stringResource(R.string.round_create), onClick = { actions.create(name) }, enabled = !ui.busy && name.isNotBlank())
-
-    SectionHeading(stringResource(R.string.round_redeem_heading))
-    var code by rememberSaveable { mutableStateOf("") }
-    OutlinedTextField(
-        value = code,
-        onValueChange = { code = it },
-        label = { Text(stringResource(R.string.round_redeem_field)) },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
-    QuietButton(stringResource(R.string.round_join), onClick = { actions.redeem(code) }, enabled = !ui.busy && code.isNotBlank())
+    CreateSection(state = state, hint = stringResource(R.string.round_create_hint), busy = ui.busy, onCreate = actions.create)
+    RedeemSection(busy = ui.busy, onRedeem = actions.redeem)
 
     HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
     TextButton(
@@ -464,10 +415,115 @@ private fun SignedIn(state: RoundState, ui: RoundUi, actions: RoundActions) {
     ) { Text(stringResource(R.string.round_sign_out)) }
 }
 
+/** Die Karte einer wartenden Einladung: „Einladung in die Runde ‹Name›“ mit „Beitreten“ und „Einladung verwerfen“. */
+@Composable
+private fun InviteCard(ui: RoundUi, actions: RoundActions) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(16.dp)) {
+            val invite = ui.invite
+            Text(
+                stringResource(R.string.round_invite_card, invite?.roundName ?: "…"),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            if (invite != null) {
+                Text(pluralStringResource(R.plurals.round_members_count, invite.memberCount, invite.memberCount))
+            }
+            BigButton(stringResource(R.string.round_join), onClick = actions.joinInvited, enabled = !ui.busy)
+            TextButton(
+                onClick = actions.discardInvite,
+                enabled = !ui.busy,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.round_invite_discard)) }
+        }
+    }
+}
+
+/**
+ * Runden des Kontos mit „Verwenden“ bzw. „Wechseln“ ([useLabel]) und „Verlassen“. Ließen sie sich nicht lesen und ist
+ * keine bekannt, steht das da, mit „Erneut versuchen“ (sonst sähe es auf einem neuen Handy aus, als gäbe es keine).
+ */
+@Composable
+private fun RoundList(
+    heading: String,
+    rounds: List<RoundSummary>,
+    failed: Boolean,
+    useLabel: String,
+    busy: Boolean,
+    actions: RoundActions,
+) {
+    if (failed && rounds.isEmpty()) {
+        SectionHeading(heading)
+        Text(stringResource(R.string.round_my_rounds_failed), style = MaterialTheme.typography.bodyLarge)
+        QuietButton(stringResource(R.string.round_retry), onClick = actions.refresh, enabled = !busy)
+    }
+    if (rounds.isEmpty()) return
+    SectionHeading(heading)
+    for (round in rounds) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(16.dp)) {
+                Text(round.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    membersLine(round),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                QuietButton(useLabel, onClick = { actions.use(round) }, enabled = !busy)
+                TextButton(
+                    onClick = { actions.leaveRound(round) },
+                    enabled = !busy,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.round_leave_other), color = MaterialTheme.colorScheme.error) }
+            }
+        }
+    }
+}
+
+/** „Neue Runde anlegen“: Feld mit freiem Vorschlag (docs/ARCHITEKTUR.md 8.7, „Eindeutige Namen“), Hinweis, Knopf. */
+@Composable
+private fun CreateSection(state: RoundState, hint: String, busy: Boolean, onCreate: (String) -> Unit) {
+    SectionHeading(stringResource(R.string.round_create_heading))
+    val base = stringResource(R.string.round_create_default_name)
+    // Der Vorschlag ändert sich, sobald die Runden des Kontos gelesen sind; was man schon getippt hat, bleibt dann nur,
+    // solange der Vorschlag derselbe ist.
+    val suggestion = RoundNames.suggest(knownRounds(state), base)
+    var name by rememberSaveable(suggestion) { mutableStateOf(suggestion) }
+    OutlinedTextField(
+        value = name,
+        onValueChange = { name = it },
+        label = { Text(stringResource(R.string.round_create_name)) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Text(hint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    BigButton(stringResource(R.string.round_create), onClick = { onCreate(name) }, enabled = !busy && name.isNotBlank())
+}
+
+/** „Einladung einlösen“: Feld „Link oder Code“ und „Beitreten“. */
+@Composable
+private fun RedeemSection(busy: Boolean, onRedeem: (String) -> Unit) {
+    SectionHeading(stringResource(R.string.round_redeem_heading))
+    var code by rememberSaveable { mutableStateOf("") }
+    OutlinedTextField(
+        value = code,
+        onValueChange = { code = it },
+        label = { Text(stringResource(R.string.round_redeem_field)) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    QuietButton(stringResource(R.string.round_join), onClick = { onRedeem(code) }, enabled = !busy && code.isNotBlank())
+}
+
 // --- Verbunden ---
 
 @Composable
 private fun Linked(state: RoundState, link: RoundLink, ui: RoundUi, players: List<Player>, actions: RoundActions) {
+    // Eine wartende Einladung (geöffneter Link) steht ganz oben: Wer ihr folgt, wechselt in eine weitere Runde.
+    if (state.pendingInvite != null && !state.needsSignIn) InviteCard(ui = ui, actions = actions)
+
     Text(link.roundName, style = MaterialTheme.typography.headlineSmall)
     StatusRow(state)
 
@@ -516,6 +572,26 @@ private fun Linked(state: RoundState, link: RoundLink, ui: RoundUi, players: Lis
         TextButton(onClick = actions.clearNotices, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.round_notices_clear))
         }
+    }
+
+    // Andere Runden des Kontos, eine neue anlegen oder einer weiteren beitreten (docs/ARCHITEKTUR.md 8.7 und 8.9):
+    // Jedes davon wechselt nach einer Rückfrage; die Abende dieser Runde bleiben auf dem Server.
+    if (!state.needsSignIn) {
+        RoundList(
+            heading = stringResource(R.string.round_other_rounds),
+            rounds = state.rounds.orEmpty().filter { it.id != link.roundId },
+            failed = state.roundsFailed,
+            useLabel = stringResource(R.string.round_switch),
+            busy = ui.busy,
+            actions = actions,
+        )
+        CreateSection(
+            state = state,
+            hint = stringResource(R.string.round_create_hint_linked, link.roundName),
+            busy = ui.busy,
+            onCreate = actions.create,
+        )
+        RedeemSection(busy = ui.busy, onRedeem = actions.redeem)
     }
 
     HorizontalDivider(modifier = Modifier.padding(top = 8.dp))

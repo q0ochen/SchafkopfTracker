@@ -1,6 +1,7 @@
 package io.github.q0ochen.schafkopf.app.ui.start
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.foundation.layout.Arrangement
@@ -23,11 +24,16 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,7 +41,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.q0ochen.schafkopf.R
 import io.github.q0ochen.schafkopf.app.round.RoundState
 import io.github.q0ochen.schafkopf.app.ui.common.AmountText
+import io.github.q0ochen.schafkopf.app.ui.round.MessageCard
+import io.github.q0ochen.schafkopf.app.ui.round.RoundChoice
 import io.github.q0ochen.schafkopf.app.ui.round.StatusRow
+import io.github.q0ochen.schafkopf.app.ui.round.SwitchDialog
+import io.github.q0ochen.schafkopf.app.ui.round.errorText
+import io.github.q0ochen.schafkopf.app.ui.round.messageText
+import io.github.q0ochen.schafkopf.app.ui.round.roundSelection
+import io.github.q0ochen.schafkopf.domain.round.RoundSummary
 import io.github.q0ochen.schafkopf.app.ui.common.SectionHeading
 import org.koin.androidx.compose.koinViewModel
 import io.github.q0ochen.schafkopf.app.ui.common.formatDate
@@ -49,6 +62,11 @@ fun StartScreen(navigator: Navigator) {
     val viewModel: StartViewModel = koinViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val round by viewModel.round.collectAsStateWithLifecycle()
+    val roundSwitch by viewModel.roundSwitch.collectAsStateWithLifecycle()
+
+    // Die Runden des Kontos für die Auswahl: jedes Mal, wenn die Startseite erscheint, und sobald die Anmeldung gelesen
+    // ist (beim Start der App kommt sie oft erst nach dem ersten Bild; docs/ARCHITEKTUR.md 8.9).
+    LaunchedEffect(viewModel, round.account?.userId) { viewModel.refreshRounds() }
 
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) }) { padding ->
         LazyColumn(
@@ -96,7 +114,16 @@ fun StartScreen(navigator: Navigator) {
                 }
             }
 
-            item(key = "round") { RoundRow(round) { navigator.open(Screen.Round) } }
+            item(key = "round") {
+                RoundRow(
+                    round = round,
+                    switch = roundSwitch,
+                    onOpen = { navigator.open(Screen.Round) },
+                    onChoose = viewModel::choose,
+                    onClearMessage = viewModel::clearMessage,
+                    onClearError = viewModel::clearError,
+                )
+            }
 
             item(key = "heading") { SectionHeading(stringResource(R.string.start_past_evenings)) }
 
@@ -113,6 +140,16 @@ fun StartScreen(navigator: Navigator) {
             }
         }
     }
+
+    roundSwitch.switching?.let { request ->
+        SwitchDialog(
+            request = request,
+            from = round.link?.roundName.orEmpty(),
+            pending = roundSwitch.pending,
+            onConfirm = viewModel::confirmSwitch,
+            onCancel = viewModel::cancelSwitch,
+        )
+    }
 }
 
 @Composable
@@ -126,32 +163,76 @@ private fun LinkButton(labelRes: Int, modifier: Modifier, onClick: () -> Unit) {
     }
 }
 
-/** Der Weg zur gemeinsamen Runde; mit verbundener Runde stehen hier ihr Name und der Stand des Abgleichs. */
+/**
+ * „Gemeinsame Runden“: der Weg zum Bildschirm (Überschrift und Statuszeile) und, wenn es etwas zu wählen gibt, die
+ * Auswahl der Runde (docs/ARCHITEKTUR.md 8.9). Wer eine andere Runde wählt, bekommt erst die Rückfrage.
+ */
 @Composable
-private fun RoundRow(round: RoundState, onClick: () -> Unit) {
+private fun RoundRow(
+    round: RoundState,
+    switch: StartRoundUi,
+    onOpen: () -> Unit,
+    onChoose: (RoundSummary) -> Unit,
+    onClearMessage: () -> Unit,
+    onClearError: () -> Unit,
+) {
     val link = round.link
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    val selection = roundSelection(round)
+    Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
+                .fillMaxWidth()
                 .heightIn(min = 56.dp)
+                .clickable(role = Role.Button, onClick = onOpen)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
+            Text(stringResource(R.string.round_title), style = MaterialTheme.typography.titleMedium)
             if (link == null) {
-                Text(stringResource(R.string.round_title), style = MaterialTheme.typography.titleMedium)
                 Text(
                     stringResource(R.string.round_entry_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                Text(
-                    stringResource(R.string.round_entry_linked, link.roundName),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                // Steht die Auswahl da, zeigt sie den Namen; sonst steht er hier.
+                if (selection == null) {
+                    Text(
+                        stringResource(R.string.round_entry_linked, link.roundName),
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 StatusRow(round)
+            }
+        }
+        val message = round.message
+        val error = switch.error
+        if (selection != null || switch.busy || message != null || error != null) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            ) {
+                selection?.let {
+                    RoundChoice(
+                        current = it.current,
+                        choices = it.choices,
+                        duplicates = it.duplicates,
+                        enabled = !switch.busy,
+                        onChoose = onChoose,
+                    )
+                }
+                if (switch.busy) {
+                    Text(
+                        stringResource(R.string.round_working),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
+                message?.let { MessageCard(text = messageText(it), onDismiss = onClearMessage) }
+                error?.let { MessageCard(text = errorText(it), onDismiss = onClearError, isError = true) }
             }
         }
     }

@@ -5,6 +5,7 @@ import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.round.InMemoryRoundServer
 import io.github.q0ochen.schafkopf.domain.round.RoundError
+import io.github.q0ochen.schafkopf.domain.round.RoundException
 import io.github.q0ochen.schafkopf.domain.round.SyncNotice
 import io.github.q0ochen.schafkopf.domain.round.SyncOutcome
 import io.github.q0ochen.schafkopf.domain.round.InviteLinks
@@ -555,14 +556,16 @@ class RoundCoordinatorTest {
         kit.coordinator.start()
         runCurrent()
         kit.session.joinRound(token)
-        val round = kit.coordinator.myRounds().single()
+        kit.coordinator.refreshRounds()
+        val round = kit.state.rounds!!.single()
 
         kit.coordinator.leaveRound(round)
 
-        assertEquals(emptyList<Any>(), kit.coordinator.myRounds())
+        // Die Liste ist danach neu gelesen.
+        assertEquals(emptyList<Any>(), kit.state.rounds)
         assertNull(kit.state.link)
         assertEquals(listOf("eigener-abend"), kit.evenings.evenings.first().map { it.id.value })
-        assertEquals(1, host.coordinator.myRounds().single().memberCount)
+        assertEquals(1, host.session.myRounds().single().memberCount)
     }
 
     @Test
@@ -599,7 +602,7 @@ class RoundCoordinatorTest {
 
         val link = kit.coordinator.inviteLink()
         assertTrue(link, link.startsWith("https://example.org/app/#/einladung/"))
-        assertEquals(1, kit.coordinator.myRounds().size)
+        assertEquals(1, kit.state.rounds?.size)
         assertEquals(0, kit.coordinator.pendingCount())
 
         kit.coordinator.leave()
@@ -625,5 +628,94 @@ class RoundCoordinatorTest {
 
         assertEquals("SIGNED_OUT", error?.message)
         assertNull(kit.state.link)
+    }
+
+    // --- Runden des Kontos und Wechseln (docs/ARCHITEKTUR.md 8.7 und 8.9) ---
+
+    @Test
+    fun `die Runden des Kontos stehen im Zustand - eine gescheiterte Lesung behaelt die alte Liste`() = runTest {
+        val kit = linked()
+        assertEquals(listOf("Stammtisch"), kit.state.rounds?.map { it.name })
+        assertFalse(kit.state.roundsFailed)
+
+        kit.session.offline = true
+        kit.coordinator.refreshRounds()
+        assertEquals(listOf("Stammtisch"), kit.state.rounds?.map { it.name })
+        assertTrue(kit.state.roundsFailed)
+
+        kit.session.offline = false
+        kit.coordinator.refreshRounds()
+        assertFalse(kit.state.roundsFailed)
+
+        // Ohne Anmeldung gibt es keine Liste (sie gehörte zum Konto).
+        kit.coordinator.signOut()
+        runCurrent()
+        assertNull(kit.state.rounds)
+        kit.coordinator.refreshRounds()
+        assertNull(kit.state.rounds)
+    }
+
+    @Test
+    fun `vor dem Wechseln wird vollstaendig abgeglichen und gezaehlt, was danach noch wartet`() = runTest {
+        val kit = linked()
+        kit.addGame(io.github.q0ochen.schafkopf.domain.model.EveningId("abend-1"))
+        assertEquals(1, kit.coordinator.pendingCount())
+
+        assertEquals(0, kit.coordinator.prepareSwitch())
+        assertEquals(1, kit.server.evenings(kit.state.link!!.roundId).single().entries.size)
+
+        // Ohne Netz: ein Fehler, keine Zahl.
+        kit.session.offline = true
+        val error = runCatching { kit.coordinator.prepareSwitch() }.exceptionOrNull()
+        assertEquals(RoundError.OFFLINE, (error as RoundException).error)
+        kit.session.offline = false
+
+        // Gibt es die Runde nicht mehr: keine Rückfrage, sondern die Meldung.
+        kit.server.removeMember(kit.state.link!!.roundId, kit.userId)
+        assertNull(kit.coordinator.prepareSwitch())
+        runCurrent()
+        assertEquals(RoundMessage.DETACHED, kit.state.message)
+        assertNull(kit.state.link)
+        assertNull(kit.coordinator.prepareSwitch())
+    }
+
+    @Test
+    fun `wechseln, beitreten und neu anlegen lesen danach die Runden neu`() = runTest {
+        val server = InMemoryRoundServer()
+        val host = linked(server)
+        val stammtisch = host.state.link!!.roundId
+        val kit = RoundTestKit(backgroundScope, server, userId = "konto-2")
+        kit.coordinator.start()
+        runCurrent()
+        kit.coordinator.create("Eigene")
+        runCurrent()
+        assertEquals(listOf("Eigene"), kit.state.rounds?.map { it.name })
+
+        kit.coordinator.join(host.session.createInvite(stammtisch))
+        runCurrent()
+        assertEquals(stammtisch, kit.state.link?.roundId)
+        // Der Server im Speicher ordnet nach dem Anlegen der Runden, der echte nach dem Beitritt: hier nur die Namen.
+        assertEquals(listOf("Eigene", "Stammtisch"), kit.state.rounds?.map { it.name }?.sorted())
+
+        kit.coordinator.use(kit.state.rounds!!.single { it.name == "Eigene" })
+        runCurrent()
+        assertEquals("Eigene", kit.state.link?.roundName)
+
+        kit.coordinator.create("Dritte")
+        runCurrent()
+        assertEquals("Dritte", kit.state.link?.roundName)
+        assertEquals(listOf("Dritte", "Eigene", "Stammtisch"), kit.state.rounds?.map { it.name }?.sorted())
+        // Die anderen Runden haben dabei nichts verloren.
+        assertEquals(listOf("abend-1"), server.evenings(stammtisch).map { it.id.value })
+    }
+
+    @Test
+    fun `ein vergebener Name wird gemeldet, und die Liste ist danach frisch`() = runTest {
+        val kit = linked()
+        val error = runCatching { kit.coordinator.create("STAMMTISCH") }.exceptionOrNull()
+
+        assertEquals(RoundError.NAME_TAKEN, (error as RoundException).error)
+        assertEquals("Stammtisch", kit.state.link?.roundName)
+        assertEquals(listOf("Stammtisch"), kit.state.rounds?.map { it.name })
     }
 }

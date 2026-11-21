@@ -59,12 +59,13 @@ fun roundStatus(state: RoundState, resources: Resources): RoundStatus = when {
 /**
  * Der Text zu einem gescheiterten Aufruf.
  *
- * @param roundName `true`, wenn es um den Namen einer Runde ging (1 bis 40 Zeichen statt 1 bis 24).
+ * @param roundName `true`, wenn es um den Namen einer Runde ging (1 bis 40 Zeichen statt 1 bis 24; vergeben heißt dann:
+ *   Das Konto hat schon eine Runde dieses Namens).
  */
 fun roundErrorText(error: RoundError, resources: Resources, roundName: Boolean = false): String = resources.getString(
     when (error) {
         RoundError.INVALID_INVITE -> R.string.round_error_invalid_invite
-        RoundError.NAME_TAKEN -> R.string.round_error_name_taken
+        RoundError.NAME_TAKEN -> if (roundName) R.string.round_error_round_name_taken else R.string.round_error_name_taken
         RoundError.INVALID_NAME -> if (roundName) R.string.round_error_invalid_round_name else R.string.round_error_invalid_name
         RoundError.PLAYER_TAKEN -> R.string.round_error_player_taken
         RoundError.ALREADY_CLAIMED -> R.string.round_error_already_claimed
