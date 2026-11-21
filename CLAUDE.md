@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 729, `data` 296, `database` 24, `app` 255, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 53 Oberflächen-Tests je Playwright-Projekt, Server 578 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 729, `data` 296, `database` 24, `app` 255, Web 786 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 64 Oberflächen-Tests je Playwright-Projekt, Server 578 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -636,7 +636,16 @@ irgendwo auftauchen“.
     v2 nimmt `StandardTestDispatcher`). Die Meldung nennt seitdem auch die Felder von `AndroidUiDispatcher.Main`.
     Tritt es wieder auf: Wartet dort Arbeit, während ein Durchlauf als angemeldet gilt, hängt der Taktgeber; dann
     die Testregel v2 erproben. Gleich der nächste volle Lauf war grün.
-  - Web-App: gebaut von einem Helfer nach dem Vertrag (siehe unten, sobald zusammengeführt).
+  - Web-App (gebaut von einem Helfer nach dem Vertrag, von Claude durchgesehen und geprüft): Port von `RoundNames`,
+    `SwitchFrom`, `syncThen` und `RoundConnection` in `web/src/core/round` (dazu Golden-Test `roundNames`),
+    Steuerung `web/src/round/controller.ts` (`rounds`, `prepareSwitch`, `switchWork`, `RoundState.switching`),
+    `picker.ts` (Auswahl der Startseite), `screenModel.ts`, `texts.ts`, Bildschirme `StartScreen.tsx`,
+    `RoundScreen.tsx`, `App.tsx` (modaler Dialog „Einen Moment …“ an der Wurzel). Unterschiede zu Android, beide im
+    Vertrag: „Einen Moment …“ über der ganzen App (die Zurück-Taste des Browsers lässt sich nicht sperren), und beim
+    Lesen der Runden gilt eine Antwort schon dann nicht mehr, wenn danach erneut gelesen wurde. Bildschirmfotos
+    `48-start-runden-auswahl`, `49-runde-wechseln-rueckfrage`, `49b-runde-verbunden-andere-runden`,
+    `49c-runde-anlegen-rueckfrage`, `49d-runde-wechsel-laeuft`. Nicht geprüft: wie sich der Dialog in Safari auf dem
+    iPhone und bei der Zurück-Geste von Chrome auf Android verhält.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 

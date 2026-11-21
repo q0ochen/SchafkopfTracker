@@ -776,7 +776,10 @@ steht sie vorn. Ausgewählt ist die verbundene. Jeder Eintrag heißt wie die Run
 „‹n› Mitglieder“ (bei 1: „1 Mitglied“). Wer eine andere Runde wählt, bekommt die „Rückfrage vor dem Wechseln“
 (unten); bis zum Wechsel zeigt die Auswahl weiter die verbundene Runde. Solange die App vorher abgleicht oder wechselt,
 steht über allem „Einen Moment …“, und nichts lässt sich bedienen, auch „Zurück“ nicht (sonst ließe sich mitten im
-Wechsel ein Spiel in die Runde eintragen, die das Gerät gerade verlässt). Fehler (Texte wie auf dem Bildschirm) und die
+Wechsel ein Spiel in die Runde eintragen, die das Gerät gerade verlässt). Web: Die Zurück-Taste des Browsers lässt sich
+nicht sperren; „Einen Moment …“ steht deshalb über der ganzen App (Zustand in der Steuerung, `RoundState.switching`)
+und bleibt auch auf dem nächsten Bildschirm stehen, bis der Wechsel fertig ist; abbrechen lässt sich ein Wechsel dort
+ohnehin nicht. Fehler (Texte wie auf dem Bildschirm) und die
 Meldung nach `Detached` stehen unter der Auswahl, bis man sie mit „OK“ wegtippt; andere Meldungen der Runde gehören auf
 den Bildschirm „Gemeinsame Runden“. Gelesen werden die Runden, wenn der Start-Bildschirm
 erscheint und jemand angemeldet ist, sowie nach jedem Anlegen, Beitreten, Wechseln und Verlassen. Scheitert das
