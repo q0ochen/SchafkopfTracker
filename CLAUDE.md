@@ -646,6 +646,9 @@ irgendwo auftauchen“.
     `48-start-runden-auswahl`, `49-runde-wechseln-rueckfrage`, `49b-runde-verbunden-andere-runden`,
     `49c-runde-anlegen-rueckfrage`, `49d-runde-wechsel-laeuft`. Nicht geprüft: wie sich der Dialog in Safari auf dem
     iPhone und bei der Zurück-Geste von Chrome auf Android verhält.
+  - Geprüft am 21.11.2026 spätabends: „Android“ 65, „Web-App“ 39 (auch WebKit) und „Supabase“ 22 grün (Stand
+    `5fabaed`, mit den Proben beider Apps gegen einen echten lokalen Supabase-Stack samt neuer Migration). Kein Pull
+    Request; dem Nutzer angeboten.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
