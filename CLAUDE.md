@@ -607,14 +607,35 @@ irgendwo auftauchen“.
   - Server: Migration `20261121200000_runde_auswahl.sql` (578 pgTAP-Tests, dazu ein Fall für zwei Geräte desselben
     Kontos in `nebenlaeufig.sh`). **Wird erst mit „Supabase Deploy“ (von Hand, nach dem Release) auf dem echten
     Server wirksam;** bis dahin fehlen nur die Mitgliedernamen, und die Namen prüft allein die App.
-  - Kotlin: `domain.round.RoundNames`, `RoundConnection` (`handOver`, `clearDevice`), `RoundCoordinator`
-    (`rounds`, `roundsFailed`, `refreshRounds`, `prepareSwitch`), `ui/round/RoundSwitch.kt` (Auswahl, Rückfrage,
-    `roundSelection`, `knownRounds`), `StartViewModel` (Wechsel über die Auswahl). Bildschirmfotos 67 bis 71.
-    Golden-Abschnitt `roundNames`. Tests: `RoundSwitchTest`, `RoundNamesTest` (domain), `RoundSelectionTest`,
-    `StartRoundSwitchTest` und neue Fälle in `RoundCoordinatorTest`, `RoundViewModelTest`, `RoundScreenshotTest`.
+  - Kotlin: `domain.round.RoundNames` (`reusable`, `blocking`), `SwitchFrom`, `RoundConnection` (`switchDevice`,
+    `clearDevice`), `RoundSync.syncThen`, `RoundCoordinator` (`rounds`, `roundsFailed`, `refreshRounds`,
+    `prepareSwitch`), `ui/round/RoundSwitch.kt` (Auswahl, Rückfrage, „Einen Moment …“ über allem, `roundSelection`,
+    `knownRounds`), `StartViewModel` (Wechsel über die Auswahl). Bildschirmfotos 67 bis 71. Golden-Abschnitt
+    `roundNames`. Tests: `RoundSwitchTest`, `RoundNamesTest` (domain), `RoundSelectionTest`, `StartRoundSwitchTest`
+    und neue Fälle in `RoundCoordinatorTest`, `RoundViewModelTest`, `RoundScreenshotTest`.
+  - Eine unabhängige Durchsicht (21.11.2026 nachts) fand zwei mittlere Lücken, beide behoben: Ein Spiel, das mitten im
+    Wechsel eingetragen wurde, ging still verloren (jetzt: letzter Abgleich in derselben Sperre direkt vor dem Leeren,
+    Vergleich mit der Zahl aus der Rückfrage, sonst `CHANGED_MEANWHILE`; dazu „Einen Moment …“ über allem); die
+    Namensprüfung der Oberfläche verhinderte die Wiederverwendung einer leeren Runde nach verlorener Antwort. Dazu
+    kleinere: Bestätigung prüft die Runde der Rückfrage (`SwitchFrom`), Zug ohne Abbruch (`NonCancellable`), Einladung
+    bleibt bei `Detached`, Hinweise der alten Runde weg, jüngste Antwort der Rundenliste zählt, Getipptes bleibt,
+    Hinweis auf die automatische Sicherung, auf der Startseite nur die Meldung nach `Detached`. Bekannte Grenze: Wird
+    die App mitten im Leeren beendet, bleibt eine Teilkopie ohne Runde (auf dem Server fehlt nichts).
+  - Außerhalb dieser Aufgabe aufgefallen (noch offen): `GameFormViewModel.save` ruft `onSaved()` auch, wenn
+    `editor.update` `null` liefert (Abend inzwischen gelöscht, etwa von einem anderen Handy): Das Spiel ist dann weg,
+    und das Formular schließt sich, als wäre es gespeichert. Die Web-App vermutlich ebenso.
   - Gut zu wissen: Ein Test, der auf das Ergebnis eines ViewModels wartet, muss auf die Anzeige warten (Suche nach
     Text oder Beschreibung); `waitFor` mit einer Bedingung ohne Compose lässt den Hauptthread von Robolectric nicht
     laufen, und das ViewModel bleibt stehen. Zwischen Leeren und Verbinden ist das Gerät kurz ohne Runde und leer.
+  - Der wacklige Test der Startseite trat hier am 21.11.2026 nachts wieder auf (`start_mit_geplantem_abend_dunkel`)
+    und zeigte zum ersten Mal alles: ViewModel `loading=false, 2 Abende`, „sammelnd: 1“, Lebenszyklus RESUMED,
+    Hauptthread mit 0 Nachrichten, auf dem Bildschirm weder Abende noch „Noch kein Abend eingetragen“, also der
+    Anfangsstand (`loading=true`). Der Zustand kam beim Sammler an der Oberfläche nie an, obwohl nichts mehr wartet.
+    Verdacht: Die Fortsetzung des Sammlers hängt im Taktgeber von Compose (`AndroidUiDispatcher.Main`, ein Objekt für
+    den ganzen Prozess) oder im Test-Dispatcher der alten Testregel (`createComposeRule` v1, als veraltet markiert;
+    v2 nimmt `StandardTestDispatcher`). Die Meldung nennt seitdem auch die Felder von `AndroidUiDispatcher.Main`.
+    Tritt es wieder auf: Wartet dort Arbeit, während ein Durchlauf als angemeldet gilt, hängt der Taktgeber; dann
+    die Testregel v2 erproben. Gleich der nächste volle Lauf war grün.
   - Web-App: gebaut von einem Helfer nach dem Vertrag (siehe unten, sobald zusammengeführt).
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
