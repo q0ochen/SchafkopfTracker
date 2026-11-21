@@ -457,6 +457,13 @@ drückt und in den neuen Bildschirm gelangt kann man nicht mehr auf den Rückpfe
   `e2e/app.spec.ts` (einer legt `History.prototype.back` still und scheitert ohne die Korrektur).
 - Nicht auf einem echten iPhone geprüft. Hilft es dort nicht, erreicht vermutlich das Antippen den Knopf nicht; dann
   beim Nutzer nachfragen, ob „Zurück“ auf anderen Bildschirmen geht und ob vorher etwas eingeblendet war.
+- **Entscheidung des Nutzers (21.11.2026):** „Heb dir den Rückpfeil Fix dann aber für einen gesammelten neuen Release
+  zu verschiedenen Bugfixes auf. Es werden jetzt neue Tests kommen“. Also keinen Pull Request, bis er darum bittet;
+  die Korrekturen aus den Tests sammeln sich auf dem Zweig `claude/gracious-keller-48tcn0` (Stand dort: `8cbe734`).
+  Die Web-App erreicht das ohnehin erst über `main`. **Aber:** Android-Änderungen auf einem Zweig `claude/…` gehen
+  bisher sofort als Testversion und in die F-Droid-Paketquelle (`android.yml`, Bedingungen mit
+  `refs/heads/claude/`). Dem Nutzer am 21.11.2026 angeboten, das auf `main` und `entwicklung` zu begrenzen; Antwort
+  hier nachtragen. In F-Droid steht seit dem 21.11.2026 die Testversion 49 (= `main` mit Pull Request #26).
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
