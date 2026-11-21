@@ -563,8 +563,11 @@ Aussagekräftiges Diagramm mit den Spielernamen enthalten ist“.
 - Geprüft am 21.11.2026: „Android“ 56 und „Web-App“ 34 grün (Stand `f57c1e3`). Lauf 55 davor (nur der Android-Teil)
   scheiterte am wackligen Test der Startseite (siehe „Gut zu wissen“). Dessen Ursache ist noch offen, die Fehlermeldung
   ist seitdem genauer. Bei der Suche fiel ein zweiter wackliger Fall auf, der Fehler in `awaitFirst` (ebenda); der ist
-  behoben.
-- Auf dem Zweig `claude/gracious-keller-48tcn0`; Pull Request nur auf Bitte des Nutzers.
+  behoben. Mit dem Diagramm-Nachzug und den genaueren Meldungen: „Android“ 58 und 59 grün (Stand `1969ecb`, samt
+  Installationstest im Emulator); 57 scheiterte am wackligen Test der Startseite (`loading=false, 2 Abende`).
+- Pull Request nach `main` am 21.11.2026 abends auf Wunsch des Nutzers angelegt („nein mach einen pull request. nicht
+  weiter sammeln“): „Abend teilen“ in beiden Apps, Diagramm-Nachzug in Android, Korrektur von `awaitFirst` und die
+  genaueren Meldungen des Tests der Startseite. Schließt kein Issue (der Wunsch kam direkt vom Nutzer).
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
