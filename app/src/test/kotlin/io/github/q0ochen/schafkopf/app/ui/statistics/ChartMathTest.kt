@@ -3,6 +3,7 @@ package io.github.q0ochen.schafkopf.app.ui.statistics
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.hypot
 
 /** Dieselben Fälle wie `BalanceChart.test.ts` der Web-App, dazu die Kotlin-Besonderheiten (ganze Cent). */
 class ChartMathTest {
@@ -42,6 +43,39 @@ class ChartMathTest {
     fun `unten anstossende Beschriftungen wandern nach oben`() {
         val placed = ChartMath.spreadLabels(listOf(248f, 249f, 250f), 16f, 10f, 250f)
         assertEquals(listOf(218f, 234f, 250f), placed.sorted())
+    }
+
+    @Test
+    fun `Linien, die genau gleich verlaufen, liegen nebeneinander statt uebereinander`() {
+        // Dieselben Fälle wie in shareImage.test.ts der Web-App.
+        val x = { index: Int -> 100f + index * 100f }
+        val y = { value: Int -> 500f - value }
+        // Anna und Cilli gewinnen zusammen, dann trennen sich ihre Wege; Bert verliert allein.
+        val (anna, cilli, bert) = ChartMath.chartPaths(
+            listOf(listOf(0, 10, 60), listOf(0, 10, 0), listOf(0, -20, -20)),
+            x,
+            y,
+            6f,
+        )
+        fun distance(a: Pair<Float, Float>, b: Pair<Float, Float>) = hypot(a.first - b.first, a.second - b.second)
+        // Erstes Stück: Anna und Cilli je 3 Pixel quer zur Linie versetzt, zusammen genau eine Linienbreite auseinander.
+        assertEquals(6f, distance(anna[0], cilli[0]), 0.001f)
+        assertEquals(6f, distance(anna[1], cilli[1]), 0.001f)
+        assertEquals(500f, (anna[0].second + cilli[0].second) / 2, 0.001f)
+        assertEquals(490f, (anna[1].second + cilli[1].second) / 2, 0.001f)
+        // Danach wieder genau auf den Werten; Bert ist nie versetzt.
+        assertEquals(300f to 440f, anna.last())
+        assertEquals(300f to 500f, cilli.last())
+        assertEquals(listOf(100f to 500f, 200f to 520f, 300f to 520f), bert)
+        // Drei gleiche Linien: in der Mitte die zweite, die anderen eine Linienbreite daneben.
+        val three = ChartMath.chartPaths(listOf(listOf(5, 5), listOf(5, 5), listOf(5, 5)), x, y, 6f)
+        assertEquals(listOf(listOf(489f, 489f), listOf(495f, 495f), listOf(501f, 501f)), three.map { path -> path.map { it.second } })
+    }
+
+    @Test
+    fun `ohne zwei Punkte gibt es keine Linie`() {
+        assertEquals(listOf(emptyList<Pair<Float, Float>>()), ChartMath.chartPaths(listOf(listOf(0)), { 0f }, { 0f }, 6f))
+        assertEquals(emptyList<List<Pair<Float, Float>>>(), ChartMath.chartPaths(emptyList(), { 0f }, { 0f }, 6f))
     }
 
     @Test

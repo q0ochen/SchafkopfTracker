@@ -385,6 +385,12 @@ ein „Geldverlauf“ mit einer farbigen Linie je Spieler und einer Legende mit 
   eingestellten Designs (dunkel oder hell). Android nimmt den Bildschirmausschnitt (`captureInto`); die Web-App zeichnet
   dasselbe in einem Canvas, 1080 Pixel breit, und gibt es als PNG weiter. Dateiname `schafkopf-abend.png`. Der geteilte
   Text bleibt, wie er ist.
+- **Diagramm im Bild:** Linien, die auf einem Stück genau gleich verlaufen (etwa die Partner eines Rufspiels), liegen
+  dort nebeneinander statt übereinander, damit jede Farbe zu sehen ist. Rechts neben den Linienenden steht je Spieler
+  ein Punkt in seiner Farbe und sein Name; liegen Enden nah beieinander, werden Punkt und Name auseinandergeschoben, und
+  eine feine Linie in seiner Farbe führt vom Ende seiner Linie zum Punkt. Android zeichnet sein Diagramm (auch in der
+  Statistik) seit dem 21.11.2026 abends ebenso (`ChartMath.chartPaths`, wie `chartPaths` in `web/src/ui/shareImage.ts`);
+  das Diagramm auf dem Bildschirm der Web-App behält die Punkte am Linienende.
 - **Statistik:** Auch dort heißen die Knöpfe „Als Bild teilen“ (zuerst) und „Als Text teilen“ (Android wie bisher;
   die Web-App bekommt nur „Als Bild teilen“). Das Bild zeigt den oberen Teil der Statistik: Auswahl („Abend vom …“ bzw.
   „Alle Abende (ewige Tabelle)“; Android nennt einen Abend wie in seiner Auswahl nur mit Datum und Ort), Kontostand und

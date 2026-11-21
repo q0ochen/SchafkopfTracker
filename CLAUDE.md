@@ -155,7 +155,7 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 699, `data` 296, `database` 24, `app` 227, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
+  `domain` 699, `data` 296, `database` 24, `app` 229, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
   laufen) und 53 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
@@ -545,7 +545,10 @@ Aussagekräftiges Diagramm mit den Spielernamen enthalten ist“.
   Vermögensverlauf und „Wer zahlt wem“.
 - **Android:** `ClosingScreen` (Diagramm `BalanceChart` im geteilten Ausschnitt), `ClosingViewModel` (Verlauf aus
   `StatisticEngine.forEvening`), `ShareButtons` (Reihenfolge), Bild `schafkopf-abend.png`; Test
-  `ShareTest` (Diagramm und Reihenfolge), Bildschirmfotos 11 und 18.
+  `ShareTest` (Diagramm und Reihenfolge), Bildschirmfotos 11 und 18. Nachgezogen (Vertrag 4.4, „Diagramm im Bild“):
+  `BalanceChart` legt gleich verlaufende Linien nebeneinander (`ChartMath.chartPaths`, dieselben Testfälle wie die
+  Web-App) und setzt vor jeden Namen am Linienende einen Farbpunkt mit feiner Linie zum Linienende. Vorher lag die Linie
+  eines Partners mit gleichem Stand unsichtbar unter der anderen, und ein Name stand neben dem Punkt eines anderen.
 - **Web-App** (gebaut von einem Helfer, von Claude durchgesehen und geprüft): teilt jetzt Bilder, „Abend teilen“ und die
   Statistik (`shareImage.ts`, `shareImageCanvas.ts`, `ShareImageButton.tsx`), 1080 Pixel breit in den Farben des
   Designs. Linien, die genau gleich verlaufen (Partner mit gleichem Stand), liegen im Bild nebeneinander statt
