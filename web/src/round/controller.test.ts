@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemoryRoundServer } from "../core/round/InMemoryRound";
 import { InviteLinks } from "../core/round/InviteLinks";
-import { RoundException, type RoundSummary } from "../core/round/RoundModels";
+import { RoundException, switchFrom, type RoundSummary } from "../core/round/RoundModels";
 import { needsSignIn, NOT_CONFIGURED } from "./controller";
 import { account, Phone, WEB_APP_URL } from "./testing/phone";
 import { roundStatus } from "./texts";
@@ -1075,6 +1075,32 @@ describe("Runden des Kontos", () => {
     expect(other.state.roundsFailed).toBe(false);
   });
 
+  it("nur die Antwort auf die jüngste Anfrage zählt, auch wenn eine ältere erst danach kommt", async () => {
+    const one = await founder();
+    const session = one.mine;
+    const myRounds = session.myRounds.bind(session);
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Die erste Anfrage bekommt ihre Antwort (nur der Stammtisch) erst nach der zweiten.
+    session.myRounds = async () => {
+      session.myRounds = myRounds;
+      const answer = await myRounds();
+      await gate;
+      return answer;
+    };
+    const older = one.controller.refreshRounds();
+    await pass();
+    await club();
+    await one.controller.refreshRounds();
+    expect(one.state.rounds?.map((it) => it.name)).toEqual(["Stammtisch", "Klub"]);
+
+    release();
+    await older;
+    expect(one.state.rounds?.map((it) => it.name)).toEqual(["Stammtisch", "Klub"]);
+  });
+
   it("nach dem Anlegen, Beitreten, Wechseln und Verlassen wird neu gelesen, auch ohne Bildschirm", async () => {
     const one = await founder();
     expect(one.state.rounds?.map((it) => it.name)).toEqual(["Stammtisch"]);
@@ -1118,12 +1144,13 @@ describe("Runden wechseln", () => {
     await one.controller.refreshRounds();
     await one.addGame("abend-1");
 
-    // Die Vorbereitung gleicht vollständig ab und sagt, was danach noch wartet.
-    expect(await one.controller.beforeSwitch()).toBe(0);
+    // Die Vorbereitung gleicht vollständig ab und sagt, von welcher Runde aus gefragt wird und was danach noch wartet.
+    const from = await one.controller.prepareSwitch();
+    expect(from).toEqual(switchFrom(stammtisch, 0));
     expect(server.evenings(stammtisch)[0].entries).toHaveLength(2);
     expect(one.state.link?.roundId).toBe(stammtisch);
 
-    expect((await one.controller.use(roundNamed(one, "Klub"))).kind).toBe("Synced");
+    expect((await one.controller.use(roundNamed(one, "Klub"), from)).kind).toBe("Synced");
     await pass();
 
     expect(one.state.link).toMatchObject({ roundName: "Klub", isCreator: false, playerId: null });
@@ -1139,6 +1166,7 @@ describe("Runden wechseln", () => {
 
   it("was der Server nicht annimmt, wartet auch nach dem Abgleich: die Zahl für die Rückfrage", async () => {
     const one = await founder();
+    const stammtisch = one.state.link?.roundId ?? "";
     await club();
     await one.controller.refreshRounds();
     one.mine.saveEvening = async () => {
@@ -1146,8 +1174,12 @@ describe("Runden wechseln", () => {
     };
     await one.addGame("abend-1");
 
-    expect(await one.controller.beforeSwitch()).toBe(1);
+    expect(await one.controller.prepareSwitch()).toEqual(switchFrom(stammtisch, 1));
     expect(status(one)).toBe("1 Abend nimmt der Server nicht an");
+    // Ohne diese Zustimmung wird nicht gewechselt: Der Abend ginge verloren.
+    await expect(one.controller.use(roundNamed(one, "Klub"))).rejects.toMatchObject({ error: "CHANGED_MEANWHILE" });
+    expect(one.state.link?.roundId).toBe(stammtisch);
+    expect(one.store.getState().evenings[0].entries).toHaveLength(2);
   });
 
   it("ohne Netz oder mit abgelaufener Anmeldung scheitert die Vorbereitung, und es bleibt alles, wie es ist", async () => {
@@ -1156,15 +1188,29 @@ describe("Runden wechseln", () => {
     await one.addGame("abend-1");
     one.mine.offline = true;
 
-    await expect(one.controller.beforeSwitch()).rejects.toMatchObject({ error: "OFFLINE" });
+    await expect(one.controller.prepareSwitch()).rejects.toMatchObject({ error: "OFFLINE" });
     expect(status(one)).toBe("Kein Netz – 1 Änderung wartet");
 
     one.mine.offline = false;
     one.mine.signedOut = true;
-    await expect(one.controller.beforeSwitch()).rejects.toMatchObject({ error: "SIGNED_OUT" });
+    await expect(one.controller.prepareSwitch()).rejects.toMatchObject({ error: "SIGNED_OUT" });
     expect(needsSignIn(one.state)).toBe(true);
     expect(one.state.link?.roundId).toBe(stammtisch);
     expect(one.store.getState().evenings[0].entries).toHaveLength(2);
+  });
+
+  it("ohne Anmeldung wird nicht abgeglichen: Die Vorbereitung scheitert mit „Anmeldung abgelaufen“", async () => {
+    const one = await founder();
+    const stammtisch = one.state.link?.roundId ?? "";
+    const session = one.mine;
+    one.auth.set(null);
+    await pass();
+    session.calls.length = 0;
+
+    await expect(one.controller.prepareSwitch()).rejects.toMatchObject({ error: "SIGNED_OUT" });
+
+    expect(session.calls).toEqual([]);
+    expect(one.state.link?.roundId).toBe(stammtisch);
   });
 
   it("antwortet der Server mit einem Fehler, scheitert die Vorbereitung mit dessen Fehler", async () => {
@@ -1173,7 +1219,7 @@ describe("Runden wechseln", () => {
       throw new RoundException("SERVER", "HTTP 503");
     };
 
-    await expect(one.controller.beforeSwitch()).rejects.toMatchObject({ error: "SERVER" });
+    await expect(one.controller.prepareSwitch()).rejects.toMatchObject({ error: "SERVER" });
     expect(status(one)).toBe("Server nicht erreichbar");
   });
 
@@ -1184,14 +1230,16 @@ describe("Runden wechseln", () => {
     one.controller.start(true);
     await pass();
 
-    await expect(one.controller.beforeSwitch()).rejects.toMatchObject({ name: "UnreadableDataError" });
+    await expect(one.controller.prepareSwitch()).rejects.toMatchObject({ name: "UnreadableDataError" });
+    // Auch eine neue Runde wird dann nicht angelegt.
+    await expect(one.controller.create("Dienstag")).rejects.toMatchObject({ name: "UnreadableDataError" });
   });
 
   it("gibt es die verbundene Runde nicht mehr, gibt es nichts zu fragen: Die Meldung nach `Detached` steht da", async () => {
     const one = await founder();
     server.removeMember(one.state.link?.roundId ?? "", "konto-1");
 
-    expect(await one.controller.beforeSwitch()).toBeNull();
+    expect(await one.controller.prepareSwitch()).toBeNull();
 
     expect(one.state.link).toBeNull();
     expect(one.state.message).toBe("DETACHED");
@@ -1203,7 +1251,7 @@ describe("Runden wechseln", () => {
     one.controller.start(true);
     await pass();
 
-    expect(await one.controller.beforeSwitch()).toBeNull();
+    expect(await one.controller.prepareSwitch()).toBeNull();
     expect(one.state.message).toBeNull();
   });
 
@@ -1246,6 +1294,23 @@ describe("Runden wechseln", () => {
     expect(server.evenings(stammtisch)).toHaveLength(1);
   });
 
+  it("eine Einladung bleibt, wenn der Beitritt nicht zum Wechsel führte (die bisherige Runde gibt es nicht mehr)", async () => {
+    const two = await club();
+    const one = await founder();
+    const stammtisch = one.state.link?.roundId ?? "";
+    const token = await inviteToken(two);
+    one.controller.rememberInvite(token);
+    server.removeMember(stammtisch, "konto-1");
+
+    expect((await one.controller.join(token)).kind).toBe("Detached");
+    await pass();
+
+    expect(one.state.pendingInvite).toBe(token);
+    expect(one.state.link).toBeNull();
+    expect(one.state.message).toBe("DETACHED");
+    expect(one.store.getState().evenings).toHaveLength(1);
+  });
+
   it("nach dem Wechsel gelten Hinweise und nicht angenommene Abende der bisherigen Runde nicht mehr", async () => {
     const one = await founder();
     const stammtisch = one.state.link?.roundId ?? "";
@@ -1274,7 +1339,12 @@ describe("Runden wechseln", () => {
       return head(round);
     };
 
-    expect((await one.controller.use(roundNamed(one, "Klub"))).kind).toBe("Offline");
+    // Der Abend, den der Server nicht annimmt, geht beim Wechseln verloren: Die Rückfrage nennt ihn.
+    const from = await one.controller.prepareSwitch();
+    expect(from).toEqual(switchFrom(stammtisch, 1));
+    expect(one.state.notices).not.toEqual([]);
+
+    expect((await one.controller.use(roundNamed(one, "Klub"), from)).kind).toBe("Offline");
 
     expect(one.state.link?.roundId).toBe(klub);
     expect(one.state.notices).toEqual([]);
@@ -1293,5 +1363,31 @@ describe("Runden wechseln", () => {
 
     expect(after).not.toBe(before);
     expect(one.issued?.roundId).toBe(one.state.link?.roundId);
+  });
+
+  it("solange ein Wechsel vorbereitet wird oder läuft, steht es im Zustand – auch bei zweien zugleich und wenn er scheitert", async () => {
+    const one = await founder();
+    expect(one.state.switching).toBe(false);
+    let inside = false;
+    await one.controller.switchWork(async () => {
+      inside = one.state.switching;
+    });
+    expect(inside).toBe(true);
+    expect(one.state.switching).toBe(false);
+
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waiting = one.controller.switchWork(() => gate);
+    await expect(
+      one.controller.switchWork(async () => {
+        throw new RoundException("OFFLINE");
+      }),
+    ).rejects.toMatchObject({ error: "OFFLINE" });
+    expect(one.state.switching).toBe(true);
+    release();
+    await waiting;
+    expect(one.state.switching).toBe(false);
   });
 });

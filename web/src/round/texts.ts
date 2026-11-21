@@ -95,6 +95,8 @@ export function roundErrorText(error: RoundError, roundName = false): string {
       return "Keine Verbindung. Bitte später noch einmal versuchen.";
     case "SIGNED_OUT":
       return "Anmeldung abgelaufen – bitte neu anmelden";
+    case "CHANGED_MEANWHILE":
+      return "Inzwischen hat sich auf diesem Gerät etwas geändert. Bitte noch einmal versuchen.";
     default:
       return GENERIC_ERROR;
   }

@@ -92,9 +92,21 @@ describe("Fehlertexte", () => {
     expect(roundErrorText("LIMIT_REACHED")).toBe("Mehr geht nicht: Die Grenze für Runden, Mitglieder oder Einladungen ist erreicht.");
     expect(roundErrorText("OFFLINE")).toBe("Keine Verbindung. Bitte später noch einmal versuchen.");
     expect(roundErrorText("SIGNED_OUT")).toBe("Anmeldung abgelaufen – bitte neu anmelden");
+    // Seit der Rückfrage zum Wechseln hat sich auf dem Gerät etwas geändert (docs/ARCHITEKTUR.md 8.9).
+    expect(roundErrorText("CHANGED_MEANWHILE")).toBe("Inzwischen hat sich auf diesem Gerät etwas geändert. Bitte noch einmal versuchen.");
     expect(GENERIC_ERROR).toBe("Das hat nicht geklappt. Bitte später noch einmal versuchen.");
     expect(NO_CODE_ERROR).toBe("Das ist kein gültiger Einladungslink.");
-    const own = new Set(["INVALID_INVITE", "NAME_TAKEN", "INVALID_NAME", "PLAYER_TAKEN", "ALREADY_CLAIMED", "LIMIT_REACHED", "OFFLINE", "SIGNED_OUT"]);
+    const own = new Set([
+      "INVALID_INVITE",
+      "NAME_TAKEN",
+      "INVALID_NAME",
+      "PLAYER_TAKEN",
+      "ALREADY_CLAIMED",
+      "LIMIT_REACHED",
+      "OFFLINE",
+      "SIGNED_OUT",
+      "CHANGED_MEANWHILE",
+    ]);
     for (const error of ROUND_ERRORS) {
       if (!own.has(error)) expect(roundErrorText(error), error).toBe(GENERIC_ERROR);
       expect(roundErrorText(error).length, error).toBeGreaterThan(10);

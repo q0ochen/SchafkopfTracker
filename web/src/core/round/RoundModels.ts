@@ -133,6 +133,21 @@ export interface InviteInfo {
   readonly alreadyMember: boolean;
 }
 
+/**
+ * Was die Oberfläche vor einem Wechsel in eine andere Runde gefragt hat (docs/ARCHITEKTUR.md 8.7): von welcher Runde aus
+ * (`roundId`, `null` ohne Runde) und wie viele wartende Änderungen dabei verloren gehen dürfen (`acceptedLoss`, die Zahl
+ * aus der Rückfrage). Weicht das Gerät beim Wechsel davon ab, wird nicht gewechselt (`CHANGED_MEANWHILE`).
+ */
+export interface SwitchFrom {
+  readonly roundId: RoundId | null;
+  readonly acceptedLoss: number;
+}
+
+/** Ein `SwitchFrom` mit dem Standardwert der Kotlin-Klasse (`acceptedLoss = 0`). */
+export function switchFrom(roundId: RoundId | null, acceptedLoss = 0): SwitchFrom {
+  return { roundId, acceptedLoss };
+}
+
 /** Antwort auf ein gespeichertes Abend-Dokument. */
 export interface SavedEvening {
   readonly version: number;
@@ -173,13 +188,17 @@ export function roundLink(fields: Pick<RoundLink, "roundId" | "roundName" | "use
  * - `OFFLINE`: keine Verbindung zum Server,
  * - `SIGNED_OUT`: die Anmeldung ist abgelaufen oder wurde widerrufen,
  * - `SERVER`: der Server antwortet mit einem Fehler (zum Beispiel, weil das Projekt pausiert ist),
- * - `NOT_CONFIGURED`: die App kennt keinen Server (keine Konfiguration).
+ * - `NOT_CONFIGURED`: die App kennt keinen Server (keine Konfiguration),
+ * - `CHANGED_MEANWHILE`: Ein Wechsel in eine andere Runde wurde abgebrochen, weil sich auf dem Gerät seit der Rückfrage
+ *   etwas geändert hat: Es ist inzwischen mit einer anderen (oder keiner) Runde verbunden, oder es wartet mehr, als die
+ *   Rückfrage nannte.
  */
 export type RoundError =
   | "OFFLINE"
   | "SIGNED_OUT"
   | "SERVER"
   | "NOT_CONFIGURED"
+  | "CHANGED_MEANWHILE"
   | "NOT_MEMBER"
   | "INVALID_NAME"
   | "NAME_TAKEN"
@@ -198,6 +217,7 @@ export const ROUND_ERRORS: readonly RoundError[] = [
   "SIGNED_OUT",
   "SERVER",
   "NOT_CONFIGURED",
+  "CHANGED_MEANWHILE",
   "NOT_MEMBER",
   "INVALID_NAME",
   "NAME_TAKEN",

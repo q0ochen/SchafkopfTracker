@@ -18,6 +18,7 @@ export {
   roundLink,
   roundSummary,
   sameContent,
+  switchFrom,
   toPlayer,
 } from "./RoundModels";
 export type {
@@ -31,6 +32,7 @@ export type {
   RoundMember,
   RoundSummary,
   SavedEvening,
+  SwitchFrom,
 } from "./RoundModels";
 export { EveningNotStorableError, ROUND_API_METHODS } from "./RoundPorts";
 export type {

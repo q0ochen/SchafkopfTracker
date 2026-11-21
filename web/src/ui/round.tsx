@@ -1,10 +1,10 @@
 /*
  * Bausteine der gemeinsamen Runde, die mehrere Bildschirme brauchen (docs/ARCHITEKTUR.md, Abschnitt 8.9): die
  * Statuszeile, die Einstiegszeile „Gemeinsame Runden“ auf dem Start-Bildschirm (mit der Runden-Auswahl) und in den
- * Einstellungen, die „Rückfrage vor dem Wechseln“, Meldungen und das Wolken-Symbol in der Kopfzeile eines Abends. Der
- * Text sagt immer alles; Symbol und Farbe sind nur Beiwerk.
+ * Einstellungen, die „Rückfrage vor dem Wechseln“, „Einen Moment …“ während eines Wechsels, Meldungen und das
+ * Wolken-Symbol in der Kopfzeile eines Abends. Der Text sagt immer alles; Symbol und Farbe sind nur Beiwerk.
  */
-import { useEffect, useId, useMemo, useState } from "preact/hooks";
+import { useEffect, useId, useMemo, useRef, useState } from "preact/hooks";
 import { targetName, type RoundUiError, type SwitchConfirm } from "../round/actions";
 import { needsSignIn, type RoundController, type RoundState } from "../round/controller";
 import { roundChoices, RoundPicker, showsPicker } from "../round/picker";
@@ -76,7 +76,7 @@ export function MessageCard({ text, onDismiss, isError }: { text: string; onDism
  * verloren, steht das in einer eigenen Zeile, und der Knopf ist als gefährlich markiert (der Text sagt es auch).
  */
 export function SwitchDialog({ confirm, onCancel, onConfirm }: { confirm: SwitchConfirm; onCancel: () => void; onConfirm: () => void }) {
-  const texts = switchTexts(confirm.target.kind, targetName(confirm.target), confirm.from, confirm.pending);
+  const texts = switchTexts(confirm.target.kind, targetName(confirm.target), confirm.fromName, confirm.from.acceptedLoss);
   return (
     <Dialog
       title={texts.title}
@@ -96,6 +96,40 @@ export function SwitchDialog({ confirm, onCancel, onConfirm }: { confirm: Switch
       <p>{texts.keeps}</p>
       {texts.loss !== null ? <p class="error-text">{texts.loss}</p> : null}
     </Dialog>
+  );
+}
+
+/**
+ * „Einen Moment …“ über allem, solange ein Wechsel vorbereitet wird oder läuft (`RoundState.switching`): Bis er fertig
+ * ist, lässt sich nichts bedienen, auch „Zurück“ nicht (docs/ARCHITEKTUR.md 8.9). Sonst ließe sich mitten im Wechsel ein
+ * Spiel in die Runde eintragen, die das Gerät gerade verlässt. Ein modaler Dialog macht alles dahinter unbedienbar;
+ * Escape schließt ihn nicht, und schließt ihn der Browser trotzdem (etwa mit der Zurück-Geste von Android), öffnet er
+ * sich sofort wieder. Er hängt an der Wurzel der Oberfläche, nicht am Bildschirm: Die Zurück-Taste des Browsers lässt
+ * sich nicht sperren, und wer damit den Bildschirm verlässt, sieht ihn auch auf dem nächsten.
+ */
+export function SwitchProgress() {
+  const ref = useRef<HTMLDialogElement>(null);
+  const textId = useId();
+  const open = (): void => {
+    const dialog = ref.current;
+    if (dialog === null || dialog.open) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  };
+  useEffect(open, []);
+  return (
+    <dialog
+      ref={ref}
+      class="dialog switch-progress"
+      aria-labelledby={textId}
+      onCancel={(event) => event.preventDefault()}
+      onClose={() => queueMicrotask(open)}
+    >
+      <div class="switch-progress-row" role="status">
+        <span class="spinner" aria-hidden="true" />
+        <span id={textId}>Einen Moment …</span>
+      </div>
+    </dialog>
   );
 }
 
@@ -120,7 +154,11 @@ function RowSummary({ state, withName }: { state: RoundState; withName: boolean 
   );
 }
 
-/** Die Zeile „Gemeinsame Runden“ mit Runden-Auswahl, Rückfrage und Meldungen (Start-Bildschirm). */
+/**
+ * Die Zeile „Gemeinsame Runden“ mit Runden-Auswahl, Rückfrage und Meldungen (Start-Bildschirm). Von den Meldungen der
+ * Runde gehört hierher nur die nach einem gescheiterten Wechsel (die Runde gibt es nicht mehr); die anderen stehen auf
+ * dem Bildschirm „Gemeinsame Runden“.
+ */
 function PickerRow({ controller }: { controller: RoundController }) {
   const { router } = useServices();
   const state = useRoundState();
@@ -170,13 +208,8 @@ function PickerRow({ controller }: { controller: RoundController }) {
           </div>
         </div>
       ) : null}
-      {ui.busy ? (
-        <p class="hint" role="status">
-          Einen Moment …
-        </p>
-      ) : null}
       {ui.error !== null ? <MessageCard text={uiErrorText(ui.error)} onDismiss={() => picker.clearError()} isError /> : null}
-      {state.message !== null ? <MessageCard text={messageText(state.message)} onDismiss={() => controller.clearMessage()} /> : null}
+      {state.message === "DETACHED" ? <MessageCard text={messageText(state.message)} onDismiss={() => controller.clearMessage()} /> : null}
       {ui.confirm !== null ? <SwitchDialog confirm={ui.confirm} onCancel={() => picker.cancel()} onConfirm={() => void picker.confirm()} /> : null}
     </div>
   );

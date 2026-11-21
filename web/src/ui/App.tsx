@@ -2,7 +2,8 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Route } from "../app/router";
 import type { ThemeMode } from "../core/model";
-import { ServicesContext, useAppState, useServices, type Services } from "./context";
+import { ServicesContext, useAppState, useRoundState, useServices, type Services } from "./context";
+import { SwitchProgress } from "./round";
 import { BoardScreen } from "./screens/BoardScreen";
 import { ClosingScreen } from "./screens/ClosingScreen";
 import { EditEveningScreen } from "./screens/EditEveningScreen";
@@ -80,6 +81,15 @@ function UpdateBanner({ onReload }: { onReload: () => void }) {
   );
 }
 
+/**
+ * „Einen Moment …“ über jedem Bildschirm, solange ein Wechsel in eine andere Runde vorbereitet wird oder läuft
+ * (docs/ARCHITEKTUR.md 8.9). Eine eigene Komponente, damit nur sie dem Stand der Runde folgt, nicht der ganze Bildschirm.
+ */
+function SwitchOverlay() {
+  const round = useRoundState();
+  return round.switching ? <SwitchProgress /> : null;
+}
+
 function Shell({ updateReady, onReload }: { updateReady: boolean; onReload: () => void }) {
   const { router } = useServices();
   const { settings } = useAppState();
@@ -95,6 +105,7 @@ function Shell({ updateReady, onReload }: { updateReady: boolean; onReload: () =
       {updateReady ? <UpdateBanner onReload={onReload} /> : null}
       <SaveErrorBanner />
       <Screen key={JSON.stringify(route)} route={route} />
+      <SwitchOverlay />
     </>
   );
 }

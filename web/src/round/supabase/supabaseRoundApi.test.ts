@@ -420,7 +420,7 @@ describe("Fehler", () => {
       expect(await errorOf(() => api.savePlayer(round, player("gast", "Wirt", 4))), code).toBe(expected);
     }
     // Ein Code, den diese Version nicht kennt, und die Fehler der App selbst sind keine Codes des Servers.
-    for (const code of ["neuer_code", "offline", "signed_out", "server", "NAME_TAKEN", ""]) {
+    for (const code of ["neuer_code", "offline", "signed_out", "server", "changed_meanwhile", "NAME_TAKEN", ""]) {
       fake.handle = async () => ({ status: 400, body: { code: "P0001", message: code, details: null, hint: null } });
       expect(await errorOf(() => api.savePlayer(round, player("gast", "Wirt", 4))), code).toBe("SERVER");
     }

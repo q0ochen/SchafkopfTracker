@@ -7,12 +7,15 @@
  * Ohne verbundene Runde fragt Beitreten und Verwenden „Daten dieses Geräts ersetzen?“, wenn auf dem Gerät etwas liegt.
  * Mit verbundener Runde gleichen Wechseln, Beitreten und Anlegen sie vorher vollständig ab und fragen dann „Zur Runde
  * ‹Ziel› wechseln?“ bzw. „Der Runde ‹Ziel› beitreten?“ und „Neue Runde ‹Ziel› anlegen?“ (docs/ARCHITEKTUR.md 8.9).
+ * Solange das vorbereitet wird oder der Wechsel läuft, steht über allem „Einen Moment …“ (`RoundController.switchWork`).
+ * Eine offene Rückfrage bleibt, bis man sie beantwortet: Hat sich das Gerät bis dahin geändert (etwa in einem anderen
+ * Fenster), wird beim Bestätigen nicht gewechselt (`CHANGED_MEANWHILE`), und der Fehler steht da.
  */
 import type { PlayerId } from "../core/model";
 import { InviteLinks } from "../core/round/InviteLinks";
-import { RoundException, type InviteInfo, type RoundSummary } from "../core/round/RoundModels";
+import { RoundException, switchFrom, type InviteInfo, type RoundSummary } from "../core/round/RoundModels";
 import { RoundNames } from "../core/round/RoundNames";
-import { prepareSwitch, roundNameProblem, runSwitch, stillValid, uiErrorOf, type RoundUiError, type SwitchConfirm, type SwitchTarget } from "./actions";
+import { prepareSwitch, roundNameProblem, runSwitch, uiErrorOf, type RoundUiError, type SwitchConfirm, type SwitchTarget } from "./actions";
 import type { RoundController } from "./controller";
 import type { RoundMessage } from "./texts";
 
@@ -67,7 +70,7 @@ export class RoundScreenModel {
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: () => void;
   private readonly unwatchRounds: () => void;
-  /** Konto und verbundene Runde als ein Text: Ändert er sich, gelten offene Rückfragen nicht mehr. */
+  /** Konto und verbundene Runde als ein Text: Ändert er sich, gelten ein erzeugter Link und „Verlassen?“ nicht mehr. */
   private situation: string | null = null;
   /** Konto und wartende Einladung als ein Text: Ändert er sich, wird die Einladung neu nachgesehen. */
   private watchedInvite: string | null = null;
@@ -119,10 +122,10 @@ export class RoundScreenModel {
     const situation = JSON.stringify([userId, state.link?.roundId ?? null]);
     if (situation !== this.situation) {
       this.situation = situation;
-      // Rückfragen und ein erzeugter Link gelten nur für die Lage, in der sie entstanden sind.
-      if (this.ui.switching !== null || this.ui.replace !== null || this.ui.leaving !== null || this.ui.shareLink !== null) {
-        this.update({ switching: null, replace: null, leaving: null, shareLink: null });
-      }
+      // Ein erzeugter Link gilt nur für die Runde, für die er erzeugt wurde, und „Verlassen?“ fragt nach einer Runde, die
+      // nicht verbunden ist. Die Rückfragen zum Wechseln und Ersetzen bleiben: Beim Bestätigen entscheidet der Wechsel
+      // selbst, ob er noch passt (`CHANGED_MEANWHILE`).
+      if (this.ui.leaving !== null || this.ui.shareLink !== null) this.update({ leaving: null, shareLink: null });
     }
     const invite = JSON.stringify([userId, state.pendingInvite]);
     if (invite === this.watchedInvite) return;
@@ -213,15 +216,16 @@ export class RoundScreenModel {
    */
   create(name: string): Promise<void> {
     if (this.ui.busy) return Promise.resolve();
-    const problem = roundNameProblem(name, this.controller.getState().rounds ?? []);
+    const state = this.controller.getState();
+    const problem = roundNameProblem(name, state);
     if (problem !== null) {
       this.update({ error: { kind: "Server", error: problem, roundName: true } });
       return Promise.resolve();
     }
     const clean = RoundNames.clean(name);
-    if (this.controller.getState().link !== null) return this.busy(() => this.askSwitch({ kind: "create", name: clean }), true);
+    if (state.link !== null) return this.switching(() => this.askSwitch({ kind: "create", name: clean }), true);
     return this.busy(async () => {
-      await this.controller.create(clean);
+      await this.controller.create(clean, switchFrom(null));
     }, true);
   }
 
@@ -246,7 +250,7 @@ export class RoundScreenModel {
    * Runden“).
    */
   use(round: RoundSummary): Promise<void> {
-    if (this.controller.getState().link !== null) return this.busy(() => this.askSwitch({ kind: "use", round }));
+    if (this.controller.getState().link !== null) return this.switching(() => this.askSwitch({ kind: "use", round }));
     return this.requestAttach({ kind: "use", round });
   }
 
@@ -261,7 +265,7 @@ export class RoundScreenModel {
    */
   private join(token: string): Promise<void> {
     if (this.controller.getState().link === null) return this.requestAttach({ kind: "join", token });
-    return this.busy(async () => {
+    return this.switching(async () => {
       let info: InviteInfo;
       try {
         info = await this.controller.inviteInfo(token);
@@ -287,7 +291,7 @@ export class RoundScreenModel {
 
   /**
    * Mit verbundener Runde: vollständig abgleichen, dann fragen. Gibt es die verbundene Runde nicht mehr, steht die
-   * Meldung nach `Detached` da, und es kommt keine Rückfrage. Nur innerhalb von {@link busy}.
+   * Meldung nach `Detached` da, und es kommt keine Rückfrage. Nur innerhalb von {@link switching}.
    */
   private async askSwitch(target: SwitchTarget): Promise<void> {
     const confirm = await prepareSwitch(this.controller, target);
@@ -298,13 +302,15 @@ export class RoundScreenModel {
     this.update({ switching: null });
   }
 
-  /** Wechseln, Beitreten oder Anlegen ist bestätigt. Ist das Gerät inzwischen anders verbunden, gilt es nicht mehr. */
+  /**
+   * Wechseln, Beitreten oder Anlegen ist bestätigt. Hat sich das Gerät seit der Rückfrage geändert, wird nicht gewechselt
+   * (`CHANGED_MEANWHILE`, siehe `RoundConnection`).
+   */
   confirmSwitch(): Promise<void> {
     const confirm = this.ui.switching;
-    if (confirm === null) return Promise.resolve();
+    if (confirm === null || this.ui.busy) return Promise.resolve();
     this.update({ switching: null });
-    if (!stillValid(this.controller, confirm)) return Promise.resolve();
-    return this.busy(() => runSwitch(this.controller, confirm.target), confirm.target.kind === "create");
+    return this.switching(() => runSwitch(this.controller, confirm), confirm.target.kind === "create");
   }
 
   /** Liegt auf dem Gerät etwas, das ersetzt würde, kommt erst die Rückfrage (ohne verbundene Runde). */
@@ -321,16 +327,19 @@ export class RoundScreenModel {
 
   confirmReplace(): Promise<void> {
     const target = this.ui.replace;
-    if (target === null) return Promise.resolve();
+    if (target === null || this.ui.busy) return Promise.resolve();
     this.update({ replace: null });
-    // Inzwischen mit einer Runde verbunden: Dann gilt die Rückfrage nicht mehr (dort ginge es nur nach Abgleich).
-    if (this.controller.getState().link !== null) return Promise.resolve();
     return this.busy(() => this.attach(target));
   }
 
+  /**
+   * Beitreten oder Verwenden ohne verbundene Runde. Hängt das Gerät inzwischen doch an einer (etwa aus einem anderen
+   * Fenster), wird nicht ohne die Rückfrage vor dem Wechseln gewechselt (`CHANGED_MEANWHILE`).
+   */
   private async attach(target: PendingAttach): Promise<void> {
-    if (target.kind === "join") await this.controller.join(target.token);
-    else await this.controller.use(target.round);
+    const from = switchFrom(null);
+    if (target.kind === "join") await this.controller.join(target.token, from);
+    else await this.controller.use(target.round, from);
   }
 
   // --- Verbunden ---
@@ -383,5 +392,13 @@ export class RoundScreenModel {
     } finally {
       this.update({ busy: false });
     }
+  }
+
+  /**
+   * Wie {@link busy}, aber für das Wechseln (vorbereiten bis zur Rückfrage oder der bestätigte Wechsel): Solange es
+   * läuft, steht über allem „Einen Moment …“, und nichts lässt sich bedienen, auch „Zurück“ nicht.
+   */
+  private switching(block: () => Promise<void>, roundName = false): Promise<void> {
+    return this.busy(() => this.controller.switchWork(block), roundName);
   }
 }

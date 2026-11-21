@@ -185,6 +185,28 @@ export function roundPicker(page: Page) {
   return page.getByRole("combobox", { name: "Runde", exact: true });
 }
 
+/** „Einen Moment …“ über allem, solange ein Wechsel vorbereitet wird oder läuft. */
+export function switchProgress(page: Page) {
+  return page.getByRole("dialog", { name: "Einen Moment …" });
+}
+
+/**
+ * Hält die Anfragen nach dem Kopf der Runde `round` an, bis die zurückgegebene Funktion aufgerufen wird. Ein Wechsel in
+ * diese Runde fragt zuerst danach: So lange läuft er.
+ */
+export async function holdHead(context: BrowserContext, round: RoundId): Promise<() => void> {
+  let release = (): void => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await context.route(`${FAKE_SUPABASE_URL}/rest/v1/rounds**`, async (route) => {
+    const request = route.request();
+    if (request.method() === "GET" && new URL(request.url()).searchParams.get("id") === `eq.${round}`) await held;
+    await route.fallback();
+  });
+  return release;
+}
+
 /**
  * Eine weitere Runde, die ein anderes Konto (`owner`, ohne Angabe Konto 2) angelegt hat: vier Spieler, von denen der
  * erste dem Konto gehört („Das bin ich“ als `ownerName`, ohne Angabe „Anna“; `null`: noch niemand) und die anderen

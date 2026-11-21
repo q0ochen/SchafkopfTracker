@@ -15,6 +15,7 @@ import {
   createRound,
   FakeSupabase,
   foundRound,
+  holdHead,
   KONTO_1,
   KONTO_2,
   nameRound,
@@ -25,6 +26,7 @@ import {
   roundRow,
   routeSupabase,
   signIn,
+  switchProgress,
   SYNC,
 } from "./roundSupport";
 import {
@@ -463,7 +465,7 @@ test.describe("mit Server", () => {
     const fake = new FakeSupabase();
     await routeSupabase(context, fake);
     await foundRound(page, fake);
-    await otherRound(fake, "Klub", { location: "Klubheim", ownerName: "Wirt" });
+    const klub = await otherRound(fake, "Klub", { location: "Klubheim", ownerName: "Wirt" });
     // Eine gleichnamige Runde: In der Auswahl stehen dann die Mitglieder dahinter.
     await otherRound(fake, "Stammtisch", { owner: KONTO_2, ownerName: "Vroni" });
 
@@ -489,5 +491,15 @@ test.describe("mit Server", () => {
     await expect(page.getByRole("dialog", { name: "Neue Runde Dienstagsrunde anlegen?" })).toBeVisible();
     await shot(page, "49c-runde-anlegen-rueckfrage");
     await page.getByRole("dialog").getByRole("button", { name: "Abbrechen" }).click();
+
+    // Während gewechselt wird: „Einen Moment …“ über allem.
+    const release = await holdHead(context, klub);
+    await page.getByRole("list", { name: "Deine anderen Runden" }).getByRole("button", { name: "Zu Klub wechseln" }).click();
+    await page.getByRole("dialog", { name: "Zur Runde Klub wechseln?" }).getByRole("button", { name: "Wechseln" }).click();
+    await expect(switchProgress(page)).toBeVisible();
+    await shot(page, "49d-runde-wechsel-laeuft");
+    release();
+    await expect(switchProgress(page)).toBeHidden(SYNC);
+    await expect(page.getByRole("heading", { level: 2, name: "Klub" })).toBeVisible();
   });
 });

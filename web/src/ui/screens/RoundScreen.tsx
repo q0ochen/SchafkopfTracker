@@ -7,6 +7,7 @@ import { useEffect, useId, useMemo, useState } from "preact/hooks";
 import type { Player, PlayerId } from "../../core/model";
 import type { InviteInfo, RoundLink, RoundSummary } from "../../core/round/RoundModels";
 import { RoundNames } from "../../core/round/RoundNames";
+import { suggestedRoundName } from "../../round/actions";
 import { needsSignIn, type RoundController, type RoundState } from "../../round/controller";
 import { RoundScreenModel, type Farewell, type RoundUi } from "../../round/screenModel";
 import {
@@ -195,23 +196,25 @@ function RoundList({
 
 /**
  * „Neue Runde anlegen“. Die Vorgabe im Feld ist „Schafkopfrunde“ oder, ist der Name schon vergeben, die erste freie
- * Fassung mit Nummer (docs/ARCHITEKTUR.md 8.7); sie folgt der Liste der Runden, bis jemand selbst tippt.
+ * Fassung mit Nummer (docs/ARCHITEKTUR.md 8.7; eine eigene, noch leere Runde zählt nicht, die verbundene immer). Das Feld
+ * folgt der Vorgabe (die Liste der Runden kommt oft erst nach dem ersten Bild), bis jemand selbst tippt; was getippt
+ * ist, bleibt.
  *
  * @param linkedRoundName Die verbundene Runde; `null` ohne Runde (dann kommen die Daten des Geräts mit).
  */
 function NewRoundForm({
-  rounds,
+  state,
   linkedRoundName,
   busy,
   model,
 }: {
-  rounds: readonly RoundSummary[];
+  state: RoundState;
   linkedRoundName: string | null;
   busy: boolean;
   model: RoundScreenModel;
 }) {
   const [typed, setTyped] = useState<string | null>(null);
-  const name = typed ?? RoundNames.suggest(rounds);
+  const name = typed ?? suggestedRoundName(state);
   return (
     <form
       aria-label="Neue Runde anlegen"
@@ -268,7 +271,7 @@ function SignedIn({ state, ui, model }: { state: RoundState; ui: RoundUi; model:
 
       <RoundList title="Deine Runden" rounds={rounds} all={rounds} failed={state.roundsFailed} linked={false} ui={ui} model={model} />
 
-      <NewRoundForm rounds={rounds} linkedRoundName={null} busy={ui.busy} model={model} />
+      <NewRoundForm state={state} linkedRoundName={null} busy={ui.busy} model={model} />
       <RedeemForm busy={ui.busy} model={model} />
 
       <hr class="divider" />
@@ -517,7 +520,7 @@ function Linked({
 
       {expired ? null : (
         <>
-          <NewRoundForm rounds={rounds} linkedRoundName={link.roundName} busy={ui.busy} model={model} />
+          <NewRoundForm state={state} linkedRoundName={link.roundName} busy={ui.busy} model={model} />
           <RedeemForm busy={ui.busy} model={model} />
         </>
       )}
@@ -665,7 +668,8 @@ function Configured({ controller }: { controller: RoundController }) {
         {ui.message !== null ? <MessageCard text={messageText(ui.message)} onDismiss={() => model.clearMessage()} /> : null}
         {ui.error !== null ? <MessageCard text={uiErrorText(ui.error)} onDismiss={() => model.clearError()} isError /> : null}
         {body}
-        {shown.busy || (!state.loaded && link === null && state.problem !== "OFFLINE") ? (
+        {/* Während eines Wechsels steht „Einen Moment …“ ohnehin über allem (`SwitchProgress`). */}
+        {(shown.busy && !state.switching) || (!state.loaded && link === null && state.problem !== "OFFLINE") ? (
           <p class="hint" role="status">
             Einen Moment …
           </p>

@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemoryRoundServer } from "../core/round/InMemoryRound";
 import { InviteLinks } from "../core/round/InviteLinks";
-import { RoundException, type RoundSummary } from "../core/round/RoundModels";
+import { RoundException, switchFrom, type RoundSummary } from "../core/round/RoundModels";
 import { needsSignIn } from "./controller";
 import type { RoundScreenModel } from "./screenModel";
 import { account, Phone, WEB_APP_URL } from "./testing/phone";
@@ -457,6 +457,25 @@ describe("Beitreten und Verwenden", () => {
     expect(two.store.getState().evenings.map((it) => it.id)).toEqual(["abend-1"]);
   });
 
+  it("ist das Gerät verbunden, während „Daten dieses Geräts ersetzen?“ offen ist, wird beim Bestätigen nicht gewechselt", async () => {
+    const one = await founder();
+    const two = await phone("zwei", 2);
+    await two.startEvening("eigener-1");
+    two.controller.rememberInvite(await inviteToken(one));
+    const screen = await screenOf(two);
+    await screen.joinInvited();
+    expect(screen.getUi().replace).not.toBeNull();
+
+    // Zum Beispiel in einem anderen Fenster: eine eigene Runde, die die Abende dieses Geräts mitnimmt.
+    await two.controller.create("Freitag");
+    await screen.confirmReplace();
+
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "CHANGED_MEANWHILE", roundName: false });
+    expect(two.state.link?.roundName).toBe("Freitag");
+    expect(two.store.getState().evenings.map((it) => it.id)).toEqual(["eigener-1"]);
+    expect(roundErrorText("CHANGED_MEANWHILE")).toBe("Inzwischen hat sich auf diesem Gerät etwas geändert. Bitte noch einmal versuchen.");
+  });
+
   it("eine ungültige Einladung beim Einlösen: Fehlertext, nichts ersetzt", async () => {
     const two = await phone("zwei", 2);
     await two.startEvening("eigener-1");
@@ -635,10 +654,13 @@ describe("Mit verbundener Runde: wechseln, beitreten, anlegen", () => {
     await one.addGame("abend-1");
 
     const asking = screen.use(klub);
+    // Solange abgeglichen wird, steht über allem „Einen Moment …“.
     expect(screen.getUi().busy).toBe(true);
+    expect(one.state.switching).toBe(true);
     await asking;
 
-    expect(screen.getUi().switching).toEqual({ target: { kind: "use", round: klub }, fromId: stammtisch, from: "Stammtisch", pending: 0 });
+    expect(one.state.switching).toBe(false);
+    expect(screen.getUi().switching).toEqual({ target: { kind: "use", round: klub }, from: switchFrom(stammtisch, 0), fromName: "Stammtisch" });
     expect(server.evenings(stammtisch)[0].entries).toHaveLength(2);
     expect(one.state.link?.roundId).toBe(stammtisch);
     screen.cancelSwitch();
@@ -646,9 +668,12 @@ describe("Mit verbundener Runde: wechseln, beitreten, anlegen", () => {
     expect(one.state.link?.roundId).toBe(stammtisch);
 
     await screen.use(klub);
-    await screen.confirmSwitch();
+    const confirming = screen.confirmSwitch();
+    expect(one.state.switching).toBe(true);
+    await confirming;
     await pass();
 
+    expect(one.state.switching).toBe(false);
     expect(screen.getUi().error).toBeNull();
     expect(one.state.link?.roundName).toBe("Klub");
     expect(one.store.getState().evenings).toEqual(two.store.getState().evenings);
@@ -666,7 +691,7 @@ describe("Mit verbundener Runde: wechseln, beitreten, anlegen", () => {
 
     await screen.use(roundNamed(one, "Klub"));
 
-    expect(screen.getUi().switching?.pending).toBe(1);
+    expect(screen.getUi().switching?.from).toEqual(switchFrom(one.state.link?.roundId ?? "", 1));
   });
 
   it("ohne Netz kommt statt der Rückfrage der Fehlertext, und es bleibt alles, wie es ist", async () => {
@@ -699,20 +724,73 @@ describe("Mit verbundener Runde: wechseln, beitreten, anlegen", () => {
     expect(one.store.getState().evenings.map((it) => it.id)).toEqual(["abend-1"]);
   });
 
-  it("ändert sich die verbundene Runde, gilt eine offene Rückfrage nicht mehr", async () => {
+  it("hat sich das Gerät seit der Rückfrage geändert, wird nicht gewechselt", async () => {
     const one = await founder();
     await club();
     const screen = await screenOf(one);
     await screen.use(roundNamed(one, "Klub"));
     expect(screen.getUi().switching).not.toBeNull();
 
-    // Zum Beispiel in einem anderen Fenster: Die Runde ist getrennt worden.
+    // Zwischen Rückfrage und Bestätigung wird das Gerät getrennt (etwa abgemeldet in einem anderen Fenster).
     await one.controller.signOut();
     await pass();
 
-    expect(screen.getUi().switching).toBeNull();
+    // Die Rückfrage bleibt, bis man sie beantwortet; „Wechseln“ scheitert dann, und das Gerät bleibt, wie es ist.
+    expect(screen.getUi().switching).not.toBeNull();
     await screen.confirmSwitch();
+    await pass();
+
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "SIGNED_OUT", roundName: false });
     expect(one.state.link).toBeNull();
+    expect(one.store.getState().evenings.map((it) => it.id)).toEqual(["abend-1"]);
+  });
+
+  it("ist das Gerät seit der Rückfrage mit einer anderen Runde verbunden, wird nicht gewechselt", async () => {
+    const one = await founder();
+    await club();
+    const screen = await screenOf(one);
+    await screen.use(roundNamed(one, "Klub"));
+    // Inzwischen ist das Gerät (etwa in einem anderen Fenster) in eine neue Runde gewechselt.
+    await one.controller.create("Dienstag");
+
+    await screen.confirmSwitch();
+
+    expect(screen.getUi().error).toEqual({ kind: "Server", error: "CHANGED_MEANWHILE", roundName: false });
+    expect(one.state.link?.roundName).toBe("Dienstag");
+  });
+
+  it("solange der Wechsel vorbereitet wird, ist alles gesperrt; ein zweiter Anstoß zählt nicht", async () => {
+    const one = await founder();
+    await club();
+    const screen = await screenOf(one);
+    one.mine.calls.length = 0;
+
+    const asking = screen.use(roundNamed(one, "Klub"));
+    expect(screen.getUi().busy).toBe(true);
+    expect(one.state.switching).toBe(true);
+    await screen.create("Noch eine");
+    await screen.use(roundNamed(one, "Stammtisch"));
+    await asking;
+
+    expect(one.state.switching).toBe(false);
+    expect(screen.getUi().switching?.target).toEqual({ kind: "use", round: roundNamed(one, "Klub") });
+    expect(one.mine.calls).not.toContain("createRound");
+  });
+
+  it("wird der Bildschirm mitten im Wechsel geschlossen, läuft der Wechsel trotzdem zu Ende", async () => {
+    const one = await founder();
+    const two = await club();
+    const screen = await screenOf(one);
+    await screen.use(roundNamed(one, "Klub"));
+
+    const confirming = screen.confirmSwitch();
+    screen.dispose();
+    await confirming;
+    await pass();
+
+    expect(one.state.link?.roundName).toBe("Klub");
+    expect(one.store.getState().evenings).toEqual(two.store.getState().evenings);
+    expect(one.state.switching).toBe(false);
   });
 
   it("eine Einladung in die verbundene Runde: „Du bist schon in dieser Runde.“, und die Einladung ist vergessen", async () => {
@@ -752,9 +830,8 @@ describe("Mit verbundener Runde: wechseln, beitreten, anlegen", () => {
 
     expect(screen.getUi().switching).toEqual({
       target: { kind: "join", token, roundName: "Freitag" },
-      fromId: stammtisch,
-      from: "Stammtisch",
-      pending: 0,
+      from: switchFrom(stammtisch, 0),
+      fromName: "Stammtisch",
     });
     await screen.confirmSwitch();
     await pass();
@@ -795,7 +872,11 @@ describe("Mit verbundener Runde: wechseln, beitreten, anlegen", () => {
 
     await screen.create("  Neue \t Runde ");
 
-    expect(screen.getUi().switching).toEqual({ target: { kind: "create", name: "Neue Runde" }, fromId: stammtisch, from: "Stammtisch", pending: 0 });
+    expect(screen.getUi().switching).toEqual({
+      target: { kind: "create", name: "Neue Runde" },
+      from: switchFrom(stammtisch, 0),
+      fromName: "Stammtisch",
+    });
     await screen.confirmSwitch();
     await pass();
 

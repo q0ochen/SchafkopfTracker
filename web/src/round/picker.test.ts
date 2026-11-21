@@ -5,8 +5,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemoryRoundServer } from "../core/round/InMemoryRound";
-import { RoundException, roundLink, roundSummary, type RoundSummary } from "../core/round/RoundModels";
-import { roundNameProblem } from "./actions";
+import { RoundException, roundLink, roundSummary, switchFrom, type RoundSummary } from "../core/round/RoundModels";
+import { knownRounds, roundNameProblem, suggestedRoundName } from "./actions";
 import { NOT_CONFIGURED, type RoundState } from "./controller";
 import { roundChoices, RoundPicker, showsPicker } from "./picker";
 import { account, Phone } from "./testing/phone";
@@ -69,23 +69,41 @@ describe("Wann die Auswahl dasteht", () => {
 });
 
 describe("Name einer neuen Runde", () => {
+  /** Ohne verbundene Runde, mit diesen Runden des Kontos. */
+  function unlinked(rounds: readonly RoundSummary[] | null): { link: null; rounds: readonly RoundSummary[] | null } {
+    return { link: null, rounds };
+  }
+
   it("1 bis 40 Zeichen nach dem Bereinigen, und keine Runde des Kontos heißt schon so", () => {
     const rounds = [summary("a", "Stammtisch"), summary("b", "Klub", { isCreator: true })];
-    expect(roundNameProblem("Freitag", rounds)).toBeNull();
-    expect(roundNameProblem("  stammTISCH \t", rounds)).toBe("NAME_TAKEN");
-    expect(roundNameProblem("klub", rounds)).toBe("NAME_TAKEN");
-    expect(roundNameProblem(" \t ", rounds)).toBe("INVALID_NAME");
-    expect(roundNameProblem("x".repeat(41), [])).toBe("INVALID_NAME");
-    expect(roundNameProblem("x".repeat(40), [])).toBeNull();
+    expect(roundNameProblem("Freitag", unlinked(rounds))).toBeNull();
+    expect(roundNameProblem("  stammTISCH \t", unlinked(rounds))).toBe("NAME_TAKEN");
+    expect(roundNameProblem("klub", unlinked(rounds))).toBe("NAME_TAKEN");
+    expect(roundNameProblem(" \t ", unlinked(rounds))).toBe("INVALID_NAME");
+    expect(roundNameProblem("x".repeat(41), unlinked([]))).toBe("INVALID_NAME");
+    expect(roundNameProblem("x".repeat(40), unlinked([]))).toBeNull();
+    // Ohne gelesene Liste prüft erst das Anlegen selbst.
+    expect(roundNameProblem("Stammtisch", unlinked(null))).toBeNull();
   });
 
   it("die eigene, noch leere Runde eines Versuchs, dessen Antwort verloren ging, zählt nicht: Das Anlegen nimmt sie", () => {
     const fresh = summary("a", "Stammtisch", { rev: 1, memberCount: 1, isCreator: true });
-    expect(roundNameProblem("stammtisch", [fresh])).toBeNull();
+    expect(roundNameProblem("stammtisch", unlinked([fresh]))).toBeNull();
+    expect(suggestedRoundName(unlinked([{ ...fresh, name: "Schafkopfrunde" }]))).toBe("Schafkopfrunde");
     // Sobald etwas in ihr liegt, jemand dazukam oder sie von jemand anderem stammt, ist der Name vergeben.
-    expect(roundNameProblem("stammtisch", [{ ...fresh, rev: 2 }])).toBe("NAME_TAKEN");
-    expect(roundNameProblem("stammtisch", [{ ...fresh, memberCount: 2 }])).toBe("NAME_TAKEN");
-    expect(roundNameProblem("stammtisch", [{ ...fresh, isCreator: false }])).toBe("NAME_TAKEN");
+    expect(roundNameProblem("stammtisch", unlinked([{ ...fresh, rev: 2 }]))).toBe("NAME_TAKEN");
+    expect(roundNameProblem("stammtisch", unlinked([{ ...fresh, memberCount: 2 }]))).toBe("NAME_TAKEN");
+    expect(roundNameProblem("stammtisch", unlinked([{ ...fresh, isCreator: false }]))).toBe("NAME_TAKEN");
+  });
+
+  it("die verbundene Runde blockiert ihren Namen immer, auch noch leer und auch, wenn die Liste sie (noch) nicht kennt", () => {
+    const fresh = summary("a", "Stammtisch", { rev: 1, memberCount: 1, isCreator: true });
+    expect(roundNameProblem("stammtisch", { link: LINK, rounds: [fresh] })).toBe("NAME_TAKEN");
+    expect(roundNameProblem("stammtisch", { link: LINK, rounds: null })).toBe("NAME_TAKEN");
+    expect(roundNameProblem("Klub", { link: LINK, rounds: null })).toBeNull();
+    expect(suggestedRoundName({ link: { ...LINK, roundName: "Schafkopfrunde" }, rounds: [] })).toBe("Schafkopfrunde 2");
+    expect(knownRounds({ link: LINK, rounds: null }).map((it) => it.id)).toEqual(["a"]);
+    expect(knownRounds({ link: null, rounds: null })).toEqual([]);
   });
 });
 
@@ -164,24 +182,29 @@ describe("Wechseln über die Auswahl", () => {
     await one.addGame("abend-1");
 
     const choosing = picker.choose(klubOf(one).id);
+    // Solange abgeglichen wird, steht über allem „Einen Moment …“.
     expect(picker.getUi().busy).toBe(true);
+    expect(one.state.switching).toBe(true);
     await choosing;
 
     expect(picker.getUi()).toEqual({
       busy: false,
       error: null,
-      confirm: { target: { kind: "use", round: klubOf(one) }, fromId: stammtisch, from: "Stammtisch", pending: 0 },
+      confirm: { target: { kind: "use", round: klubOf(one) }, from: switchFrom(stammtisch, 0), fromName: "Stammtisch" },
     });
+    expect(one.state.switching).toBe(false);
     expect(server.evenings(stammtisch)[0].entries).toHaveLength(2);
     expect(one.state.link?.roundId).toBe(stammtisch);
 
     const confirming = picker.confirm();
     expect(picker.getUi().confirm).toBeNull();
     expect(picker.getUi().busy).toBe(true);
+    expect(one.state.switching).toBe(true);
     await confirming;
     await pass();
 
     expect(picker.getUi().busy).toBe(false);
+    expect(one.state.switching).toBe(false);
     expect(picker.getUi().error).toBeNull();
     expect(one.state.link?.roundName).toBe("Klub");
     expect(one.store.getState().evenings).toEqual(two.store.getState().evenings);
@@ -258,19 +281,74 @@ describe("Wechseln über die Auswahl", () => {
     picker.dispose();
   });
 
-  it("wird das Gerät getrennt, während die Rückfrage offen ist, gilt sie nicht mehr", async () => {
+  it("wird das Gerät abgemeldet, während die Rückfrage offen ist, wird beim Bestätigen nicht gewechselt", async () => {
     const { one } = await twoRounds();
     const picker = await pickerOf(one);
     await picker.choose(klubOf(one).id);
     expect(picker.getUi().confirm).not.toBeNull();
+    const local = one.store.getState().evenings;
 
     await one.controller.signOut();
     await pass();
 
-    expect(picker.getUi().confirm).toBeNull();
+    // Die Rückfrage bleibt, bis man sie beantwortet; „Wechseln“ scheitert dann.
+    expect(picker.getUi().confirm).not.toBeNull();
     await picker.confirm();
+    expect(picker.getUi().error).toEqual({ kind: "Server", error: "SIGNED_OUT", roundName: false });
     expect(one.state.link).toBeNull();
+    expect(one.store.getState().evenings).toEqual(local);
     picker.dispose();
+  });
+
+  it("hängt das Gerät beim Bestätigen nicht mehr an der Runde der Rückfrage, wird nicht gewechselt", async () => {
+    const { one } = await twoRounds();
+    const picker = await pickerOf(one);
+    await picker.choose(klubOf(one).id);
+    const local = one.store.getState().evenings;
+
+    // Inzwischen hat das Konto die Runde verlassen (etwa in einem anderen Fenster); die Daten bleiben als Kopie.
+    await one.controller.leave();
+    await picker.confirm();
+
+    expect(picker.getUi().error).toEqual({ kind: "Server", error: "CHANGED_MEANWHILE", roundName: false });
+    expect(one.state.link).toBeNull();
+    expect(one.store.getState().evenings).toEqual(local);
+    picker.dispose();
+  });
+
+  it("wartet beim Bestätigen mehr, als die Rückfrage nannte, wird nicht gewechselt", async () => {
+    const { one } = await twoRounds();
+    const stammtisch = one.state.link?.roundId ?? "";
+    const picker = await pickerOf(one);
+    await picker.choose(klubOf(one).id);
+    expect(picker.getUi().confirm?.from).toEqual(switchFrom(stammtisch, 0));
+
+    // Inzwischen kommt ein Spiel dazu, dessen Abend der Server nicht annimmt.
+    one.mine.saveEvening = async () => {
+      throw new RoundException("TOO_LARGE");
+    };
+    await one.addGame("abend-1");
+    await picker.confirm();
+
+    expect(picker.getUi().error).toEqual({ kind: "Server", error: "CHANGED_MEANWHILE", roundName: false });
+    expect(one.state.link?.roundId).toBe(stammtisch);
+    expect(one.store.getState().evenings[0].entries).toHaveLength(2);
+    picker.dispose();
+  });
+
+  it("wird der Start-Bildschirm mitten im Wechsel verlassen, läuft der Wechsel trotzdem zu Ende", async () => {
+    const { one, two } = await twoRounds();
+    const picker = await pickerOf(one);
+    await picker.choose(klubOf(one).id);
+
+    const confirming = picker.confirm();
+    picker.dispose();
+    await confirming;
+    await pass();
+
+    expect(one.state.link?.roundName).toBe("Klub");
+    expect(one.store.getState().evenings).toEqual(two.store.getState().evenings);
+    expect(one.state.switching).toBe(false);
   });
 
   it("antwortet der Server mit einem Fehler, steht der allgemeine Fehler da", async () => {

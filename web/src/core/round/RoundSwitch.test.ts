@@ -7,7 +7,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Evening } from "../model";
 import { InMemoryRoundServer } from "./InMemoryRound";
-import { toPlayer, type RoundId, type RoundSummary } from "./RoundModels";
+import { switchFrom, toPlayer, type RoundId, type RoundSummary } from "./RoundModels";
+import { RoundNames } from "./RoundNames";
 import { Device, errorOf, game, P1, PLACEHOLDERS, SEATING, TestClock } from "./testing/fixtures";
 
 let clock: TestClock;
@@ -106,8 +107,6 @@ describe("Wechseln", () => {
     await one.connection.use(target, one.userId);
 
     expect(server.evenings(stammtisch)[0].entries).toHaveLength(2);
-    // Zuerst der Abgleich mit dem „Stammtisch“ (sein Kopf, dann das Hochladen), erst danach der „Klub“.
-    expect(one.session.calls.slice(0, 2)).toEqual(["head", "saveEvening"]);
     await expectShows(one, klub);
   });
 
@@ -189,11 +188,91 @@ describe("Wechseln", () => {
     const outcome = await one.synced();
     expect(outcome.refused).toBe(1);
     expect(await one.sync.pendingCount()).toBe(1);
+    const local = await one.allEvenings();
+    const target = await summary(one, klub);
 
-    await one.connection.use(await summary(one, klub), one.userId);
+    // Ohne Zustimmung (die Rückfrage nannte 0) wird nicht gewechselt.
+    expect(await errorOf(() => one.connection.use(target, one.userId))).toBe("CHANGED_MEANWHILE");
+    expect(await one.roundId()).toBe(stammtisch);
+    expect(await one.allEvenings()).toEqual(local);
+
+    await one.connection.use(target, one.userId, switchFrom(stammtisch, 1));
 
     await expectShows(one, klub);
     expect(onServer(stammtisch).map((it) => it.id)).toEqual([abendA]);
+  });
+
+  it("ein Spiel, das mitten im Wechsel eingetragen wird, nimmt der letzte Abgleich mit", async () => {
+    const [stammtisch, klub] = await twoRounds();
+    const target = await summary(one, klub);
+    // Während die App nach dem Kopf der Zielrunde fragt, trägt jemand auf diesem Handy noch ein Spiel ein.
+    one.api.afterHead = async (round) => {
+      if (round !== klub) return;
+      one.api.afterHead = null;
+      clock.advance(60);
+      await one.addGame(abendA, true, 4);
+    };
+
+    expect((await one.connection.use(target, one.userId, switchFrom(stammtisch))).kind).toBe("Synced");
+
+    expect(server.evenings(stammtisch)[0].entries).toHaveLength(2);
+    await expectShows(one, klub);
+  });
+
+  it("kommt der letzte Abgleich nicht mehr durch, bleibt alles, wie es ist", async () => {
+    const [stammtisch, klub] = await twoRounds();
+    const target = await summary(one, klub);
+    one.api.afterHead = async (round) => {
+      if (round !== klub) return;
+      one.api.afterHead = null;
+      clock.advance(60);
+      await one.addGame(abendA);
+      one.session.offline = true;
+    };
+
+    expect(await errorOf(() => one.connection.use(target, one.userId, switchFrom(stammtisch)))).toBe("OFFLINE");
+
+    expect(await one.roundId()).toBe(stammtisch);
+    expect((await one.allEvenings())[0].entries).toHaveLength(2);
+    expect(await one.sync.pendingCount()).toBe(1);
+  });
+
+  it("hängt das Gerät nicht mehr an der Runde der Rückfrage, wird nicht gewechselt", async () => {
+    const [stammtisch, klub] = await twoRounds();
+    const local = await one.allEvenings();
+
+    // Die Rückfrage ging von einer anderen Runde aus.
+    expect(await errorOf(async () => one.connection.use(await summary(one, klub), one.userId, switchFrom(klub)))).toBe("CHANGED_MEANWHILE");
+    expect(await one.roundId()).toBe(stammtisch);
+    // Inzwischen getrennt: Die Kopie wird nicht ohne die Rückfrage „Daten dieses Geräts ersetzen?“ geleert.
+    await one.connection.disconnect();
+    expect(await errorOf(async () => one.connection.use(await summary(one, klub), one.userId, switchFrom(stammtisch)))).toBe(
+      "CHANGED_MEANWHILE",
+    );
+    expect(await errorOf(() => one.connection.create("Neu", one.userId, PLACEHOLDERS, switchFrom(stammtisch)))).toBe("CHANGED_MEANWHILE");
+    expect(await one.link()).toBeNull();
+    expect(await one.allEvenings()).toEqual(local);
+  });
+
+  it("wartet niemand mehr auf das Ergebnis, läuft der Wechsel trotzdem am Stück zu Ende", async () => {
+    // Kotlin bricht hier den Aufrufer ab (der Zug läuft `NonCancellable` weiter). In JavaScript lässt sich ein Aufruf
+    // nicht abbrechen; wer den Bildschirm verlässt, lässt das Versprechen nur liegen. Der Wechsel läuft dann zu Ende.
+    const [, klub] = await twoRounds();
+    const target = await summary(one, klub);
+    let headOfTarget = (): void => undefined;
+    const reachedTarget = new Promise<void>((resolve) => {
+      headOfTarget = resolve;
+    });
+    one.api.afterHead = async (round) => {
+      if (round === klub) headOfTarget();
+    };
+
+    const abandoned = one.connection.use(target, one.userId);
+    await reachedTarget;
+    await abandoned.catch(() => undefined);
+
+    expect(await one.roundId()).toBe(klub);
+    await expectShows(one, klub);
   });
 
   it("wer zurückwechselt, sieht, was die anderen inzwischen eingetragen haben", async () => {
@@ -302,6 +381,22 @@ describe("Anlegen, während das Gerät verbunden ist", () => {
 
     expect(await one.roundId()).toBe(stammtisch);
     expect(await one.allEvenings()).toEqual(local);
+  });
+
+  it("die verbundene, noch leere Runde wird nie wiederverwendet", async () => {
+    // Eine Runde, deren erster Abgleich nicht durchkam, hat noch rev = 1 und sähe aus wie eine verwaiste leere Runde.
+    // Solange das Gerät an ihr hängt, ist ihr Name trotzdem vergeben.
+    one.api.afterHead = async () => {
+      one.api.afterHead = null;
+      one.session.offline = true;
+    };
+    expect(await one.connection.create("Leer", one.userId, PLACEHOLDERS)).toEqual({ kind: "Offline" });
+    one.session.offline = false;
+    const leer = await one.roundId();
+    expect(RoundNames.reusable(await summary(one, leer))).toBe(true);
+
+    expect(await errorOf(() => one.connection.create("leer", one.userId, PLACEHOLDERS))).toBe("NAME_TAKEN");
+    expect(await one.roundId()).toBe(leer);
   });
 
   it("ohne Runde scheitert das Anlegen mit einem vergebenen Namen, ohne etwas zu ändern", async () => {

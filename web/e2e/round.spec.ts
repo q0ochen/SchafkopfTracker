@@ -17,6 +17,7 @@ import {
   FakeSupabase,
   foundRound,
   fromHomeScreen,
+  holdHead,
   inviteLink,
   IPHONE_SAFARI,
   KONTO_1,
@@ -32,6 +33,7 @@ import {
   roundRow,
   routeSupabase,
   signIn,
+  switchProgress,
   SYNC,
 } from "./roundSupport";
 import { answerPlaces, enterGame, expect, expectAccessible, openApp, photonAnswer, startEvening, test, waitUntilSaved } from "./support";
@@ -1003,6 +1005,89 @@ test("ohne Netz lässt sich nicht wechseln: Fehlertext unter der Auswahl, alles 
   expect(fake.calls("POST", "/rest/v1/rpc/join_round")).toEqual([]);
 });
 
+test("während gewechselt wird, steht „Einen Moment …“ über allem; nichts lässt sich bedienen, auch nicht mit Escape", async ({
+  page,
+  context,
+}) => {
+  await foundRound(page, fake);
+  const klub = await otherRound(fake, "Klub", { location: "Klubheim" });
+  const release = await holdHead(context, klub);
+  await openApp(page);
+  await roundPicker(page).selectOption({ label: "Klub" });
+  await page.getByRole("dialog", { name: "Zur Runde Klub wechseln?" }).getByRole("button", { name: "Wechseln" }).click();
+
+  const progress = switchProgress(page);
+  await expect(progress).toBeVisible();
+  await expect(progress.getByRole("status")).toHaveText("Einen Moment …");
+  await expectAccessible(page);
+  // Alles dahinter ist gesperrt: Ein Tippen auf „Neuer Abend“ kommt nicht an, Escape schließt nichts.
+  const newEvening = page.getByText("Neuer Abend", { exact: true });
+  await expect(newEvening.click({ trial: true, timeout: 1_000 })).rejects.toThrow();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(progress).toBeVisible();
+  expect(await page.locator("dialog.switch-progress").evaluate((dialog) => dialog.matches(":modal"))).toBe(true);
+
+  release();
+  await expect(progress).toBeHidden(SYNC);
+  await expect(roundPicker(page)).toHaveValue(klub, SYNC);
+  await expect(page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem").first()).toContainText("Klubheim");
+  await newEvening.click({ trial: true });
+});
+
+test("„Einen Moment …“ bleibt auch nach „Zurück“ im Browser stehen, bis der Wechsel fertig ist", async ({ page, context }) => {
+  await foundRound(page, fake);
+  const klub = await otherRound(fake, "Klub", { location: "Klubheim" });
+  await openApp(page);
+  await roundRow(page).click();
+  const release = await holdHead(context, klub);
+  await page.getByRole("list", { name: "Deine anderen Runden" }).getByRole("button", { name: "Zu Klub wechseln" }).click();
+  await page.getByRole("dialog", { name: "Zur Runde Klub wechseln?" }).getByRole("button", { name: "Wechseln" }).click();
+  const progress = switchProgress(page);
+  await expect(progress).toBeVisible();
+  await expectAccessible(page);
+
+  // Die Zurück-Taste des Browsers lässt sich nicht sperren; dann steht „Einen Moment …“ über dem Start-Bildschirm.
+  await page.goBack();
+  await expect(page).not.toHaveURL(/runde/);
+  await expect(progress).toBeVisible();
+
+  release();
+  await expect(progress).toBeHidden(SYNC);
+  await expect(roundPicker(page)).toHaveValue(klub, SYNC);
+  await expect(page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem").first()).toContainText("Klubheim");
+});
+
+test("hat sich das Gerät seit der Rückfrage geändert (in einem zweiten Fenster), wird nicht gewechselt", async ({ page, context }) => {
+  await foundRound(page, fake);
+  await otherRound(fake, "Klub");
+  await openApp(page);
+  await roundPicker(page).selectOption({ label: "Klub" });
+  const dialog = page.getByRole("dialog", { name: "Zur Runde Klub wechseln?" });
+  await expect(dialog).toBeVisible();
+
+  // Im zweiten Fenster derselben App verlässt das Konto inzwischen den Stammtisch; die Daten bleiben als Kopie.
+  const second = await context.newPage();
+  await second.goto("./#/runde");
+  await second.getByRole("button", { name: "Runde verlassen" }).click();
+  await second.getByRole("dialog", { name: "Runde verlassen?" }).getByRole("button", { name: "Runde verlassen" }).click();
+  await expect(second.getByText(`Angemeldet als ${KONTO_1.email}`)).toBeVisible();
+  await second.close();
+
+  await dialog.getByRole("button", { name: "Wechseln" }).click();
+
+  const alert = page.getByRole("alert");
+  await expect(alert).toHaveText(/Inzwischen hat sich auf diesem Gerät etwas geändert\. Bitte noch einmal versuchen\./);
+  await expect(dialog).toBeHidden();
+  await expect(switchProgress(page)).toBeHidden();
+  await expect(page.getByText("Abend läuft")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Alle Abende" }).getByRole("listitem")).toHaveCount(1);
+  await expectAccessible(page);
+  await alert.getByRole("button", { name: "OK" }).click();
+  await expect(alert).toBeHidden();
+  expect(fake.calls("POST", "/rest/v1/rpc/join_round")).toEqual([]);
+});
+
 test("mit verbundener Runde eine neue anlegen: Name geprüft, Rückfrage, sie beginnt leer, die bisherige behält ihre Abende", async ({
   page,
 }) => {
@@ -1154,6 +1239,31 @@ test("Namen von Runden: Die Vorgabe ist frei, einen vergebenen Namen gibt es kei
   await expectAccessible(page);
   expect(fake.calls("POST", "/rest/v1/rpc/create_round")).toEqual([]);
   expect(await owner.myRounds()).toHaveLength(1);
+});
+
+test("was man in „Name der Runde“ selbst getippt hat, bleibt, auch wenn die Liste der Runden erst danach kommt", async ({ page, context }) => {
+  const owner = fake.session(KONTO_1.userId);
+  const round = await owner.createRound("Schafkopfrunde");
+  await owner.savePlayer(round, { id: "wirt", name: "Wirt", colorIndex: 0, archived: false });
+  let release = (): void => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await context.route(`${FAKE_SUPABASE_URL}/rest/v1/rpc/my_rounds`, async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.fallback();
+  });
+
+  await openRound(page);
+  await signIn(page, fake, KONTO_1);
+  const field = page.getByRole("form", { name: "Neue Runde anlegen" }).getByLabel("Name der Runde");
+  // Solange die Liste fehlt, ist „Schafkopfrunde“ die Vorgabe.
+  await expect(field).toHaveValue("Schafkopfrunde");
+  await field.fill("Freitagsrunde");
+  release();
+
+  await expect(page.getByRole("list", { name: "Deine Runden" }).getByRole("listitem")).toHaveCount(1);
+  await expect(field).toHaveValue("Freitagsrunde");
 });
 
 test("gleichnamige Runden tragen in der Auswahl und in „Deine anderen Runden“ die Namen ihrer Mitglieder", async ({ page }) => {

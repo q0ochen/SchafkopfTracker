@@ -3,9 +3,9 @@
  * welche Runden zur Wahl stehen, wie sie heißen, und was geschieht, wenn jemand eine andere wählt – vorher vollständig
  * abgleichen, dann „Zur Runde ‹Ziel› wechseln?“. Reine Logik ohne Oberfläche, damit sie sich prüfen lässt.
  */
-import { roundSummary, type RoundId, type RoundLink, type RoundSummary } from "../core/round/RoundModels";
+import type { RoundId, RoundLink, RoundSummary } from "../core/round/RoundModels";
 import { RoundNames } from "../core/round/RoundNames";
-import { prepareSwitch, runSwitch, stillValid, uiErrorOf, type RoundUiError, type SwitchConfirm } from "./actions";
+import { knownRounds, prepareSwitch, runSwitch, uiErrorOf, type RoundUiError, type SwitchConfirm } from "./actions";
 import { needsSignIn, type RoundController, type RoundState } from "./controller";
 import { roundChoiceLabel } from "./texts";
 
@@ -15,24 +15,13 @@ export interface RoundChoice {
   readonly label: string;
 }
 
-/** Die verbundene Runde als Eintrag, wenn sie unter den Runden des Kontos fehlt (die Mitglieder nennt dann nur die Zahl). */
-function linkedSummary(link: RoundLink): RoundSummary {
-  return roundSummary({
-    id: link.roundId,
-    name: link.roundName,
-    rev: link.cursor,
-    memberCount: link.members.length,
-    myPlayerId: link.playerId,
-    isCreator: link.isCreator,
-  });
-}
-
 /**
  * Die Einträge der Auswahl: die Runden des Kontos in der Reihenfolge von `my_rounds`; fehlt die verbundene darin, steht
- * sie vorn. Haben zwei Einträge denselben Namen (`RoundNames.same`), steht bei beiden dahinter „ (‹Mitglieder›)“.
+ * sie vorn (die Mitglieder nennt sie dann nur als Zahl). Haben zwei Einträge denselben Namen (`RoundNames.same`), steht
+ * bei beiden dahinter „ (‹Mitglieder›)“.
  */
 export function roundChoices(link: RoundLink, rounds: readonly RoundSummary[]): RoundChoice[] {
-  const entries = rounds.some((it) => it.id === link.roundId) ? [...rounds] : [linkedSummary(link), ...rounds];
+  const entries = knownRounds({ link, rounds });
   const duplicates = RoundNames.duplicates(entries);
   return entries.map((round) => ({ round, label: roundChoiceLabel(round, duplicates.has(round.id)) }));
 }
@@ -49,10 +38,11 @@ export function showsPicker(state: RoundState): boolean {
 }
 
 /**
- * @property busy Vor der Rückfrage wird abgeglichen bzw. gerade gewechselt: Die Auswahl ist gesperrt, darunter steht
- *   „Einen Moment …“.
+ * @property busy Vor der Rückfrage wird abgeglichen bzw. gerade gewechselt: Die Auswahl ist gesperrt, und über allem
+ *   steht „Einen Moment …“ (`RoundState.switching`).
  * @property error Ein Fehler (Texte wie auf dem Bildschirm „Gemeinsame Runden“); bleibt, bis man ihn wegtippt.
- * @property confirm Wartet auf die Rückfrage „Zur Runde ‹Ziel› wechseln?“.
+ * @property confirm Wartet auf die Rückfrage „Zur Runde ‹Ziel› wechseln?“. Sie bleibt, bis man sie beantwortet; hat sich
+ *   das Gerät bis dahin geändert, wird beim Bestätigen nicht gewechselt (`CHANGED_MEANWHILE`).
  */
 export interface PickerUi {
   readonly busy: boolean;
@@ -65,20 +55,20 @@ const INITIAL: PickerUi = { busy: false, error: null, confirm: null };
 export class RoundPicker {
   private ui: PickerUi = INITIAL;
   private readonly listeners = new Set<() => void>();
-  private readonly unsubscribe: () => void;
   private readonly unwatchRounds: () => void;
   private disposed = false;
 
   /** Erscheint der Start-Bildschirm, werden die Runden des Kontos gelesen (sobald jemand angemeldet ist). */
   constructor(private readonly controller: RoundController) {
-    this.unsubscribe = controller.subscribe(() => this.watch());
     this.unwatchRounds = controller.watchRounds();
   }
 
-  /** Der Start-Bildschirm ist weg: nichts mehr beobachten. */
+  /**
+   * Der Start-Bildschirm ist weg: nichts mehr beobachten. Ein laufender Wechsel läuft trotzdem zu Ende (siehe
+   * `RoundConnection`).
+   */
   dispose(): void {
     this.disposed = true;
-    this.unsubscribe();
     this.unwatchRounds();
   }
 
@@ -99,12 +89,6 @@ export class RoundPicker {
     for (const listener of [...this.listeners]) listener();
   }
 
-  /** Ist das Gerät inzwischen nicht mehr mit der Runde verbunden, für die gefragt wurde, gilt die Rückfrage nicht mehr. */
-  private watch(): void {
-    const confirm = this.ui.confirm;
-    if (confirm !== null && !stillValid(this.controller, confirm)) this.update({ confirm: null });
-  }
-
   /**
    * Jemand hat in der Auswahl eine Runde gewählt. Ist es eine andere als die verbundene, wird vollständig abgeglichen
    * und dann gefragt; die Auswahl zeigt bis zum Wechsel weiter die verbundene Runde.
@@ -114,7 +98,7 @@ export class RoundPicker {
     const round = state.rounds?.find((it) => it.id === roundId) ?? null;
     if (round === null || state.link === null || round.id === state.link.roundId) return Promise.resolve();
     return this.busy(async () => {
-      const confirm = await prepareSwitch(this.controller, { kind: "use", round });
+      const confirm = await this.controller.switchWork(() => prepareSwitch(this.controller, { kind: "use", round }));
       if (confirm !== null) this.update({ confirm });
     });
   }
@@ -126,10 +110,9 @@ export class RoundPicker {
   /** „Wechseln“ in der Rückfrage. */
   confirm(): Promise<void> {
     const confirm = this.ui.confirm;
-    if (confirm === null) return Promise.resolve();
+    if (confirm === null || this.ui.busy) return Promise.resolve();
     this.update({ confirm: null });
-    if (!stillValid(this.controller, confirm)) return Promise.resolve();
-    return this.busy(() => runSwitch(this.controller, confirm.target));
+    return this.busy(() => this.controller.switchWork(() => runSwitch(this.controller, confirm)));
   }
 
   clearError(): void {

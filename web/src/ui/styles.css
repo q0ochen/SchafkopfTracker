@@ -1407,6 +1407,36 @@ button.card {
   margin-top: 16px;
 }
 
+/* „Einen Moment …“ über allem, solange ein Wechsel in eine andere Runde vorbereitet wird oder läuft. */
+.switch-progress {
+  width: auto;
+  min-width: min(92vw, 280px);
+}
+
+.switch-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 48px;
+  font-size: 17px;
+}
+
+.spinner {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 4px solid var(--outline-variant);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .radio-row {
   display: flex;
   align-items: center;

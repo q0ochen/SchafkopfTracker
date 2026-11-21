@@ -479,6 +479,7 @@ describe("Regelwerk, Störungen, Hilfen für Tests", () => {
     expect(RoundError.fromCode("signed_out")).toBeNull();
     expect(RoundError.fromCode("server")).toBeNull();
     expect(RoundError.fromCode("not_configured")).toBeNull();
+    expect(RoundError.fromCode("changed_meanwhile")).toBeNull();
     expect(RoundError.fromCode("NAME_TAKEN")).toBeNull();
     expect(RoundError.fromCode("")).toBeNull();
     expect(new RoundException("NAME_TAKEN").message).toBe("NAME_TAKEN");

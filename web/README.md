@@ -108,7 +108,11 @@ Supabase-Server ab. Der Vertrag steht in `docs/ARCHITEKTUR.md`, Abschnitt 8; wie
 - **Runden wechseln** (Vertrag: `docs/ARCHITEKTUR.md`, 8.7 und 8.9): Ein Gerät hält immer nur die Daten einer
   Runde. Vor einem Wechsel (auch vor „Neue Runde anlegen“ und dem Beitreten mit verbundener Runde) wird die verbundene
   Runde vollständig abgeglichen, dann kommt die Rückfrage, die nennt, was dabei verloren ginge; die Abende der
-  bisherigen Runde bleiben auf dem Server. Die Runden des Kontos stehen im Zustand der Steuerung (`RoundState.rounds`),
+  bisherigen Runde bleiben auf dem Server. Unmittelbar vor dem Leeren wird in derselben Sperre noch einmal abgeglichen
+  (`RoundSync.syncThen`); weicht das Gerät dann von der Rückfrage ab (`SwitchFrom`), wird nicht gewechselt
+  (`CHANGED_MEANWHILE`). Solange ein Wechsel vorbereitet wird oder läuft, steht über allem „Einen Moment …“
+  (`RoundState.switching`, an der Wurzel der Oberfläche, damit es auch nach „Zurück“ im Browser stehen bleibt). Die
+  Runden des Kontos stehen im Zustand der Steuerung (`RoundState.rounds`),
   damit Start-Bildschirm (`src/round/picker.ts`) und „Gemeinsame Runden“ dieselbe Liste sehen. Ein Konto hat keine
   zwei Runden desselben Namens (`RoundNames`); gleichnamige Runden durch Beitreten nennen in Listen ihre Mitglieder.
 - **Wo was liegt:** `src/core/round` ist die Übertragung von `domain.round` (mit Golden-Tests für Zusammenführen,

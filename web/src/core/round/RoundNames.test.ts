@@ -56,6 +56,22 @@ describe("RoundNames", () => {
     expect(RoundNames.suggest([], "Klub")).toBe("Klub");
   });
 
+  it("eine eigene, noch leere Runde ist wiederverwendbar und blockiert ihren Namen nicht – außer sie ist verbunden", () => {
+    const fresh = roundSummary({ id: "f", name: "Stammtisch", rev: 1, memberCount: 1, myPlayerId: null, isCreator: true });
+    const used = { ...fresh, id: "u", name: "Klub", rev: 2 };
+    const foreign = { ...fresh, id: "x", name: "Freitag", isCreator: false };
+    const joined = { ...fresh, id: "j", name: "Samstag", memberCount: 2 };
+
+    expect(RoundNames.reusable(fresh)).toBe(true);
+    expect(RoundNames.reusable(used)).toBe(false);
+    expect(RoundNames.reusable(foreign)).toBe(false);
+    expect(RoundNames.reusable(joined)).toBe(false);
+    expect(RoundNames.blocking([fresh, used, foreign, joined], null)).toEqual([used, foreign, joined]);
+    expect(RoundNames.blocking([fresh, used], "f")).toEqual([fresh, used]);
+    // Die Vorgabe nimmt den Namen der leeren Runde, wenn er nur dort vergeben ist.
+    expect(RoundNames.suggest(RoundNames.blocking([{ ...fresh, name: "Schafkopfrunde" }], null))).toBe("Schafkopfrunde");
+  });
+
   it("gleichnamige Runden werden erkannt, ohne Groß und Klein", () => {
     const rounds = [
       round("a", "Stammtisch", "Anna", "Bert"),

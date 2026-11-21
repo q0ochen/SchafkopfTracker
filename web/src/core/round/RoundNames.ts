@@ -12,10 +12,14 @@ const DEFAULT = "Schafkopfrunde";
 /** Höchstens so viele Zeichen hat der Name einer Runde (nach dem Bereinigen). */
 const MAX_LENGTH = 40;
 
+/** Den Stand `rev = 1` hat eine Runde nur unmittelbar nach dem Anlegen. */
+const FRESH_REV = 1;
+
 /**
- * Ob ein Zeichen (UTF-16-Einheit) Leer- oder Steuerzeichen ist: nur ASCII, U+0000 bis U+0020 und U+007F, wie
- * `[[:space:][:cntrl:]]` auf dem Server (Kotlin: `Regex("[\\x00-\\x20\\x7F]+")`). Ein geschütztes Leerzeichen gehört
- * nicht dazu.
+ * Ob ein Zeichen (UTF-16-Einheit) Leer- oder Steuerzeichen ist: nur ASCII, U+0000 bis U+0020 und U+007F (Kotlin:
+ * `Regex("[\\x00-\\x20\\x7F]+")`). Ein geschütztes Leerzeichen gehört nicht dazu. Der Server (`[[:space:][:cntrl:]]`,
+ * je nach Spracheinstellung der Datenbank) zählt auch manche anderen Leerzeichen dazu, und `lower()` weicht bei wenigen
+ * Buchstaben (etwa Schluss-Sigma) ab: Bei solchen Namen entscheidet der Server, die App prüft nur vorab.
  */
 function isSpaceOrControl(code: number): boolean {
   return code <= 0x20 || code === 0x7f;
@@ -59,13 +63,17 @@ function taken(name: string, rounds: readonly RoundSummary[]): boolean {
   return rounds.some((it) => same(it.name, name));
 }
 
+function reusable(round: RoundSummary): boolean {
+  return round.isCreator && round.memberCount === 1 && round.rev === FRESH_REV;
+}
+
 export const RoundNames = {
   DEFAULT,
   MAX_LENGTH,
 
   /**
-   * Wie `private.clean_name` auf dem Server: Folgen von Leer- und Steuerzeichen (auch Tabulator und Zeilenumbruch)
-   * werden zu einem Leerzeichen, Leerzeichen am Anfang und Ende entfallen.
+   * Wie `private.clean_name` auf dem Server (für ASCII): Folgen von Leer- und Steuerzeichen (auch Tabulator und
+   * Zeilenumbruch) werden zu einem Leerzeichen, Leerzeichen am Anfang und Ende entfallen.
    */
   clean,
 
@@ -90,6 +98,20 @@ export const RoundNames = {
       const candidate = number === 1 ? base : `${base} ${number}`;
       if (!taken(candidate, rounds)) return candidate;
     }
+  },
+
+  /**
+   * Eine eigene, noch leere Runde: selbst angelegt, ein Mitglied, `rev = 1`. Sie stammt von einem Versuch, dessen Antwort
+   * verloren ging; „Runde anlegen“ mit ihrem Namen nimmt sie wieder, statt eine zweite anzulegen (8.7).
+   */
+  reusable,
+
+  /**
+   * Die Runden, deren Namen für eine neue Runde vergeben sind: alle außer den eigenen, noch leeren ({@link reusable});
+   * die verbundene Runde `linked` zählt immer (sie wird nie wiederverwendet).
+   */
+  blocking(rounds: readonly RoundSummary[], linked: RoundId | null): RoundSummary[] {
+    return rounds.filter((it) => !reusable(it) || it.id === linked);
   },
 
   /**

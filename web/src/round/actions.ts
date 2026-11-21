@@ -1,12 +1,13 @@
 /*
  * Was die Bildschirme der gemeinsamen Runde gemeinsam haben (Start-Bildschirm und „Gemeinsame Runden“): wie eine
- * gescheiterte Aktion als Fehler erscheint, die Prüfung des Namens einer neuen Runde und die „Rückfrage vor dem
- * Wechseln“ (docs/ARCHITEKTUR.md 8.9). Reine Logik ohne Oberfläche, damit sie sich prüfen lässt.
+ * gescheiterte Aktion als Fehler erscheint, die bekannten Runden des Kontos, die Prüfung des Namens einer neuen Runde
+ * und die „Rückfrage vor dem Wechseln“ (docs/ARCHITEKTUR.md 8.9). Reine Logik ohne Oberfläche, damit sie sich prüfen
+ * lässt.
  */
 import { DeviceStorageError } from "../app/store";
-import { RoundException, type RoundError, type RoundId, type RoundSummary } from "../core/round/RoundModels";
+import { RoundException, roundSummary, type RoundError, type RoundLink, type RoundSummary, type SwitchFrom } from "../core/round/RoundModels";
 import { RoundNames } from "../core/round/RoundNames";
-import type { RoundController } from "./controller";
+import type { RoundController, RoundState } from "./controller";
 
 /** Ein Fehler, den ein Bildschirm in Worten zeigt. */
 export type RoundUiError =
@@ -29,21 +30,52 @@ export function uiErrorOf(error: unknown, roundName = false): RoundUiError {
   return { kind: "Server", error: "SERVER", roundName: false };
 }
 
-/** Den Stand `rev = 1` hat eine Runde nur unmittelbar nach dem Anlegen (wie in `RoundConnection`). */
-const FRESH_REV = 1;
+/** Die verbundene Runde als Eintrag einer Liste (die Mitglieder nennt dann nur die Zahl). */
+function linkedSummary(link: RoundLink): RoundSummary {
+  return roundSummary({
+    id: link.roundId,
+    name: link.roundName,
+    rev: link.cursor,
+    memberCount: link.members.length,
+    myPlayerId: link.playerId,
+    isCreator: link.isCreator,
+  });
+}
+
+/**
+ * Die Runden des Kontos, soweit bekannt (`RoundState.rounds`, in der Reihenfolge von `my_rounds`); die verbundene ist
+ * immer dabei (fehlt sie, vorn). Damit zählt ihr Name auch dann als vergeben, wenn die Liste noch nicht gelesen ist.
+ * Kotlin: `knownRounds`.
+ */
+export function knownRounds(state: Pick<RoundState, "link" | "rounds">): RoundSummary[] {
+  const rounds = state.rounds ?? [];
+  const link = state.link;
+  if (link === null || rounds.some((it) => it.id === link.roundId)) return [...rounds];
+  return [linkedSummary(link), ...rounds];
+}
+
+/**
+ * Die Runden, deren Namen für eine neue Runde vergeben sind (docs/ARCHITEKTUR.md 8.7, „Eindeutige Namen“): die bekannten
+ * außer den eigenen, noch leeren, denn die nimmt das Anlegen wieder; die verbundene zählt immer (`RoundNames.blocking`).
+ */
+function blockingRounds(state: Pick<RoundState, "link" | "rounds">): RoundSummary[] {
+  return RoundNames.blocking(knownRounds(state), state.link?.roundId ?? null);
+}
+
+/** Die Vorgabe im Feld „Name der Runde“: „Schafkopfrunde“, ist der Name vergeben, die erste freie Fassung mit Nummer. */
+export function suggestedRoundName(state: Pick<RoundState, "link" | "rounds">): string {
+  return RoundNames.suggest(blockingRounds(state));
+}
 
 /**
  * Was gegen den Namen einer neuen Runde spricht, bevor die App sie anlegt bzw. danach fragt (docs/ARCHITEKTUR.md 8.7,
  * „Eindeutige Namen“): `INVALID_NAME`, wenn er nach dem Bereinigen nicht 1 bis 40 Zeichen hat; `NAME_TAKEN`, wenn eine
- * Runde des Kontos schon so heißt; sonst `null`. Wie in `RoundConnection.create` zählt die eigene, noch leere Runde eines
- * Versuchs, dessen Antwort verloren ging, nicht: Die nimmt das Anlegen, statt eine zweite anzulegen.
- *
- * @param rounds Die bekannten Runden des Kontos (ohne Liste prüft das Anlegen selbst noch einmal).
+ * Runde des Kontos schon so heißt (außer einer eigenen, noch leeren, siehe {@link blockingRounds}); sonst `null`. Ohne
+ * gelesene Liste prüft das Anlegen selbst noch einmal.
  */
-export function roundNameProblem(name: string, rounds: readonly RoundSummary[]): RoundError | null {
+export function roundNameProblem(name: string, state: Pick<RoundState, "link" | "rounds">): RoundError | null {
   if (!RoundNames.valid(name)) return "INVALID_NAME";
-  const reusable = (round: RoundSummary): boolean => round.isCreator && round.memberCount === 1 && round.rev === FRESH_REV;
-  return rounds.some((round) => RoundNames.same(round.name, name) && !reusable(round)) ? "NAME_TAKEN" : null;
+  return RoundNames.taken(name, blockingRounds(state)) ? "NAME_TAKEN" : null;
 }
 
 /**
@@ -72,48 +104,45 @@ export function targetName(target: SwitchTarget): string {
 /**
  * Die „Rückfrage vor dem Wechseln“, nachdem vollständig abgeglichen ist.
  *
- * @property fromId Die bisherige Runde; ist das Gerät beim Bestätigen nicht mehr mit ihr verbunden, gilt die Rückfrage
- *   nicht mehr.
- * @property from Ihr Name („Die Abende von ‹bisherige Runde› bleiben dort …“).
- * @property pending So viele Änderungen warten nach dem Abgleich noch; sie gingen beim Wechseln verloren.
+ * @property from Was gefragt wird: von welcher Runde aus und wie viele Änderungen dabei verloren gingen
+ *   (`from.acceptedLoss`, etwa ein Abend, den der Server nicht annimmt). Es geht mit der Bestätigung an den Wechsel; hat
+ *   sich das Gerät bis dahin geändert, wird nicht gewechselt (`CHANGED_MEANWHILE`).
+ * @property fromName Der Name der bisherigen Runde („Die Abende von ‹bisherige Runde› bleiben dort …“).
  */
 export interface SwitchConfirm {
   readonly target: SwitchTarget;
-  readonly fromId: RoundId;
-  readonly from: string;
-  readonly pending: number;
+  readonly from: SwitchFrom;
+  readonly fromName: string;
 }
 
 /**
- * Bereitet die Rückfrage vor: gleicht die verbundene Runde vollständig ab (`RoundController.beforeSwitch`). `null`, wenn
- * es nichts zu fragen gibt (nicht mehr verbunden, oder die Runde gibt es nicht mehr: dann steht die Meldung nach
- * `Detached` da). Scheitert der Abgleich, scheitert auch dieser Aufruf, und es bleibt alles, wie es ist.
+ * Bereitet die Rückfrage vor: gleicht die verbundene Runde vollständig ab (`RoundController.prepareSwitch`). `null`, wenn
+ * es nichts zu fragen gibt (nicht verbunden, oder die Runde gibt es nicht mehr: dann steht die Meldung nach `Detached`
+ * da). Scheitert der Abgleich, scheitert auch dieser Aufruf, und es bleibt alles, wie es ist.
  */
 export async function prepareSwitch(controller: RoundController, target: SwitchTarget): Promise<SwitchConfirm | null> {
-  const link = controller.getState().link;
-  if (link === null) return null;
-  const pending = await controller.beforeSwitch();
-  const after = controller.getState().link;
-  if (pending === null || after === null || after.roundId !== link.roundId) return null;
-  return { target, fromId: after.roundId, from: after.roundName, pending };
+  const before = controller.getState().link;
+  const from = await controller.prepareSwitch();
+  if (from === null) return null;
+  // Der Abgleich kann den Namen aufgefrischt haben; hängt das Gerät inzwischen an einer anderen Runde, entscheidet der
+  // Wechsel selbst (`CHANGED_MEANWHILE`), und die Rückfrage nennt die Runde, von der aus gefragt wurde.
+  const now = controller.getState().link;
+  const fromName = (now?.roundId === from.roundId ? now : before)?.roundName ?? "";
+  return { target, from, fromName };
 }
 
-/** Führt aus, was die Rückfrage bestätigt hat. */
-export async function runSwitch(controller: RoundController, target: SwitchTarget): Promise<void> {
+/** Führt aus, was die Rückfrage bestätigt hat, mit dem, was sie gefragt hat. */
+export async function runSwitch(controller: RoundController, confirm: SwitchConfirm): Promise<void> {
+  const { target, from } = confirm;
   switch (target.kind) {
     case "use":
-      await controller.use(target.round);
+      await controller.use(target.round, from);
       return;
     case "join":
-      await controller.join(target.token);
+      await controller.join(target.token, from);
       return;
     case "create":
-      await controller.create(target.name);
+      await controller.create(target.name, from);
       return;
   }
-}
-
-/** Ob die Rückfrage noch gilt: Das Gerät ist noch mit der Runde verbunden, für die sie gestellt wurde. */
-export function stillValid(controller: RoundController, confirm: SwitchConfirm): boolean {
-  return controller.getState().link?.roundId === confirm.fromId;
 }
