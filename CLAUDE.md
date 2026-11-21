@@ -155,7 +155,7 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 723, `data` 296, `database` 24, `app` 251, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
+  `domain` 729, `data` 296, `database` 24, `app` 255, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
   laufen) und 53 Oberflächen-Tests je Playwright-Projekt, Server 578 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.

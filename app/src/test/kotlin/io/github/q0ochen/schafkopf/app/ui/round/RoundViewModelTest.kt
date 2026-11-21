@@ -6,6 +6,7 @@ import io.github.q0ochen.schafkopf.domain.round.InMemoryRoundServer
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.RoundId
 import io.github.q0ochen.schafkopf.domain.round.RoundSummary
+import io.github.q0ochen.schafkopf.domain.round.SwitchFrom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -366,7 +367,7 @@ class RoundViewModelTest {
 
         // Vor der Rückfrage ist alles hochgeladen; es wartet nichts, was verloren ginge.
         assertEquals(SwitchRequest.Use(target), viewModel.ui.value.switching)
-        assertEquals(0, viewModel.ui.value.switchPending)
+        assertEquals(SwitchFrom(eigene, acceptedLoss = 0), viewModel.ui.value.switchFrom)
         assertEquals(1, server.evenings(eigene).single().entries.size)
         viewModel.cancelSwitch()
         assertNull(viewModel.ui.value.switching)
@@ -475,5 +476,42 @@ class RoundViewModelTest {
         assertNull(viewModel.ui.value.switching)
         assertNull(kit.state.pendingInvite)
         assertEquals(round, kit.state.link?.roundId)
+    }
+
+    @Test
+    fun `solange der Wechsel vorbereitet wird, ist alles gesperrt`() = runTest(dispatcher) {
+        val (kit, viewModel, stammtisch) = linkedWithAnother()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        kit.api.gate = gate
+
+        viewModel.use(kit.state.rounds!!.single { it.id == stammtisch })
+        assertTrue(viewModel.ui.value.switchBusy)
+        assertTrue(viewModel.ui.value.busy)
+        // Ein zweiter Anstoß während des Wartens zählt nicht.
+        viewModel.create("Noch eine")
+        kit.api.gate = null
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.ui.value.switchBusy)
+        assertTrue(viewModel.ui.value.switching is SwitchRequest.Use)
+    }
+
+    @Test
+    fun `hat sich das Geraet seit der Rueckfrage geaendert, wird nicht gewechselt`() = runTest(dispatcher) {
+        val (kit, viewModel, stammtisch) = linkedWithAnother()
+        viewModel.use(kit.state.rounds!!.single { it.id == stammtisch })
+        advanceUntilIdle()
+        assertNotNull(viewModel.ui.value.switching)
+        // Zwischen Rückfrage und Bestätigung wird das Gerät getrennt (etwa abgemeldet auf einem anderen Bildschirm).
+        kit.coordinator.signOut()
+        advanceUntilIdle()
+
+        viewModel.confirmSwitch()
+        advanceUntilIdle()
+
+        assertNull(kit.state.link)
+        assertEquals(listOf("eigener-abend"), kit.evenings.evenings.first().map { it.id.value })
+        assertTrue(viewModel.ui.value.error is RoundUiError.Server)
     }
 }

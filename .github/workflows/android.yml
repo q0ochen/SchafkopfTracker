@@ -83,7 +83,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import glob, sys, xml.etree.ElementTree as ET
-          minimum = {"domain": 723, "data": 296, "database": 24, "app": 251}
+          minimum = {"domain": 729, "data": 296, "database": 24, "app": 255}
           ok = True
           for module, least in minimum.items():
               files = glob.glob(f"{module}/build/test-results/**/*.xml", recursive=True)

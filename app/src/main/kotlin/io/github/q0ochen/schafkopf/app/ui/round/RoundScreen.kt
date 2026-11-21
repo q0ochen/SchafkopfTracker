@@ -211,11 +211,13 @@ fun RoundContent(state: RoundState, ui: RoundUi, players: List<Player>, actions:
         SwitchDialog(
             request = request,
             from = state.link?.roundName.orEmpty(),
-            pending = ui.switchPending,
+            pending = ui.switchFrom?.acceptedLoss ?: 0,
+            autoBackup = ui.autoBackup,
             onConfirm = actions.confirmSwitch,
             onCancel = actions.cancelSwitch,
         )
     }
+    if (ui.switchBusy) SwitchProgress()
 
     if (ui.replace != null) {
         AlertDialog(
@@ -486,13 +488,13 @@ private fun RoundList(
 private fun CreateSection(state: RoundState, hint: String, busy: Boolean, onCreate: (String) -> Unit) {
     SectionHeading(stringResource(R.string.round_create_heading))
     val base = stringResource(R.string.round_create_default_name)
-    // Der Vorschlag ändert sich, sobald die Runden des Kontos gelesen sind; was man schon getippt hat, bleibt dann nur,
-    // solange der Vorschlag derselbe ist.
-    val suggestion = RoundNames.suggest(knownRounds(state), base)
-    var name by rememberSaveable(suggestion) { mutableStateOf(suggestion) }
+    // Der Vorschlag folgt der Liste der Runden (sie kommt oft erst nach dem ersten Bild), bis man selbst etwas tippt.
+    val suggestion = RoundNames.suggest(RoundNames.blocking(knownRounds(state), state.link?.roundId), base)
+    var typed by rememberSaveable { mutableStateOf<String?>(null) }
+    val name = typed ?: suggestion
     OutlinedTextField(
         value = name,
-        onValueChange = { name = it },
+        onValueChange = { typed = it },
         label = { Text(stringResource(R.string.round_create_name)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),

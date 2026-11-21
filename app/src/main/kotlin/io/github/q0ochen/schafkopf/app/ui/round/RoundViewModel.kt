@@ -14,6 +14,7 @@ import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.RoundException
 import io.github.q0ochen.schafkopf.domain.round.RoundNames
 import io.github.q0ochen.schafkopf.domain.round.RoundSummary
+import io.github.q0ochen.schafkopf.domain.round.SwitchFrom
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -79,8 +80,9 @@ sealed interface RoundUiError {
  * @property invite Was die wartende Einladung verrät; `null`, solange unbekannt.
  * @property replace Wartet auf die Rückfrage „Daten dieses Geräts ersetzen?“ (ohne verbundene Runde).
  * @property eveningCount So viele Abende lägen beim Ersetzen auf dem Gerät.
- * @property switching Wartet auf die Rückfrage vor dem Wechseln (mit verbundener Runde); [switchPending] Änderungen
- *   warten nach dem Abgleich davor noch.
+ * @property switching Wartet auf die Rückfrage vor dem Wechseln (mit verbundener Runde); [switchFrom] ist, was dabei
+ *   gefragt wird (von welcher Runde aus, wie viel verloren ginge).
+ * @property switchBusy Ein Wechsel wird vorbereitet oder läuft: Bis er fertig ist, lässt sich nichts bedienen.
  * @property farewell Wartet auf die Rückfrage vor dem Verlassen oder Abmelden; [farewellPending] Änderungen warten noch.
  * @property leaving Wartet auf die Rückfrage, ob das Konto diese (nicht verbundene) Runde verlassen will.
  * @property signInUrl Diese Adresse soll der Browser jetzt öffnen.
@@ -94,7 +96,8 @@ data class RoundUi(
     val replace: PendingAttach? = null,
     val eveningCount: Int = 0,
     val switching: SwitchRequest? = null,
-    val switchPending: Int = 0,
+    val switchFrom: SwitchFrom? = null,
+    val switchBusy: Boolean = false,
     val farewell: Farewell? = null,
     val farewellPending: Int = 0,
     val leaving: RoundSummary? = null,
@@ -188,10 +191,30 @@ class RoundViewModel(
      * „Runde anlegen“. Der Name wird vorher geprüft (Länge, schon vergeben). Ohne verbundene Runde wird gleich angelegt;
      * mit verbundener Runde kommt erst die Rückfrage, denn die neue Runde beginnt leer.
      */
-    fun create(name: String) = busy(roundName = true) {
+    fun create(name: String) {
+        val state = coordinator.state.value
+        if (state.link == null) {
+            busy(roundName = true) {
+                checkName(name, state)
+                coordinator.create(name, SwitchFrom(null))
+            }
+        } else {
+            switching(roundName = true) {
+                checkName(name, state)
+                askSwitch(SwitchRequest.Create(name))
+            }
+        }
+    }
+
+    /**
+     * Prüft den Namen einer neuen Runde vorab: Länge und ob das Konto schon eine Runde so nennt (eine eigene, noch leere
+     * zählt nicht, die nimmt das Anlegen wieder; docs/ARCHITEKTUR.md 8.7).
+     */
+    private fun checkName(name: String, state: RoundState) {
         if (!RoundNames.valid(name)) throw RoundException(RoundError.INVALID_NAME)
-        if (RoundNames.taken(name, knownRounds(coordinator.state.value))) throw RoundException(RoundError.NAME_TAKEN)
-        if (coordinator.state.value.link == null) coordinator.create(name) else askSwitch(SwitchRequest.Create(name))
+        if (RoundNames.taken(name, RoundNames.blocking(knownRounds(state), state.link?.roundId))) {
+            throw RoundException(RoundError.NAME_TAKEN)
+        }
     }
 
     /** Löst einen eingefügten Link oder Code ein. */
@@ -207,12 +230,12 @@ class RoundViewModel(
 
     /** „Auf diesem Gerät verwenden“ (ohne verbundene Runde) bzw. „Wechseln“ (mit verbundener Runde). */
     fun use(round: RoundSummary) {
-        if (coordinator.state.value.link == null) requestAttach(PendingAttach.Use(round)) else busy { askSwitch(SwitchRequest.Use(round)) }
+        if (coordinator.state.value.link == null) requestAttach(PendingAttach.Use(round)) else switching { askSwitch(SwitchRequest.Use(round)) }
     }
 
     private fun requestJoin(token: String) {
         val link = coordinator.state.value.link ?: return requestAttach(PendingAttach.Join(token))
-        busy {
+        switching {
             val info = coordinator.inviteInfo(token)
             if (info.roundId == link.roundId) {
                 // Die Einladung führt in die Runde, in der das Gerät schon ist: sagen und die Einladung vergessen.
@@ -229,20 +252,21 @@ class RoundViewModel(
      * mehr, kommt keine Rückfrage (die Meldung dazu zeigt der Stand der Runde).
      */
     private suspend fun askSwitch(request: SwitchRequest) {
-        val pending = coordinator.prepareSwitch() ?: return
-        mutable.update { it.copy(switching = request, switchPending = pending) }
+        val from = coordinator.prepareSwitch() ?: return
+        mutable.update { it.copy(switching = request, switchFrom = from, autoBackup = autoBackupEnabled()) }
     }
 
-    fun cancelSwitch() = mutable.update { it.copy(switching = null) }
+    fun cancelSwitch() = mutable.update { it.copy(switching = null, switchFrom = null) }
 
     fun confirmSwitch() {
         val request = mutable.value.switching ?: return
-        mutable.update { it.copy(switching = null) }
-        busy(roundName = request is SwitchRequest.Create) {
+        val from = mutable.value.switchFrom ?: return
+        mutable.update { it.copy(switching = null, switchFrom = null) }
+        switching(roundName = request is SwitchRequest.Create) {
             when (request) {
-                is SwitchRequest.Use -> coordinator.use(request.round)
-                is SwitchRequest.Join -> coordinator.join(request.token)
-                is SwitchRequest.Create -> coordinator.create(request.name)
+                is SwitchRequest.Use -> coordinator.use(request.round, from)
+                is SwitchRequest.Join -> coordinator.join(request.token, from)
+                is SwitchRequest.Create -> coordinator.create(request.name, from)
             }
         }
     }
@@ -281,9 +305,10 @@ class RoundViewModel(
     }
 
     private suspend fun attach(target: PendingAttach) {
+        // Ohne verbundene Runde: Hängt das Gerät inzwischen doch an einer, wird nicht ohne Rückfrage gewechselt.
         when (target) {
-            is PendingAttach.Join -> coordinator.join(target.token)
-            is PendingAttach.Use -> coordinator.use(target.round)
+            is PendingAttach.Join -> coordinator.join(target.token, SwitchFrom(null))
+            is PendingAttach.Use -> coordinator.use(target.round, SwitchFrom(null))
         }
     }
 
@@ -312,9 +337,14 @@ class RoundViewModel(
      * von selbst nach.
      */
 
-    private fun busy(roundName: Boolean = false, block: suspend () -> Unit) {
+    private fun busy(roundName: Boolean = false, block: suspend () -> Unit) = run(roundName, switch = false, block)
+
+    /** Wie [busy], aber für das Wechseln: Solange es läuft, sperrt der Bildschirm alles (auch „Zurück“). */
+    private fun switching(roundName: Boolean = false, block: suspend () -> Unit) = run(roundName, switch = true, block)
+
+    private fun run(roundName: Boolean, switch: Boolean, block: suspend () -> Unit) {
         if (mutable.value.busy) return
-        mutable.update { it.copy(busy = true, error = null) }
+        mutable.update { it.copy(busy = true, switchBusy = switch, error = null) }
         viewModelScope.launch {
             try {
                 block()
@@ -325,7 +355,7 @@ class RoundViewModel(
             } catch (_: Exception) {
                 mutable.update { it.copy(error = RoundUiError.Server(RoundError.SERVER)) }
             } finally {
-                mutable.update { it.copy(busy = false) }
+                mutable.update { it.copy(busy = false, switchBusy = false) }
             }
         }
     }

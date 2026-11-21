@@ -6,6 +6,7 @@ import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.round.InMemoryRoundServer
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.RoundException
+import io.github.q0ochen.schafkopf.domain.round.SwitchFrom
 import io.github.q0ochen.schafkopf.domain.round.SyncNotice
 import io.github.q0ochen.schafkopf.domain.round.SyncOutcome
 import io.github.q0ochen.schafkopf.domain.round.InviteLinks
@@ -661,7 +662,7 @@ class RoundCoordinatorTest {
         kit.addGame(io.github.q0ochen.schafkopf.domain.model.EveningId("abend-1"))
         assertEquals(1, kit.coordinator.pendingCount())
 
-        assertEquals(0, kit.coordinator.prepareSwitch())
+        assertEquals(SwitchFrom(kit.state.link!!.roundId, acceptedLoss = 0), kit.coordinator.prepareSwitch())
         assertEquals(1, kit.server.evenings(kit.state.link!!.roundId).single().entries.size)
 
         // Ohne Netz: ein Fehler, keine Zahl.
@@ -707,6 +708,46 @@ class RoundCoordinatorTest {
         assertEquals(listOf("Dritte", "Eigene", "Stammtisch"), kit.state.rounds?.map { it.name }?.sorted())
         // Die anderen Runden haben dabei nichts verloren.
         assertEquals(listOf("abend-1"), server.evenings(stammtisch).map { it.id.value })
+    }
+
+    @Test
+    fun `nach einem Wechsel gelten die Hinweise der bisherigen Runde nicht mehr`() = runTest {
+        val server = InMemoryRoundServer()
+        val kit = linked(server)
+        kit.players.save(Player(PlayerId("gast"), "spieler 1", colorIndex = 4))
+        settle()
+        assertEquals(1, kit.state.notices.size)
+        val other = server.sessionFor("konto-2")
+        val klub = other.createRound("Klub")
+        kit.session.joinRound(other.createInvite(klub))
+        kit.coordinator.refreshRounds()
+        val from = kit.coordinator.prepareSwitch()!!
+        assertEquals(1, kit.state.notices.size)
+
+        kit.coordinator.use(kit.state.rounds!!.single { it.id == klub }, from)
+        runCurrent()
+
+        assertEquals(klub, kit.state.link?.roundId)
+        assertEquals(emptyList<SyncNotice>(), kit.state.notices)
+    }
+
+    @Test
+    fun `eine Einladung bleibt, wenn der Beitritt nicht zum Wechsel fuehrte`() = runTest {
+        val server = InMemoryRoundServer()
+        val kit = linked(server)
+        val other = server.sessionFor("konto-2")
+        val klub = other.createRound("Klub")
+        val token = other.createInvite(klub)
+        kit.coordinator.onLink("schafkopftracker://einladung/$token")
+        // Die verbundene Runde gibt es inzwischen nicht mehr: Beim Beitreten wird nicht gewechselt.
+        server.removeMember(kit.state.link!!.roundId, kit.userId)
+
+        assertEquals(SyncOutcome.Detached, kit.coordinator.join(token))
+        runCurrent()
+
+        assertEquals(token, kit.state.pendingInvite)
+        assertNull(kit.state.link)
+        assertEquals(RoundMessage.DETACHED, kit.state.message)
     }
 
     @Test

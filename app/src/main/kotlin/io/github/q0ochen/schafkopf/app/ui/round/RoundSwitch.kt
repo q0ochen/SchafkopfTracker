@@ -3,12 +3,17 @@ package io.github.q0ochen.schafkopf.app.ui.round
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -21,15 +26,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import io.github.q0ochen.schafkopf.R
 import io.github.q0ochen.schafkopf.app.round.RoundState
 import io.github.q0ochen.schafkopf.domain.round.RoundId
@@ -163,9 +173,17 @@ fun RoundChoice(
  *
  * @param from Der Name der bisherigen Runde.
  * @param pending So viele Änderungen warten nach dem Abgleich noch; sie gingen beim Wechseln verloren.
+ * @param autoBackup Die automatische Sicherung ist eingeschaltet; sie hält danach die Daten der anderen Runde.
  */
 @Composable
-fun SwitchDialog(request: SwitchRequest, from: String, pending: Int, onConfirm: () -> Unit, onCancel: () -> Unit) {
+fun SwitchDialog(
+    request: SwitchRequest,
+    from: String,
+    pending: Int,
+    autoBackup: Boolean,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit,
+) {
     val (title, first, confirm) = when (request) {
         is SwitchRequest.Use -> Triple(
             stringResource(R.string.round_switch_title, request.target),
@@ -193,6 +211,7 @@ fun SwitchDialog(request: SwitchRequest, from: String, pending: Int, onConfirm: 
                 if (pending > 0) {
                     Text(pluralStringResource(R.plurals.round_switch_pending, pending, pending), color = MaterialTheme.colorScheme.error)
                 }
+                if (autoBackup) Text(stringResource(R.string.round_replace_auto_backup))
             }
         },
         confirmButton = { TextButton(onClick = onConfirm, modifier = Modifier.heightIn(min = 48.dp)) { Text(confirm) } },
@@ -200,4 +219,27 @@ fun SwitchDialog(request: SwitchRequest, from: String, pending: Int, onConfirm: 
             TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.common_cancel)) }
         },
     )
+}
+
+/**
+ * „Einen Moment …“ über allem, solange ein Wechsel vorbereitet wird oder läuft: Bis er fertig ist, lässt sich nichts
+ * bedienen, auch „Zurück“ nicht. Sonst ließe sich mitten im Wechsel ein Spiel in die Runde eintragen, die das Gerät
+ * gerade verlässt, oder der Wechsel durch Verlassen des Bildschirms abbrechen.
+ */
+@Composable
+fun SwitchProgress() {
+    Dialog(onDismissRequest = {}, properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)) {
+        Card {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .padding(24.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                Text(stringResource(R.string.round_working), style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
 }

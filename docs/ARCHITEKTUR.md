@@ -680,11 +680,14 @@ Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disc
   anlegen, während das Gerät verbunden ist“ (unten).
 - **Eindeutige Namen** (seit dem 21.11.2026): Ein Konto hat keine zwei Runden desselben Namens. Verglichen wird wie
   auf dem Server: Folgen von Leer- und Steuerzeichen werden zu einem Leerzeichen, außen beschnitten, ohne Groß/Klein
-  (`RoundNames.same`). Vor `create_round` prüft `create` gegen `my_rounds` (nach der Suche nach der eigenen leeren
-  Runde oben) und meldet `name_taken`; der Server prüft dasselbe. Die Vorgabe im Feld „Name der Runde“ ist
-  „Schafkopfrunde“, ist der Name schon vergeben, die erste freie Fassung von „Schafkopfrunde 2“, „Schafkopfrunde 3“
-  … (`RoundNames.suggest`). Durch Beitreten kann ein Konto trotzdem zwei Runden desselben Namens haben (angelegt
-  haben sie verschiedene Leute); Listen nennen deshalb die Mitglieder (8.9).
+  (`RoundNames.same`; das gilt genau für ASCII, bei anderen Leer- und Sonderzeichen entscheidet der Server). Vor
+  `create_round` prüft `create` gegen `my_rounds` (nach der Suche nach der eigenen leeren Runde oben) und meldet
+  `name_taken`; der Server prüft dasselbe. Eine eigene, noch leere Runde (`RoundNames.reusable`: selbst angelegt, ein
+  Mitglied, `rev = 1`) blockiert ihren Namen nicht, denn das Anlegen nähme sie wieder; die verbundene Runde blockiert
+  ihn immer und wird nie wiederverwendet (`RoundNames.blocking`). Genauso prüft die Oberfläche vorab und bildet ihre
+  Vorgabe im Feld „Name der Runde“: „Schafkopfrunde“, ist der Name schon vergeben, die erste freie Fassung von
+  „Schafkopfrunde 2“, „Schafkopfrunde 3“ … (`RoundNames.suggest`). Durch Beitreten kann ein Konto trotzdem zwei Runden
+  desselben Namens haben (angelegt haben sie verschiedene Leute); Listen nennen deshalb die Mitglieder (8.9).
 - **Einer Runde beitreten / eine Runde des Kontos auf diesem Gerät verwenden:** Hat das Gerät Abende oder
   umbenannte Spieler, wird nachgefragt („… werden durch die Daten der Runde ersetzt“). Dann zuerst den Kopf der
   Runde lesen: Antwortet der Server nicht, bleibt das Gerät, wie es ist (Fehler `offline` oder `server`); gibt es
@@ -695,23 +698,34 @@ Umgesetzt in `RoundConnection` (`create`, `join`, `use`, `claim`, `leave`, `disc
   neu“, dann den eigenen Namen eingeben und bestätigen („lässt sich danach nicht mehr ändern“) → `claim_player`.
 - **Abmelden / Runde verlassen:** `RoundLink` und Basen löschen, die Daten bleiben als örtliche Kopie auf dem Gerät.
   Wartende Änderungen gehen dabei verloren (Rückfrage, wenn `pendingCount() > 0`).
-- **Runde wechseln** (seit dem 21.11.2026; `use` mit einer anderen Runde, während das Gerät verbunden ist): Zuerst
-  ein vollständiger Abgleich der verbundenen Runde, damit alles von hier auf dem Server ist. Scheitert er, bleibt
-  alles, wie es ist (Fehler `offline`, `signed_out` oder der des Servers); meldet er `Detached` (oder ist das Gerät
-  inzwischen nicht mehr verbunden), wird nicht gewechselt, und `use` liefert dieses Ergebnis (die Daten bleiben als
-  Kopie). Danach wie „eine Runde des Kontos verwenden“: Kopf der Zielrunde lesen, dann leeren und verbinden, Abgleich.
-  Die Abende der bisherigen Runde bleiben auf dem Server; zurück geht es auf demselben Weg. Die Rückfrage
-  „Daten dieses Geräts ersetzen?“ entfällt dabei (die Daten sind ja in der bisherigen Runde). Was nach dem Abgleich
-  noch wartet (`pendingCount() > 0`, etwa ein Abend, den der Server nicht annimmt), geht beim Wechseln verloren:
-  Die Oberfläche gleicht deshalb schon vor ihrer Rückfrage vollständig ab und nennt dort die Zahl. Ist die Zielrunde
-  die verbundene, wird nur abgeglichen.
+- **Runde wechseln** (seit dem 21.11.2026; `use` mit einer anderen Runde, während das Gerät verbunden ist). Die
+  Abende der bisherigen Runde bleiben auf dem Server; zurück geht es auf demselben Weg. Die Rückfrage „Daten dieses
+  Geräts ersetzen?“ entfällt (die Daten sind ja in der bisherigen Runde). Ist die Zielrunde die verbundene, wird nur
+  abgeglichen. Ablauf:
+  1. *Vor der Rückfrage* gleicht die Oberfläche vollständig ab (Android `RoundCoordinator.prepareSwitch`) und merkt
+     sich `SwitchFrom(roundId, acceptedLoss)`: die verbundene Runde und wie viel danach noch wartet
+     (`pendingCount()`, etwa ein Abend, den der Server nicht annimmt; das ginge beim Wechseln verloren, die Rückfrage
+     nennt die Zahl). Scheitert der Abgleich, kommt statt der Rückfrage der Fehler; bei `Detached` die Meldung.
+  2. *Nach der Bestätigung* (`use(round, userId, from)`): Kopf der Zielrunde lesen (sonst `not_member`, `offline` …;
+     das Gerät bleibt, wie es ist). Dann in einem Zug unter der Sperre des Abgleichs (`RoundSync.syncThen`): noch
+     einmal vollständig abgleichen, damit auch ein eben eingetragenes Spiel oben ist (scheitert das: Fehler, nichts
+     ändert sich; `Detached`: nicht wechseln, Ergebnis `Detached`, die Daten bleiben als Kopie); hängt das Gerät
+     nicht mehr an `from.roundId` oder wartet mehr als `from.acceptedLoss`, nicht wechseln (Fehler
+     `CHANGED_MEANWHILE`, kein Code des Servers); sonst leeren (Verbindung und Basen, dann Abende und Spieler) und
+     verbinden. Dieser Zug läuft ohne Abbruch zu Ende, auch wenn die Oberfläche ihn abbricht (`NonCancellable`);
+     danach der Abgleich der neuen Runde. Ohne `from` gelten die verbundene Runde beim Aufruf und `acceptedLoss = 0`.
+  Ohne verbundene Runde („verwenden“, „beitreten“ nach „Daten dieses Geräts ersetzen?“) ist `from` =
+  `SwitchFrom(null)`: Hängt das Gerät inzwischen an einer Runde, wird ebenso nicht gewechselt.
 - **Einer weiteren Runde beitreten** (`join`, während das Gerät verbunden ist): erst `invite_info`; gehört die
-  Einladung zur verbundenen Runde selbst, wird nur abgeglichen. Sonst wie „Runde wechseln“, mit `join_round` nach dem
-  Abgleich und vor dem Leeren.
-- **Neue Runde anlegen, während das Gerät verbunden ist** (`create`): Die neue Runde beginnt leer. Erst der Abgleich
-  wie bei „Runde wechseln“, dann die Prüfung des Namens und `create_round` (bzw. die eigene leere Runde dieses
-  Namens), dann leeren (Verbindung und Basen, dann Abende und Spieler) und mit der neuen Runde verbinden, Abgleich.
-  Die Abende der bisherigen Runde bleiben dort.
+  Einladung zur verbundenen Runde selbst, wird nur abgeglichen. Sonst `join_round`, dann wie „Runde wechseln“ ab
+  Schritt 2. Die gemerkte Einladung ist danach erledigt, außer der Wechsel endete mit `Detached` (dann bleibt die
+  Einladungskarte für einen neuen Versuch, jetzt ohne verbundene Runde).
+- **Neue Runde anlegen, während das Gerät verbunden ist** (`create`): Die neue Runde beginnt leer. Prüfung des
+  Namens, `create_round` (bzw. die eigene leere Runde dieses Namens), dann wie „Runde wechseln“ ab dem Zug unter der
+  Sperre: abgleichen, prüfen, leeren und mit der neuen Runde verbinden. Die Abende der bisherigen Runde bleiben dort.
+  Scheitert der Zug, bleibt die neue Runde leer auf dem Server; ein neuer Versuch mit demselben Namen nimmt sie wieder.
+- Bekannte Grenze: Wird die App mitten im Leeren beendet (nicht nur der Bildschirm verlassen), bleibt das Gerät ohne
+  Runde mit einem Teil der Daten als Kopie; auf dem Server fehlt nichts.
 - Mit verbundener Runde legt die App keine vorbelegten Spieler mehr an.
 
 ### 8.8 Kotlin und Web
@@ -761,8 +775,10 @@ steht sie vorn. Ausgewählt ist die verbundene. Jeder Eintrag heißt wie die Run
 (`RoundNames.same`), steht bei beiden dahinter „ (‹Mitglieder›)“: die `member_names` mit „, “ getrennt, ohne Namen
 „‹n› Mitglieder“ (bei 1: „1 Mitglied“). Wer eine andere Runde wählt, bekommt die „Rückfrage vor dem Wechseln“
 (unten); bis zum Wechsel zeigt die Auswahl weiter die verbundene Runde. Solange die App vorher abgleicht oder wechselt,
-ist die Auswahl gesperrt und darunter steht „Einen Moment …“. Fehler (Texte wie auf dem Bildschirm) und Meldungen
-stehen unter der Auswahl, bis man sie mit „OK“ wegtippt. Gelesen werden die Runden, wenn der Start-Bildschirm
+steht über allem „Einen Moment …“, und nichts lässt sich bedienen, auch „Zurück“ nicht (sonst ließe sich mitten im
+Wechsel ein Spiel in die Runde eintragen, die das Gerät gerade verlässt). Fehler (Texte wie auf dem Bildschirm) und die
+Meldung nach `Detached` stehen unter der Auswahl, bis man sie mit „OK“ wegtippt; andere Meldungen der Runde gehören auf
+den Bildschirm „Gemeinsame Runden“. Gelesen werden die Runden, wenn der Start-Bildschirm
 erscheint und jemand angemeldet ist, sowie nach jedem Anlegen, Beitreten, Wechseln und Verlassen. Scheitert das
 Lesen, bleibt die zuletzt gelesene Liste; gab es noch keine, fehlt die Auswahl (ohne Fehlertext).
 
@@ -778,7 +794,11 @@ gibt es die verbundene Runde nicht mehr, die Meldung nach `Detached`. Sonst je n
 
 Danach immer „Die Abende von ‹bisherige Runde› bleiben dort; du kannst jederzeit zurückwechseln.“ Wartet nach dem
 Abgleich noch etwas, zusätzlich: „‹n› Änderungen sind noch nicht hochgeladen und gehen dabei verloren.“ (bei 1:
-„1 Änderung ist noch nicht hochgeladen und geht dabei verloren.“) Zweiter Knopf „Abbrechen“. ‹Ziel› beim Beitreten
+„1 Änderung ist noch nicht hochgeladen und geht dabei verloren.“) Android, wenn die automatische Sicherung
+eingeschaltet ist, zusätzlich: „Die automatische Sicherung wird danach mit den Daten der Runde überschrieben.“ Zweiter
+Knopf „Abbrechen“. Auch auf dem Bildschirm „Gemeinsame Runden“ steht, solange ein Wechsel vorbereitet wird oder läuft,
+„Einen Moment …“ über allem. Hat sich das Gerät seit der Rückfrage geändert (`CHANGED_MEANWHILE`, 8.7), wird nicht
+gewechselt, und es steht da: „Inzwischen hat sich auf diesem Gerät etwas geändert. Bitte noch einmal versuchen.“ ‹Ziel› beim Beitreten
 ist der Name aus `invite_info`. Vor der Rückfrage zum Anlegen prüft die App den Namen (Fehlertexte unten), vor der
 zum Beitreten die Einladung (`invite_info`); gehört sie zur verbundenen Runde, kommt statt der Rückfrage die Meldung
 „Du bist schon in dieser Runde.“, und die Einladung wird vergessen.
@@ -842,8 +862,8 @@ Runde: “ davor; Tippen öffnet „Gemeinsame Runden“). Es gilt die erste zut
   Rückfrage „Der Runde ‹Ziel› beitreten?“. Unter „Einladen“: „Deine anderen Runden“, sobald sie gelesen sind und es
   welche gibt (je Runde wie bei „Deine Runden“, aber mit den Knöpfen „Wechseln“ und „Verlassen“); ließen sie sich nicht
   laden, „Deine Runden ließen sich nicht laden.“ mit „Erneut versuchen“. „Neue Runde anlegen“: Feld „Name der Runde“
-  (Vorgabe nach 8.7), Hinweis „Die neue Runde beginnt leer. Die Abende von ‹Name der Runde› bleiben dort.“, Knopf
-  „Runde anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten
+  (Vorgabe nach 8.7; was man selbst getippt hat, bleibt, bis dahin folgt das Feld der Vorgabe), Hinweis „Die neue Runde
+  beginnt leer. Die Abende von ‹Name der Runde› bleiben dort.“, Knopf „Runde anlegen“. „Einladung einlösen“: Feld „Link oder Code“, Knopf „Beitreten“. Unten
   „Runde verlassen“ (Rückfrage „Runde verlassen?“ – „Die Daten bleiben als Kopie auf diesem Gerät. Dein Name bleibt
   in der Runde.“; ist das Konto das einzige Mitglied, stattdessen „Du bist das letzte Mitglied: Die Runde wird mit
   allen Abenden auf dem Server gelöscht. Auf diesem Gerät bleiben sie als Kopie.“) und „Abmelden“ (Rückfrage

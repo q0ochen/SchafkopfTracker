@@ -111,6 +111,13 @@ data class InviteInfo(
     val alreadyMember: Boolean,
 )
 
+/**
+ * Was die Oberfläche vor einem Wechsel in eine andere Runde gefragt hat (docs/ARCHITEKTUR.md 8.7): von welcher Runde aus
+ * ([roundId], `null` ohne Runde) und wie viele wartende Änderungen dabei verloren gehen dürfen ([acceptedLoss], die Zahl
+ * aus der Rückfrage). Weicht das Gerät beim Wechsel davon ab, wird nicht gewechselt ([RoundError.CHANGED_MEANWHILE]).
+ */
+data class SwitchFrom(val roundId: RoundId?, val acceptedLoss: Int = 0)
+
 /** Antwort auf ein gespeichertes Abend-Dokument. */
 data class SavedEvening(val version: Int, val rev: Long)
 
@@ -149,6 +156,12 @@ enum class RoundError {
 
     /** Die App kennt keinen Server (keine Konfiguration). */
     NOT_CONFIGURED,
+
+    /**
+     * Ein Wechsel in eine andere Runde wurde abgebrochen, weil sich auf dem Gerät seit der Rückfrage etwas geändert hat:
+     * Es ist inzwischen mit einer anderen (oder keiner) Runde verbunden, oder es wartet mehr, als die Rückfrage nannte.
+     */
+    CHANGED_MEANWHILE,
     NOT_MEMBER,
     INVALID_NAME,
     NAME_TAKEN,

@@ -167,7 +167,7 @@ val appModule = module {
         )
     }
 
-    viewModel { StartViewModel(get(), get(), get(), get()) }
+    viewModel { StartViewModel(get(), get(), get(), get(), autoBackupEnabled = { get<AutoBackupStore>().status.value.enabled }) }
     viewModel { RoundViewModel(get(), get(), get(), autoBackupEnabled = { get<AutoBackupStore>().status.value.enabled }) }
     viewModel { NewEveningViewModel(get(), get(), get(), get(), get(), get()) }
     viewModel { params -> BoardViewModel(EveningId(params.get(0)), get(), get(), get(), get(), get()) }

@@ -35,6 +35,7 @@ import io.github.q0ochen.schafkopf.app.ui.round.RoundContent
 import io.github.q0ochen.schafkopf.app.ui.round.RoundUi
 import io.github.q0ochen.schafkopf.app.ui.round.RoundUiError
 import io.github.q0ochen.schafkopf.app.ui.round.SwitchRequest
+import io.github.q0ochen.schafkopf.domain.round.SwitchFrom
 import io.github.q0ochen.schafkopf.app.ui.settings.PlayerEditFields
 import io.github.q0ochen.schafkopf.app.ui.settings.PlayerRow
 import io.github.q0ochen.schafkopf.app.ui.settings.SettingsScreen
@@ -611,7 +612,7 @@ class RoundScreenshotTest {
         var confirmed = 0
         content(
             linked,
-            RoundUi(switching = SwitchRequest.Create("Freitagsrunde"), switchPending = 2),
+            RoundUi(switching = SwitchRequest.Create("Freitagsrunde"), switchFrom = SwitchFrom(round, acceptedLoss = 2), autoBackup = true),
             RoundActions(confirmSwitch = { confirmed++ }),
             themeMode = ThemeMode.LIGHT,
         )
@@ -620,6 +621,7 @@ class RoundScreenshotTest {
         compose.onNodeWithText("Auf diesem Gerät beginnt dann die neue, leere Runde.").assertExists()
         compose.onNodeWithText("Die Abende von Schafkopfrunde bleiben dort; du kannst jederzeit zurückwechseln.").assertExists()
         compose.onNodeWithText("2 Änderungen sind noch nicht hochgeladen und gehen dabei verloren.").assertExists()
+        compose.onNodeWithText("Die automatische Sicherung wird danach mit den Daten der Runde überschrieben.").assertExists()
         capture("70_runde_rueckfrage_neue_runde")
         compose.onNodeWithText("Anlegen").performClick()
         assertEquals(1, confirmed)

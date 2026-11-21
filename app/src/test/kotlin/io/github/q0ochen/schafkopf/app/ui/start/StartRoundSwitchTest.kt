@@ -5,6 +5,7 @@ import io.github.q0ochen.schafkopf.app.ui.round.RoundUiError
 import io.github.q0ochen.schafkopf.app.ui.round.SwitchRequest
 import io.github.q0ochen.schafkopf.domain.round.InMemoryRoundServer
 import io.github.q0ochen.schafkopf.domain.round.RoundError
+import io.github.q0ochen.schafkopf.domain.round.SwitchFrom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -62,7 +63,7 @@ class StartRoundSwitchTest {
         viewModel.choose(stammtisch)
         advanceUntilIdle()
         assertEquals(SwitchRequest.Use(stammtisch), viewModel.roundSwitch.value.switching)
-        assertEquals(0, viewModel.roundSwitch.value.pending)
+        assertEquals(SwitchFrom(kit.state.link!!.roundId, acceptedLoss = 0), viewModel.roundSwitch.value.from)
         viewModel.cancelSwitch()
         assertNull(viewModel.roundSwitch.value.switching)
         assertEquals("Eigene", kit.state.link?.roundName)

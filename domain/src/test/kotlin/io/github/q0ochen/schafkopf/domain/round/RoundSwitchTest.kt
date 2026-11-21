@@ -2,6 +2,7 @@ package io.github.q0ochen.schafkopf.domain.round
 
 import io.github.q0ochen.schafkopf.domain.evening.Evening
 import io.github.q0ochen.schafkopf.domain.model.EveningId
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -112,8 +113,6 @@ class RoundSwitchTest {
         one.connection.use(target, one.userId)
 
         assertEquals(2, server.evenings(stammtisch).single().entries.size)
-        // Zuerst der Abgleich mit dem „Stammtisch“ (sein Kopf, dann das Hochladen), erst danach der „Klub“.
-        assertEquals(listOf("head", "saveEvening"), one.session.calls.take(2))
         assertShows(one, klub)
     }
 
@@ -197,11 +196,95 @@ class RoundSwitchTest {
         val outcome = one.synced()
         assertEquals(1, outcome.refused)
         assertEquals(1, one.sync.pendingCount())
+        val local = one.allEvenings()
 
-        one.connection.use(summary(one, klub), one.userId)
+        // Ohne Zustimmung (die Rückfrage nannte 0) wird nicht gewechselt.
+        assertEquals(RoundError.CHANGED_MEANWHILE, errorOf { one.connection.use(summary(one, klub), one.userId) })
+        assertEquals(stammtisch, one.roundId())
+        assertEquals(local, one.allEvenings())
+
+        one.connection.use(summary(one, klub), one.userId, SwitchFrom(stammtisch, acceptedLoss = 1))
 
         assertShows(one, klub)
         assertEquals(listOf(abendA), onServer(stammtisch).map { it.id })
+    }
+
+    @Test
+    fun `ein Spiel, das mitten im Wechsel eingetragen wird, nimmt der letzte Abgleich mit`() = runTest {
+        val (stammtisch, klub) = twoRounds()
+        val target = summary(one, klub)
+        // Während die App nach dem Kopf der Zielrunde fragt, trägt jemand auf diesem Handy noch ein Spiel ein.
+        one.api.afterHead = { round ->
+            if (round == klub) {
+                one.api.afterHead = null
+                clock.advance(60)
+                one.addGame(abendA, laufende = 4)
+            }
+        }
+
+        assertTrue(one.connection.use(target, one.userId, SwitchFrom(stammtisch)) is SyncOutcome.Synced)
+
+        assertEquals(2, server.evenings(stammtisch).single().entries.size)
+        assertShows(one, klub)
+    }
+
+    @Test
+    fun `kommt der letzte Abgleich nicht mehr durch, bleibt alles, wie es ist`() = runTest {
+        val (stammtisch, klub) = twoRounds()
+        val target = summary(one, klub)
+        one.api.afterHead = { round ->
+            if (round == klub) {
+                one.api.afterHead = null
+                clock.advance(60)
+                one.addGame(abendA)
+                one.session.offline = true
+            }
+        }
+
+        assertEquals(RoundError.OFFLINE, errorOf { one.connection.use(target, one.userId, SwitchFrom(stammtisch)) })
+
+        assertEquals(stammtisch, one.roundId())
+        assertEquals(2, one.allEvenings().single().entries.size)
+        assertEquals(1, one.sync.pendingCount())
+    }
+
+    @Test
+    fun `haengt das Geraet nicht mehr an der Runde der Rueckfrage, wird nicht gewechselt`() = runTest {
+        val (stammtisch, klub) = twoRounds()
+        val local = one.allEvenings()
+
+        // Die Rückfrage ging von einer anderen Runde aus.
+        assertEquals(RoundError.CHANGED_MEANWHILE, errorOf { one.connection.use(summary(one, klub), one.userId, SwitchFrom(klub)) })
+        assertEquals(stammtisch, one.roundId())
+        // Inzwischen getrennt: Die Kopie wird nicht ohne die Rückfrage „Daten dieses Geräts ersetzen?“ geleert.
+        one.connection.disconnect()
+        assertEquals(
+            RoundError.CHANGED_MEANWHILE,
+            errorOf { one.connection.use(summary(one, klub), one.userId, SwitchFrom(stammtisch)) },
+        )
+        assertEquals(
+            RoundError.CHANGED_MEANWHILE,
+            errorOf { one.connection.create("Neu", one.userId, PLACEHOLDERS, SwitchFrom(stammtisch)) },
+        )
+        assertNull(one.link())
+        assertEquals(local, one.allEvenings())
+    }
+
+    @Test
+    fun `wird der Aufrufer abgebrochen, laeuft der Wechsel trotzdem am Stueck zu Ende`() = runTest {
+        val (_, klub) = twoRounds()
+        val target = summary(one, klub)
+        val job = launch { one.connection.use(target, one.userId) }
+        // Abgebrochen, sobald der Kopf der Zielrunde da ist: Danach leert und verbindet der Wechsel ohne Unterbrechung.
+        one.api.afterHead = { round -> if (round == klub) job.cancel() }
+
+        job.join()
+
+        // Verbunden und geleert ist am Stück; die Daten des Klubs holt der nächste Abgleich (der abgebrochene kam nicht mehr).
+        assertEquals(klub, one.roundId())
+        assertEquals(emptyList<Evening>(), one.allEvenings())
+        one.synced()
+        assertShows(one, klub)
     }
 
     @Test
@@ -317,6 +400,23 @@ class RoundSwitchTest {
 
         assertEquals(stammtisch, one.roundId())
         assertEquals(local, one.allEvenings())
+    }
+
+    @Test
+    fun `die verbundene, noch leere Runde wird nie wiederverwendet`() = runTest {
+        // Eine Runde, deren erster Abgleich nicht durchkam, hat noch rev = 1 und sähe aus wie eine verwaiste leere Runde.
+        // Solange das Gerät an ihr hängt, ist ihr Name trotzdem vergeben.
+        one.api.afterHead = {
+            one.api.afterHead = null
+            one.session.offline = true
+        }
+        assertEquals(SyncOutcome.Offline, one.connection.create("Leer", one.userId, PLACEHOLDERS))
+        one.session.offline = false
+        val leer = one.roundId()
+        assertTrue(RoundNames.reusable(summary(one, leer)))
+
+        assertEquals(RoundError.NAME_TAKEN, errorOf { one.connection.create("leer", one.userId, PLACEHOLDERS) })
+        assertEquals(leer, one.roundId())
     }
 
     @Test

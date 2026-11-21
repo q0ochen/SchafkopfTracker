@@ -5,16 +5,18 @@ import io.github.q0ochen.schafkopf.domain.model.Player
 import io.github.q0ochen.schafkopf.domain.model.PlayerId
 import io.github.q0ochen.schafkopf.domain.ports.EveningRepository
 import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 /**
  * Verbindet dieses Gerät mit einer gemeinsamen Runde, wechselt zwischen Runden und trennt es wieder
  * (docs/ARCHITEKTUR.md, Abschnitt 8.7).
  *
  * Die Aufrufe, die mit dem Server reden, können mit einer [RoundException] scheitern; dann ist auf dem Gerät nichts
- * verändert, außer es steht ausdrücklich dabei. Ist das Gerät schon mit einer Runde verbunden, gleichen [create],
- * [join] und [use] sie zuerst vollständig ab (siehe [handOver]): Ihre Abende bleiben auf dem Server, das Gerät hält
- * danach die Daten der neuen Runde.
+ * verändert, außer es steht ausdrücklich dabei. Ist das Gerät schon mit einer Runde verbunden, wechseln [create],
+ * [join] und [use] in die neue Runde (siehe [switchDevice]): Die Abende der bisherigen bleiben auf dem Server, das Gerät
+ * hält danach die Daten der neuen.
  */
 class RoundConnection(
     private val api: RoundApi,
@@ -42,82 +44,108 @@ class RoundConnection(
      * „Eindeutige Namen“) – außer es ist die eigene, noch leere Runde eines Versuchs, dessen Antwort verloren ging.
      *
      * @param userId Das angemeldete Konto.
+     * @param from Was die Rückfrage gezeigt hat; ohne Angabe gilt der Stand beim Aufruf, und verloren gehen darf nichts.
      */
-    suspend fun create(name: String, userId: String, placeholders: List<Player>): SyncOutcome {
-        val switching = store.link.first() != null
-        if (switching) handOver()?.let { return it }
+    suspend fun create(name: String, userId: String, placeholders: List<Player>, from: SwitchFrom? = null): SyncOutcome {
+        val expected = from ?: SwitchFrom(store.link.first()?.roundId)
         val rounds = api.myRounds()
-        val round = emptyOwnRound(rounds, name) ?: run {
+        val round = emptyOwnRound(rounds, name, expected.roundId) ?: run {
             if (RoundNames.taken(name, rounds)) throw RoundException(RoundError.NAME_TAKEN)
             api.createRound(name)
         }
-        sync.exclusive {
-            if (switching) {
-                clearDevice()
-            } else {
-                val all = evenings.evenings.first()
-                players.players.first()
-                    .filter { player -> player in placeholders && all.none { it.involves(player.id) } }
-                    .forEach { players.delete(it.id) }
-                store.clearBases()
-            }
-            store.setLink(RoundLink(round, RoundNames.clean(name), userId, isCreator = true))
+        val link = RoundLink(round, RoundNames.clean(name), userId, isCreator = true)
+        val ended = switchDevice(expected, link) {
+            // Ohne Runde kommen die Daten des Geräts mit; nur unberührte vorbelegte Spieler ohne Abend entfallen.
+            val all = evenings.evenings.first()
+            players.players.first()
+                .filter { player -> player in placeholders && all.none { it.involves(player.id) } }
+                .forEach { players.delete(it.id) }
         }
-        return sync.sync()
+        return ended ?: sync.sync()
     }
 
     /**
      * Tritt der Runde hinter dem Einladungscode bei und übernimmt deren Daten. **Abende und Spieler dieses Geräts
      * werden dabei gelöscht** (ohne verbundene Runde vorher nachfragen, siehe [hasOwnData]). Gehört die Einladung zur
      * verbundenen Runde selbst, wird nur abgeglichen.
+     *
+     * @param from Was die Rückfrage gezeigt hat; ohne Angabe gilt der Stand beim Aufruf, und verloren gehen darf nichts.
      */
-    suspend fun join(token: String, userId: String): SyncOutcome {
+    suspend fun join(token: String, userId: String, from: SwitchFrom? = null): SyncOutcome {
+        val expected = from ?: SwitchFrom(store.link.first()?.roundId)
         val info = api.inviteInfo(token)
-        val current = store.link.first()
-        if (current != null) {
-            if (current.roundId == info.roundId) return sync.sync()
-            handOver()?.let { return it }
-        }
+        if (store.link.first()?.roundId == info.roundId) return sync.sync()
         val round = api.joinRound(token)
-        return attach(RoundLink(round, info.roundName, userId))
+        return attach(RoundLink(round, info.roundName, userId), expected)
     }
 
     /**
      * Verwendet eine Runde, der das Konto schon angehört, auf diesem Gerät (zum Beispiel auf einem neuen Handy) oder
      * wechselt zu ihr. **Abende und Spieler dieses Geräts werden dabei gelöscht** – ohne verbundene Runde vorher
-     * nachfragen (siehe [hasOwnData]); mit verbundener Runde sind sie nach dem Abgleich in [handOver] auf dem Server.
-     * Ist [round] die verbundene Runde, wird nur abgeglichen.
+     * nachfragen (siehe [hasOwnData]); mit verbundener Runde sind sie nach dem Abgleich in [switchDevice] auf dem
+     * Server. Ist [round] die verbundene Runde, wird nur abgeglichen.
+     *
+     * @param from Was die Rückfrage gezeigt hat; ohne Angabe gilt der Stand beim Aufruf, und verloren gehen darf nichts.
      */
-    suspend fun use(round: RoundSummary, userId: String): SyncOutcome {
-        val current = store.link.first()
-        if (current != null) {
-            if (current.roundId == round.id) return sync.sync()
-            handOver()?.let { return it }
-        }
-        return attach(RoundLink(round.id, round.name, userId, playerId = round.myPlayerId, isCreator = round.isCreator))
+    suspend fun use(round: RoundSummary, userId: String, from: SwitchFrom? = null): SyncOutcome {
+        val expected = from ?: SwitchFrom(store.link.first()?.roundId)
+        if (store.link.first()?.roundId == round.id) return sync.sync()
+        return attach(RoundLink(round.id, round.name, userId, playerId = round.myPlayerId, isCreator = round.isCreator), expected)
+    }
+
+    private suspend fun attach(link: RoundLink, from: SwitchFrom): SyncOutcome {
+        // Erst fragen, dann leeren: Ohne Antwort des Servers bleibt das Gerät, wie es ist. Sonst stünde man ohne Netz
+        // mit einem leeren Gerät da, das schon mit der Runde verbunden ist.
+        api.head(link.roundId) ?: throw RoundException(RoundError.NOT_MEMBER)
+        return switchDevice(from, link, keep = null) ?: sync.sync()
     }
 
     /**
-     * Vor dem Wechsel in eine andere Runde: gleicht die verbundene Runde vollständig ab, damit alles von hier auf dem
-     * Server ist. Was danach noch wartet (`pendingCount() > 0`, etwa ein Abend, den der Server nicht annimmt), geht
-     * beim Wechseln verloren; die Oberfläche sagt das in ihrer Rückfrage.
+     * Verbindet das Gerät mit [link], am Stück und ohne Abbruch von außen (auch wenn der Aufrufer abgebrochen wird).
      *
-     * @return `null`, wenn es weitergehen kann; sonst das Ergebnis, mit dem der Wechsel endet: [SyncOutcome.Detached]
-     *   (die Runde gibt es nicht mehr; die Daten bleiben als Kopie) oder [SyncOutcome.NotLinked] (inzwischen getrennt).
-     * @throws RoundException wenn der Abgleich nicht durchlief; dann bleibt alles, wie es ist.
+     * War das Gerät mit einer Runde verbunden, wird in derselben Sperre zuerst noch einmal vollständig abgeglichen, damit
+     * auch ein gerade eingetragenes Spiel oben ist, dann das Gerät geleert. Wartet danach mehr, als die Rückfrage nannte
+     * ([SwitchFrom.acceptedLoss]), oder hängt das Gerät inzwischen an einer anderen (oder keiner) Runde, wird nicht
+     * gewechselt ([RoundError.CHANGED_MEANWHILE]).
+     *
+     * Ohne verbundene Runde bleiben die Daten, wenn [keep] gesetzt ist (es räumt vorher auf, siehe [create]); sonst wird
+     * das Gerät geleert (Beitreten, Verwenden).
+     *
+     * @return `null`, wenn verbunden ist; [SyncOutcome.Detached], wenn es die bisherige Runde nicht mehr gibt (die Daten
+     *   bleiben dann als Kopie, und es wird nicht gewechselt).
+     * @throws RoundException ohne Netz, bei abgelaufener Anmeldung, einem Fehler des Servers oder CHANGED_MEANWHILE;
+     *   dann bleibt alles, wie es ist.
      */
-    private suspend fun handOver(): SyncOutcome? = when (val outcome = sync.sync()) {
-        is SyncOutcome.Synced, SyncOutcome.Unchanged -> null
-        SyncOutcome.Detached, SyncOutcome.NotLinked -> outcome
-        SyncOutcome.Offline -> throw RoundException(RoundError.OFFLINE)
-        SyncOutcome.SignedOut -> throw RoundException(RoundError.SIGNED_OUT)
-        is SyncOutcome.Failed -> throw RoundException(outcome.error)
-    }
+    private suspend fun switchDevice(from: SwitchFrom, link: RoundLink, keep: (suspend () -> Unit)?): SyncOutcome? =
+        withContext(NonCancellable) {
+            sync.syncThen { outcome ->
+                if (from.roundId != null) {
+                    when (outcome) {
+                        is SyncOutcome.Synced, SyncOutcome.Unchanged -> Unit
+                        SyncOutcome.Detached -> return@syncThen outcome
+                        SyncOutcome.NotLinked -> throw RoundException(RoundError.CHANGED_MEANWHILE)
+                        SyncOutcome.Offline -> throw RoundException(RoundError.OFFLINE)
+                        SyncOutcome.SignedOut -> throw RoundException(RoundError.SIGNED_OUT)
+                        is SyncOutcome.Failed -> throw RoundException(outcome.error)
+                    }
+                    if (sync.pendingCount() > from.acceptedLoss) throw RoundException(RoundError.CHANGED_MEANWHILE)
+                }
+                if (store.link.first()?.roundId != from.roundId) throw RoundException(RoundError.CHANGED_MEANWHILE)
+                if (from.roundId == null && keep != null) {
+                    keep()
+                    store.clearBases()
+                } else {
+                    clearDevice()
+                }
+                store.setLink(link)
+                null
+            }
+        }
 
     /**
      * Leert das Gerät für eine andere Runde: erst Verbindung und Basen, dann die Daten. Mit Basen sähe das Leeren aus wie
      * Löschen und ginge beim nächsten Abgleich als Löschung in die Runde hoch; und bräche es vor dem Verbinden ab, ginge
-     * der Rest sonst als neu hoch. Nur innerhalb von [RoundSync.exclusive].
+     * der Rest sonst als neu hoch. Nur innerhalb der Sperre des Abgleichs.
      */
     private suspend fun clearDevice() {
         store.setLink(null)
@@ -126,23 +154,13 @@ class RoundConnection(
         players.players.first().forEach { players.delete(it.id) }
     }
 
-    private suspend fun attach(link: RoundLink): SyncOutcome {
-        // Erst fragen, dann leeren: Ohne Antwort des Servers bleibt das Gerät, wie es ist. Sonst stünde man ohne Netz
-        // mit einem leeren Gerät da, das schon mit der Runde verbunden ist.
-        api.head(link.roundId) ?: throw RoundException(RoundError.NOT_MEMBER)
-        sync.exclusive {
-            clearDevice()
-            store.setLink(link)
-        }
-        return sync.sync()
-    }
-
     /**
-     * Eine eigene, noch leere Runde dieses Namens. Sie stammt von einem Versuch, dessen Antwort verloren ging; ohne
-     * diese Prüfung legte der zweite Versuch eine zweite Runde an, und die erste bliebe für immer leer liegen.
+     * Eine eigene, noch leere Runde dieses Namens (nie die verbundene [linked]). Sie stammt von einem Versuch, dessen
+     * Antwort verloren ging; ohne diese Prüfung legte der zweite Versuch eine zweite Runde an, und die erste bliebe für
+     * immer leer liegen.
      */
-    private fun emptyOwnRound(rounds: List<RoundSummary>, name: String): RoundId? =
-        rounds.firstOrNull { it.isCreator && it.memberCount == 1 && it.rev == FRESH_REV && RoundNames.same(it.name, name) }?.id
+    private fun emptyOwnRound(rounds: List<RoundSummary>, name: String, linked: RoundId?): RoundId? =
+        rounds.firstOrNull { RoundNames.reusable(it) && it.id != linked && RoundNames.same(it.name, name) }?.id
 
     /**
      * „Das bin ich“: Das Konto übernimmt einen Spieler ohne Besitzer oder legt sich neu an und legt seinen Namen
@@ -175,10 +193,5 @@ class RoundConnection(
             store.setLink(null)
             store.clearBases()
         }
-    }
-
-    private companion object {
-        /** Den Stand `rev = 1` hat eine Runde nur unmittelbar nach dem Anlegen. */
-        const val FRESH_REV = 1L
     }
 }

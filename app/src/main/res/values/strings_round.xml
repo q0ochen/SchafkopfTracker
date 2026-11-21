@@ -149,6 +149,7 @@
     <string name="round_error_name_taken">Den Namen gibt es in der Runde schon.</string>
     <string name="round_error_round_name_taken">Du hast schon eine Runde mit diesem Namen.</string>
     <string name="round_already_in_round">Du bist schon in dieser Runde.</string>
+    <string name="round_error_changed_meanwhile">Inzwischen hat sich auf diesem Gerät etwas geändert. Bitte noch einmal versuchen.</string>
     <string name="round_error_invalid_name">Bitte einen Namen mit 1 bis 24 Zeichen eingeben.</string>
     <string name="round_error_invalid_round_name">Bitte einen Namen mit 1 bis 40 Zeichen eingeben.</string>
     <string name="round_error_player_taken">Diesen Spieler hat gerade jemand anders gewählt.</string>

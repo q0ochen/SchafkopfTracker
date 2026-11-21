@@ -45,6 +45,8 @@ import io.github.q0ochen.schafkopf.app.ui.round.MessageCard
 import io.github.q0ochen.schafkopf.app.ui.round.RoundChoice
 import io.github.q0ochen.schafkopf.app.ui.round.StatusRow
 import io.github.q0ochen.schafkopf.app.ui.round.SwitchDialog
+import io.github.q0ochen.schafkopf.app.ui.round.SwitchProgress
+import io.github.q0ochen.schafkopf.app.round.RoundMessage
 import io.github.q0ochen.schafkopf.app.ui.round.errorText
 import io.github.q0ochen.schafkopf.app.ui.round.messageText
 import io.github.q0ochen.schafkopf.app.ui.round.roundSelection
@@ -145,11 +147,13 @@ fun StartScreen(navigator: Navigator) {
         SwitchDialog(
             request = request,
             from = round.link?.roundName.orEmpty(),
-            pending = roundSwitch.pending,
+            pending = roundSwitch.from?.acceptedLoss ?: 0,
+            autoBackup = roundSwitch.autoBackup,
             onConfirm = viewModel::confirmSwitch,
             onCancel = viewModel::cancelSwitch,
         )
     }
+    if (roundSwitch.busy) SwitchProgress()
 }
 
 @Composable
@@ -207,9 +211,10 @@ private fun RoundRow(
                 StatusRow(round)
             }
         }
-        val message = round.message
+        // Von den Meldungen der Runde gehört hierher nur die nach einem gescheiterten Wechsel: Die Runde gibt es nicht mehr.
+        val message = round.message?.takeIf { it == RoundMessage.DETACHED }
         val error = switch.error
-        if (selection != null || switch.busy || message != null || error != null) {
+        if (selection != null || message != null || error != null) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
@@ -221,14 +226,6 @@ private fun RoundRow(
                         duplicates = it.duplicates,
                         enabled = !switch.busy,
                         onChoose = onChoose,
-                    )
-                }
-                if (switch.busy) {
-                    Text(
-                        stringResource(R.string.round_working),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }
                 message?.let { MessageCard(text = messageText(it), onDismiss = onClearMessage) }

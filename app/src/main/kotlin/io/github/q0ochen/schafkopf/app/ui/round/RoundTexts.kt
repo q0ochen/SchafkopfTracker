@@ -72,6 +72,7 @@ fun roundErrorText(error: RoundError, resources: Resources, roundName: Boolean =
         RoundError.LIMIT_REACHED -> R.string.round_error_limit
         RoundError.OFFLINE -> R.string.round_error_offline
         RoundError.SIGNED_OUT -> R.string.round_status_signed_out
+        RoundError.CHANGED_MEANWHILE -> R.string.round_error_changed_meanwhile
         else -> R.string.round_error_generic
     },
 )

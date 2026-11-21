@@ -12,6 +12,7 @@ import io.github.q0ochen.schafkopf.domain.ports.PlayerRepository
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.RoundException
 import io.github.q0ochen.schafkopf.domain.round.RoundSummary
+import io.github.q0ochen.schafkopf.domain.round.SwitchFrom
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,14 +56,17 @@ data class StartUiState(
 /**
  * Der Wechsel zwischen Runden über die Auswahl auf der Startseite (docs/ARCHITEKTUR.md 8.9).
  *
- * @property busy Die App gleicht vor der Rückfrage ab oder wechselt gerade.
- * @property switching Wartet auf die Rückfrage vor dem Wechseln; [pending] Änderungen warten nach dem Abgleich noch.
+ * @property busy Die App gleicht vor der Rückfrage ab oder wechselt gerade: Bis dahin lässt sich nichts bedienen.
+ * @property switching Wartet auf die Rückfrage vor dem Wechseln; [from] ist, was dabei gefragt wird (von welcher Runde
+ *   aus, wie viele Änderungen verloren gingen).
+ * @property autoBackup Die automatische Sicherung ist eingeschaltet (für den Hinweis in der Rückfrage).
  */
 data class StartRoundUi(
     val busy: Boolean = false,
     val error: RoundUiError? = null,
     val switching: SwitchRequest.Use? = null,
-    val pending: Int = 0,
+    val from: SwitchFrom? = null,
+    val autoBackup: Boolean = false,
 )
 
 /** Startseite. [clock] (mit der Zeitzone des Geräts) entscheidet, welche Abende geplant sind. */
@@ -71,6 +75,7 @@ class StartViewModel(
     players: PlayerRepository,
     private val coordinator: RoundCoordinator,
     private val clock: Clock,
+    private val autoBackupEnabled: () -> Boolean = { false },
 ) : ViewModel() {
 
     /** Der Stand der gemeinsamen Runde für die Zeile auf der Startseite. */
@@ -89,17 +94,18 @@ class StartViewModel(
 
     /** Eine andere Runde in der Auswahl gewählt: erst abgleichen, dann die Rückfrage. */
     fun choose(target: RoundSummary) = busy {
-        val pending = coordinator.prepareSwitch() ?: return@busy
-        switchState.update { it.copy(switching = SwitchRequest.Use(target), pending = pending) }
+        val from = coordinator.prepareSwitch() ?: return@busy
+        switchState.update { it.copy(switching = SwitchRequest.Use(target), from = from, autoBackup = autoBackupEnabled()) }
     }
 
     fun confirmSwitch() {
         val request = switchState.value.switching ?: return
-        switchState.update { it.copy(switching = null) }
-        busy { coordinator.use(request.round) }
+        val from = switchState.value.from ?: return
+        switchState.update { it.copy(switching = null, from = null) }
+        busy { coordinator.use(request.round, from) }
     }
 
-    fun cancelSwitch() = switchState.update { it.copy(switching = null) }
+    fun cancelSwitch() = switchState.update { it.copy(switching = null, from = null) }
 
     fun clearError() = switchState.update { it.copy(error = null) }
 

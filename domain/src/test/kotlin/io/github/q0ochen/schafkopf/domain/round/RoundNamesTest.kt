@@ -62,6 +62,23 @@ class RoundNamesTest {
     }
 
     @Test
+    fun `eine eigene, noch leere Runde ist wiederverwendbar und blockiert ihren Namen nicht - ausser sie ist verbunden`() {
+        val fresh = RoundSummary(RoundId("f"), "Stammtisch", rev = 1, memberCount = 1, myPlayerId = null, isCreator = true)
+        val used = fresh.copy(id = RoundId("u"), name = "Klub", rev = 2)
+        val foreign = fresh.copy(id = RoundId("x"), name = "Freitag", isCreator = false)
+        val joined = fresh.copy(id = RoundId("j"), name = "Samstag", memberCount = 2)
+
+        assertTrue(RoundNames.reusable(fresh))
+        assertFalse(RoundNames.reusable(used))
+        assertFalse(RoundNames.reusable(foreign))
+        assertFalse(RoundNames.reusable(joined))
+        assertEquals(listOf(used, foreign, joined), RoundNames.blocking(listOf(fresh, used, foreign, joined), linked = null))
+        assertEquals(listOf(fresh, used), RoundNames.blocking(listOf(fresh, used), linked = RoundId("f")))
+        // Die Vorgabe nimmt den Namen der leeren Runde, wenn er nur dort vergeben ist.
+        assertEquals("Schafkopfrunde", RoundNames.suggest(RoundNames.blocking(listOf(fresh.copy(name = "Schafkopfrunde")), linked = null)))
+    }
+
+    @Test
     fun `gleichnamige Runden werden erkannt, ohne Gross und Klein`() {
         val rounds = listOf(
             round("a", "Stammtisch", "Anna", "Bert"),
