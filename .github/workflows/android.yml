@@ -138,6 +138,17 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+      # Bei Fehlschlägen die Ergebnisse aller Tests (mit den ganzen Meldungen) zum Nachlesen.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Testergebnisse
+          path: |
+            */build/test-results/
+            */build/reports/tests/
+          retention-days: 14
+          if-no-files-found: ignore
+
   # Installationstest: Die Testversion wird im Emulator mit dem neuesten verfügbaren Android installiert und gestartet –
   # einmal normal, einmal mit 16-KB-Speicherseiten (wie auf neuen Pixel-Handys). So ist belegt, dass die APK auf
   # aktuellen Geräten installierbar ist und startet; Sperren durch Geräte-Einstellungen prüft das nicht.

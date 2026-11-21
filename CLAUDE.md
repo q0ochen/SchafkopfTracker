@@ -406,7 +406,10 @@ Gut zu wissen für die nächste Sitzung:
   davon 11, die der Web-App 5.
 - Auf GitHub aufgefallen am 19.11.2026: (1) Der Bildschirmtest der Start-Seite lief einmal (einer von fünf Läufen)
   in die Wartefrist; hier nicht nachstellbar. `waitForText` nennt jetzt in der Fehlermeldung, was auf dem Bildschirm
-  stand: Tritt es wieder auf, zuerst diese Meldung lesen. (2) Der Tag „testversion“ ließ sich nicht verschieben
+  stand: Tritt es wieder auf, zuerst diese Meldung lesen. Am 21.11.2026 trat es wieder auf (Lauf 43, der nächste
+  Lauf mit fast gleichem Stand war grün); die Meldung fehlte im Protokoll, weil Gradle nur den Namen des Fehlers
+  ausgab. Seitdem schreibt `app/build.gradle.kts` die ganze Meldung ins Protokoll, und `android.yml` lädt bei
+  Fehlschlägen die Testergebnisse hoch (Artefakt „Testergebnisse“). (2) Der Tag „testversion“ ließ sich nicht verschieben
   (HTTP 403), wenn der Stand eine Workflow-Datei änderte und beim Veröffentlichen schon ein neuerer Stand auf dem
   Zweig lag; die Testversion wird jetzt trotzdem ersetzt.
 - Die Spracheingabe ist verworfen. Falls sie wieder aufkommt: Kern wäre ein Parser Text → `GameDraft` mit Kölner

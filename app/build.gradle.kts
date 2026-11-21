@@ -108,6 +108,15 @@ android {
             all { test ->
                 // Bildschirmfotos werden bei jedem Lauf neu geschrieben (app/build/outputs/roborazzi).
                 test.systemProperty("roborazzi.test.record", "true")
+                // Scheitert ein Test, steht die ganze Meldung im Protokoll, auf GitHub also im Lauf selbst. Bei
+                // `waitForText` sagt sie, was stattdessen auf dem Bildschirm stand (der Bildschirmtest der Startseite
+                // lief am 19. und 21.11.2026 je einmal in die Wartefrist, ohne dass sich das nachstellen ließ).
+                test.testLogging {
+                    events("failed")
+                    exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+                    showCauses = true
+                    showStackTraces = true
+                }
             }
         }
     }
