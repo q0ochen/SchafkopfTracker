@@ -47,13 +47,57 @@ describe("Runden und Mitglieder", () => {
     // Das Anlegen mit dem ersten Mitglied ist die erste Änderung der Runde.
     expect(await one.head(round)).toEqual({ id: round, name: "Stammtisch", rev: 1, rules: null, createdBy: "konto-1", rulesUnreadable: false });
     expect(await one.members(round)).toEqual([{ userId: "konto-1", playerId: null }]);
-    expect(await one.myRounds()).toEqual([{ id: round, name: "Stammtisch", rev: 1, memberCount: 1, myPlayerId: null, isCreator: true }]);
+    expect(await one.myRounds()).toEqual([{ id: round, name: "Stammtisch", rev: 1, memberCount: 1, myPlayerId: null, isCreator: true, memberNames: [] }]);
   });
 
   it("der Name einer Runde hat 1 bis 40 Zeichen", async () => {
     expect(await errorOf(() => one.createRound("   "))).toBe("INVALID_NAME");
     expect(await errorOf(() => one.createRound("x".repeat(41)))).toBe("INVALID_NAME");
     expect(await errorOf(() => one.createRound("x".repeat(40)))).toBeNull();
+  });
+
+  it("ein Konto hat keine zwei Runden desselben Namens", async () => {
+    const round = await one.createRound("Stammtisch");
+
+    expect(await errorOf(() => one.createRound(" stammTISCH\t"))).toBe("NAME_TAKEN");
+    expect(await errorOf(() => two.createRound("Stammtisch"))).toBeNull();
+    // Durch Beitreten kann es trotzdem zwei geben; der Name bleibt dann vergeben, bis keine mehr so heißt.
+    const [other] = await two.myRounds();
+    await one.joinRound(await two.createInvite(other.id));
+    expect((await one.myRounds()).map((it) => it.name)).toEqual(["Stammtisch", "Stammtisch"]);
+    await one.leaveRound(round);
+    expect(await errorOf(() => one.createRound("Stammtisch"))).toBe("NAME_TAKEN");
+    await one.leaveRound(other.id);
+    expect(await errorOf(() => one.createRound("Stammtisch"))).toBeNull();
+    // Geprüft wird vor der Obergrenze.
+    for (let index = 0; index < InMemoryRoundServer.MAX_ROUNDS - 1; index++) await one.createRound(`Runde ${index}`);
+    expect(await errorOf(() => one.createRound("runde 0"))).toBe("NAME_TAKEN");
+    expect(await errorOf(() => one.createRound("Runde 9"))).toBe("LIMIT_REACHED");
+  });
+
+  it("der Name wird bereinigt wie auf dem Server: Leer- und Steuerzeichen innen werden ein Leerzeichen", async () => {
+    const round = await one.createRound("  Stamm \t\n tisch ");
+
+    expect((await one.head(round))?.name).toBe("Stamm tisch");
+    expect(await errorOf(() => one.createRound("STAMM TISCH"))).toBe("NAME_TAKEN");
+    expect(await errorOf(() => one.createRound("\u0000\u001F "))).toBe("INVALID_NAME");
+    // Gezählt werden Zeichen: 40 außerhalb der Grundebene sind erlaubt.
+    expect(await errorOf(() => one.createRound("🃏".repeat(40)))).toBeNull();
+    expect(await errorOf(() => one.createRound("🂡".repeat(41)))).toBe("INVALID_NAME");
+  });
+
+  it("die Übersicht nennt die Namen der Mitglieder, ohne Gäste und ohne Mitglieder ohne Spieler", async () => {
+    const round = await roundOfTwo();
+    expect((await one.myRounds())[0].memberNames).toEqual([]);
+
+    await one.claimPlayer(round, "p1", "Zora", 1);
+    await one.savePlayer(round, guest);
+    await two.claimPlayer(round, "p2", "anton", 2);
+
+    expect((await one.myRounds())[0].memberNames).toEqual(["anton", "Zora"]);
+    expect((await two.myRounds())[0].memberNames).toEqual(["anton", "Zora"]);
+    await two.leaveRound(round);
+    expect((await one.myRounds())[0].memberNames).toEqual(["Zora"]);
   });
 
   it("ein Konto kann höchstens fünf Runden angehören", async () => {
@@ -435,6 +479,7 @@ describe("Regelwerk, Störungen, Hilfen für Tests", () => {
     expect(RoundError.fromCode("signed_out")).toBeNull();
     expect(RoundError.fromCode("server")).toBeNull();
     expect(RoundError.fromCode("not_configured")).toBeNull();
+    expect(RoundError.fromCode("changed_meanwhile")).toBeNull();
     expect(RoundError.fromCode("NAME_TAKEN")).toBeNull();
     expect(RoundError.fromCode("")).toBeNull();
     expect(new RoundException("NAME_TAKEN").message).toBe("NAME_TAKEN");

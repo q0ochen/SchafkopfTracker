@@ -333,7 +333,7 @@ describe.skipIf(!LIVE)("die Anbindung gegen ein echtes Supabase", () => {
         rulesUnreadable: false,
       });
       const mine = (await one.api.myRounds()).filter((it) => it.id === id);
-      expect(mine).toEqual([{ id, name: "Stammtisch am Freitag", rev: 1, memberCount: 1, myPlayerId: null, isCreator: true }]);
+      expect(mine).toEqual([{ id, name: "Stammtisch am Freitag", rev: 1, memberCount: 1, myPlayerId: null, isCreator: true, memberNames: [] }]);
       expect(await one.api.members(id)).toEqual([{ userId: one.userId, playerId: null }]);
 
       // Wer nicht dazugehört, sieht nichts und darf nichts.
@@ -368,7 +368,7 @@ describe.skipIf(!LIVE)("die Anbindung gegen ein echtes Supabase", () => {
         { userId: two.userId, playerId: null },
       ]);
       expect((await two.api.myRounds()).filter((it) => it.id === id)).toEqual([
-        { id, name: "Stammtisch am Freitag", rev: 2, memberCount: 2, myPlayerId: null, isCreator: false },
+        { id, name: "Stammtisch am Freitag", rev: 2, memberCount: 2, myPlayerId: null, isCreator: false, memberNames: [] },
       ]);
 
       // Spieler anlegen: Der Name wird bereinigt, die Reihenfolge gezählt.
@@ -396,8 +396,9 @@ describe.skipIf(!LIVE)("die Anbindung gegen ein echtes Supabase", () => {
       expect(await one.api.playersSince(id, 4)).toEqual([
         { id: SEATING[1], name: "Ost", colorIndex: 5, archived: false, position: 2, owner: two.userId, nameLocked: true, deleted: false, rev: 5 },
       ]);
+      // member_names (seit dem 21.11.2026): die Namen der übernommenen Spieler, hier nur der des zweiten Kontos.
       expect((await two.api.myRounds()).filter((it) => it.id === id)).toEqual([
-        { id, name: "Stammtisch am Freitag", rev: 5, memberCount: 2, myPlayerId: SEATING[1], isCreator: false },
+        { id, name: "Stammtisch am Freitag", rev: 5, memberCount: 2, myPlayerId: SEATING[1], isCreator: false, memberNames: ["Ost"] },
       ]);
       // Derselbe Aufruf noch einmal (zum Beispiel nach einer verlorenen Antwort): Der Name bleibt.
       await two.api.claimPlayer(id, SEATING[1], "Anders", 6);
@@ -539,7 +540,7 @@ describe.skipIf(!LIVE)("die Anbindung gegen ein echtes Supabase", () => {
     }
   });
 
-  it("mehr als fünf Runden je Konto lehnt der Server ab", async () => {
+  it("mehr als fünf Runden je Konto und doppelte Namen lehnt der Server ab", async () => {
     const account = await newAccount();
     const rounds: RoundId[] = [];
     try {
@@ -547,6 +548,8 @@ describe.skipIf(!LIVE)("die Anbindung gegen ein echtes Supabase", () => {
       expect(await errorOf(() => account.api.createRound("x".repeat(41)))).toBe("INVALID_NAME");
       for (let index = 0; index < 5; index++) rounds.push(await account.api.createRound(`Runde ${index + 1}`));
 
+      // Seit dem 21.11.2026: ein Name je Konto, ohne Groß/Klein, geprüft vor der Obergrenze.
+      expect(await errorOf(() => account.api.createRound("  RUNDE   1 "))).toBe("NAME_TAKEN");
       expect(await errorOf(() => account.api.createRound("Runde 6"))).toBe("LIMIT_REACHED");
       expect((await account.api.myRounds()).map((it) => it.name)).toEqual(["Runde 1", "Runde 2", "Runde 3", "Runde 4", "Runde 5"]);
     } finally {

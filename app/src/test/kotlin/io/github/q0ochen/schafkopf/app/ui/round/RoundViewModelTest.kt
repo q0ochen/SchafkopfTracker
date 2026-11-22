@@ -6,6 +6,7 @@ import io.github.q0ochen.schafkopf.domain.round.InMemoryRoundServer
 import io.github.q0ochen.schafkopf.domain.round.RoundError
 import io.github.q0ochen.schafkopf.domain.round.RoundId
 import io.github.q0ochen.schafkopf.domain.round.RoundSummary
+import io.github.q0ochen.schafkopf.domain.round.SwitchFrom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -25,7 +26,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** Die Abläufe des Bildschirms „Gemeinsame Runde“, geprüft ohne Oberfläche gegen den nachgestellten Server. */
+/** Die Abläufe des Bildschirms „Gemeinsame Runden“, geprüft ohne Oberfläche gegen den nachgestellten Server. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RoundViewModelTest {
 
@@ -79,13 +80,13 @@ class RoundViewModelTest {
     fun `nach dem Anmelden stehen die eigenen Runden und die wartende Einladung da`() = runTest(dispatcher) {
         val (round, token) = existingRound()
         val (kit, viewModel) = device(signedIn = false)
-        assertNull(viewModel.ui.value.rounds)
+        assertNull(kit.state.rounds)
 
         kit.coordinator.onLink("schafkopftracker://einladung/$token")
         kit.coordinator.onLink("schafkopftracker://auth-callback?code=abc")
         advanceUntilIdle()
 
-        assertEquals(emptyList<Any>(), viewModel.ui.value.rounds)
+        assertEquals(emptyList<Any>(), kit.state.rounds)
         assertEquals(round, viewModel.ui.value.invite?.roundId)
         assertEquals("Stammtisch", viewModel.ui.value.invite?.roundName)
         assertEquals(1, viewModel.ui.value.invite?.memberCount)
@@ -117,8 +118,8 @@ class RoundViewModelTest {
         assertEquals(1, server.evenings(kit.state.link!!.roundId).size)
         assertFalse(viewModel.ui.value.busy)
         assertNull(viewModel.ui.value.error)
-        // Mit verbundener Runde braucht der Bildschirm die Liste der Runden nicht mehr.
-        assertNull(viewModel.ui.value.rounds)
+        // Die Runden des Kontos sind danach neu gelesen (für „Deine anderen Runden“ und die Startseite).
+        assertEquals(listOf("Stammtisch"), kit.state.rounds?.map { it.name })
     }
 
     @Test
@@ -196,7 +197,7 @@ class RoundViewModelTest {
         val (second, viewModel) = device()
         advanceUntilIdle()
 
-        val round = viewModel.ui.value.rounds!!.single()
+        val round = second.state.rounds!!.single()
         assertEquals("Stammtisch", round.name)
         viewModel.use(round)
         advanceUntilIdle()
@@ -323,7 +324,7 @@ class RoundViewModelTest {
         kit.session.joinRound(token)
         viewModel.refresh()
         advanceUntilIdle()
-        val round = viewModel.ui.value.rounds!!.single()
+        val round = kit.state.rounds!!.single()
 
         viewModel.askLeaveRound(round)
         assertEquals(round, viewModel.ui.value.leaving)
@@ -334,8 +335,183 @@ class RoundViewModelTest {
         advanceUntilIdle()
 
         assertNull(viewModel.ui.value.leaving)
-        assertEquals(emptyList<RoundSummary>(), viewModel.ui.value.rounds)
+        assertEquals(emptyList<RoundSummary>(), kit.state.rounds)
         assertEquals(emptyList<RoundSummary>(), kit.session.myRounds())
         assertNull(kit.state.link)
+    }
+
+    // --- Mit verbundener Runde: wechseln, beitreten, neu anlegen (docs/ARCHITEKTUR.md 8.7 und 8.9) ---
+
+    /** Handy eins ist mit seiner „Eigenen“ verbunden (ein Abend) und gehört außerdem dem „Stammtisch“ an. */
+    private suspend fun TestScope.linkedWithAnother(): Triple<RoundTestKit, RoundViewModel, RoundId> {
+        val (stammtisch, token) = existingRound()
+        val (kit, viewModel) = device()
+        kit.seed("eigener-abend")
+        viewModel.create("Eigene")
+        advanceUntilIdle()
+        kit.session.joinRound(token)
+        viewModel.refresh()
+        advanceUntilIdle()
+        return Triple(kit, viewModel, stammtisch)
+    }
+
+    @Test
+    fun `wechseln - erst abgleichen, dann die Rueckfrage, dann die Daten der anderen Runde`() = runTest(dispatcher) {
+        val (kit, viewModel, stammtisch) = linkedWithAnother()
+        val eigene = kit.state.link!!.roundId
+        val target = kit.state.rounds!!.single { it.id == stammtisch }
+        kit.addGame(io.github.q0ochen.schafkopf.domain.model.EveningId("eigener-abend"))
+
+        viewModel.use(target)
+        advanceUntilIdle()
+
+        // Vor der Rückfrage ist alles hochgeladen; es wartet nichts, was verloren ginge.
+        assertEquals(SwitchRequest.Use(target), viewModel.ui.value.switching)
+        assertEquals(SwitchFrom(eigene, acceptedLoss = 0), viewModel.ui.value.switchFrom)
+        assertEquals(1, server.evenings(eigene).single().entries.size)
+        viewModel.cancelSwitch()
+        assertNull(viewModel.ui.value.switching)
+        assertEquals(eigene, kit.state.link?.roundId)
+
+        viewModel.use(target)
+        advanceUntilIdle()
+        viewModel.confirmSwitch()
+        advanceUntilIdle()
+
+        assertEquals(stammtisch, kit.state.link?.roundId)
+        assertEquals(listOf("abend-1"), kit.evenings.evenings.first().map { it.id.value })
+        assertEquals(listOf("eigener-abend"), server.evenings(eigene).map { it.id.value })
+        assertNull(viewModel.ui.value.error)
+        assertFalse(viewModel.ui.value.busy)
+    }
+
+    @Test
+    fun `ohne Netz kommt statt der Rueckfrage der Fehler, und nichts aendert sich`() = runTest(dispatcher) {
+        val (kit, viewModel, stammtisch) = linkedWithAnother()
+        val eigene = kit.state.link!!.roundId
+        kit.session.offline = true
+
+        viewModel.use(kit.state.rounds!!.single { it.id == stammtisch })
+        advanceUntilIdle()
+
+        assertEquals(RoundUiError.Server(RoundError.OFFLINE), viewModel.ui.value.error)
+        assertNull(viewModel.ui.value.switching)
+        assertEquals(eigene, kit.state.link?.roundId)
+        assertEquals(listOf("eigener-abend"), kit.evenings.evenings.first().map { it.id.value })
+    }
+
+    @Test
+    fun `gibt es die verbundene Runde nicht mehr, kommt statt der Rueckfrage die Meldung`() = runTest(dispatcher) {
+        val (kit, viewModel, stammtisch) = linkedWithAnother()
+        server.removeMember(kit.state.link!!.roundId, kit.userId)
+
+        viewModel.use(kit.state.rounds!!.single { it.id == stammtisch })
+        advanceUntilIdle()
+
+        assertNull(viewModel.ui.value.switching)
+        assertEquals(io.github.q0ochen.schafkopf.app.round.RoundMessage.DETACHED, kit.state.message)
+        assertNull(kit.state.link)
+        // Die Daten bleiben als Kopie.
+        assertEquals(listOf("eigener-abend"), kit.evenings.evenings.first().map { it.id.value })
+    }
+
+    @Test
+    fun `mit verbundener Runde beginnt eine neue Runde leer - erst nach der Rueckfrage`() = runTest(dispatcher) {
+        val (kit, viewModel, _) = linkedWithAnother()
+        val eigene = kit.state.link!!.roundId
+
+        // Ein Name, den das Konto schon hat, wird gleich gemeldet, ohne Rückfrage.
+        viewModel.create(" stammtisch ")
+        advanceUntilIdle()
+        assertEquals(RoundUiError.Server(RoundError.NAME_TAKEN, roundName = true), viewModel.ui.value.error)
+        assertNull(viewModel.ui.value.switching)
+
+        viewModel.create("Freitagsrunde")
+        advanceUntilIdle()
+        assertEquals(SwitchRequest.Create("Freitagsrunde"), viewModel.ui.value.switching)
+        assertEquals(eigene, kit.state.link?.roundId)
+        viewModel.confirmSwitch()
+        advanceUntilIdle()
+
+        assertEquals("Freitagsrunde", kit.state.link?.roundName)
+        assertTrue(kit.evenings.evenings.first().isEmpty())
+        assertTrue(kit.players.players.first().isEmpty())
+        assertEquals(listOf("eigener-abend"), server.evenings(eigene).map { it.id.value })
+        assertEquals(listOf("Stammtisch", "Eigene", "Freitagsrunde").sorted(), kit.state.rounds!!.map { it.name }.sorted())
+    }
+
+    @Test
+    fun `mit verbundener Runde fuehrt eine Einladung ueber die Rueckfrage in die andere Runde`() = runTest(dispatcher) {
+        val (round, token) = existingRound()
+        val (kit, viewModel) = device()
+        kit.seed("eigener-abend")
+        viewModel.create("Eigene")
+        advanceUntilIdle()
+
+        viewModel.redeem("Komm in unsere Runde: https://example.org/app/#/einladung/$token")
+        advanceUntilIdle()
+        assertEquals(SwitchRequest.Join(token, "Stammtisch"), viewModel.ui.value.switching)
+        viewModel.confirmSwitch()
+        advanceUntilIdle()
+
+        assertEquals(round, kit.state.link?.roundId)
+        assertEquals(listOf("abend-1"), kit.evenings.evenings.first().map { it.id.value })
+        assertEquals(2, kit.state.rounds!!.size)
+    }
+
+    @Test
+    fun `eine Einladung in die verbundene Runde sagt nur, dass man schon drin ist`() = runTest(dispatcher) {
+        val (round, token) = existingRound()
+        val (kit, viewModel) = device()
+        kit.coordinator.join(token)
+        advanceUntilIdle()
+        kit.coordinator.onLink("schafkopftracker://einladung/$token")
+        advanceUntilIdle()
+        assertEquals(round, viewModel.ui.value.invite?.roundId)
+
+        viewModel.joinInvited()
+        advanceUntilIdle()
+
+        assertEquals(RoundUiError.AlreadyInRound, viewModel.ui.value.error)
+        assertNull(viewModel.ui.value.switching)
+        assertNull(kit.state.pendingInvite)
+        assertEquals(round, kit.state.link?.roundId)
+    }
+
+    @Test
+    fun `solange der Wechsel vorbereitet wird, ist alles gesperrt`() = runTest(dispatcher) {
+        val (kit, viewModel, stammtisch) = linkedWithAnother()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        kit.api.gate = gate
+
+        viewModel.use(kit.state.rounds!!.single { it.id == stammtisch })
+        assertTrue(viewModel.ui.value.switchBusy)
+        assertTrue(viewModel.ui.value.busy)
+        // Ein zweiter Anstoß während des Wartens zählt nicht.
+        viewModel.create("Noch eine")
+        kit.api.gate = null
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.ui.value.switchBusy)
+        assertTrue(viewModel.ui.value.switching is SwitchRequest.Use)
+    }
+
+    @Test
+    fun `hat sich das Geraet seit der Rueckfrage geaendert, wird nicht gewechselt`() = runTest(dispatcher) {
+        val (kit, viewModel, stammtisch) = linkedWithAnother()
+        viewModel.use(kit.state.rounds!!.single { it.id == stammtisch })
+        advanceUntilIdle()
+        assertNotNull(viewModel.ui.value.switching)
+        // Zwischen Rückfrage und Bestätigung wird das Gerät getrennt (etwa abgemeldet auf einem anderen Bildschirm).
+        kit.coordinator.signOut()
+        advanceUntilIdle()
+
+        viewModel.confirmSwitch()
+        advanceUntilIdle()
+
+        assertNull(kit.state.link)
+        assertEquals(listOf("eigener-abend"), kit.evenings.evenings.first().map { it.id.value })
+        assertTrue(viewModel.ui.value.error is RoundUiError.Server)
     }
 }

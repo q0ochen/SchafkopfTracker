@@ -9,7 +9,7 @@ import { RuleSets } from "../../rules/RuleSet";
 import { InMemoryEveningEditor, InMemoryEveningRepository, InMemoryPlayerRepository, InMemorySettingsRepository } from "../InMemoryRepositories";
 import { InMemoryRoundStore, type InMemoryRoundServer, type InMemoryRoundSession } from "../InMemoryRound";
 import { RoundConnection } from "../RoundConnection";
-import { RoundException, type RoundError, type RoundId, type RoundLink, type SavedEvening } from "../RoundModels";
+import { RoundException, type RoundError, type RoundHead, type RoundId, type RoundLink, type SavedEvening } from "../RoundModels";
 import { ROUND_API_METHODS, type IdGenerator, type RoundApi } from "../RoundPorts";
 import { RoundSync, type Synced } from "../RoundSync";
 
@@ -124,12 +124,15 @@ export function delegate(inner: RoundApi, overrides: Partial<RoundApi> = {}): Ro
   return api as unknown as RoundApi;
 }
 
-/** Ein Server-Zugang, in den sich ein Test einklinken kann: `beforeSave` läuft vor dem nächsten Hochladen eines Abends. */
+/**
+ * Ein Server-Zugang, in den sich ein Test einklinken kann: `beforeSave` läuft vor dem nächsten Hochladen eines Abends,
+ * `afterHead` nach jeder Anfrage nach dem Kopf einer Runde (zum Beispiel: mitten im Wechsel wird etwas eingetragen).
+ */
 export class HookedApi implements RoundApi {
   beforeSave: (() => Promise<void>) | null = null;
+  afterHead: ((round: RoundId) => Promise<void>) | null = null;
 
   private readonly inner: RoundApi;
-  readonly head: RoundApi["head"];
   readonly members: RoundApi["members"];
   readonly playersSince: RoundApi["playersSince"];
   readonly eveningsSince: RoundApi["eveningsSince"];
@@ -147,7 +150,6 @@ export class HookedApi implements RoundApi {
   constructor(inner: RoundApi) {
     const all = delegate(inner);
     this.inner = inner;
-    this.head = all.head;
     this.members = all.members;
     this.playersSince = all.playersSince;
     this.eveningsSince = all.eveningsSince;
@@ -161,6 +163,13 @@ export class HookedApi implements RoundApi {
     this.joinRound = all.joinRound;
     this.leaveRound = all.leaveRound;
     this.claimPlayer = all.claimPlayer;
+  }
+
+  async head(round: RoundId): Promise<RoundHead | null> {
+    const head = await this.inner.head(round);
+    const hook = this.afterHead;
+    if (hook !== null) await hook(round);
+    return head;
   }
 
   async saveEvening(round: RoundId, it: Evening, expectedVersion: number, deleted = false): Promise<SavedEvening | null> {

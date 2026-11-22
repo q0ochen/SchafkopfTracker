@@ -17,10 +17,12 @@ import io.github.q0ochen.schafkopf.domain.round.RoundLink
 import io.github.q0ochen.schafkopf.domain.round.RoundStore
 import io.github.q0ochen.schafkopf.domain.round.RoundSummary
 import io.github.q0ochen.schafkopf.domain.round.RoundSync
+import io.github.q0ochen.schafkopf.domain.round.SwitchFrom
 import io.github.q0ochen.schafkopf.domain.round.SyncNotice
 import io.github.q0ochen.schafkopf.domain.round.SyncOutcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Clock
 import java.time.Duration
@@ -81,6 +84,9 @@ enum class RoundMessage {
  * @property signingIn Die Anmeldung wird nach der Rückkehr aus dem Browser gerade eingelöst.
  * @property openRound Die App wurde von außen gebeten, den Bildschirm zu zeigen (Einladungslink, Rückkehr aus der
  *   Anmeldung). Die Oberfläche öffnet ihn und meldet das mit [RoundCoordinator.roundOpened] zurück.
+ * @property rounds Die Runden des angemeldeten Kontos (`my_rounds`) für die Auswahl auf dem Start-Bildschirm und den
+ *   Bildschirm „Gemeinsame Runden“; `null`, solange sie nicht gelesen sind (siehe [RoundCoordinator.refreshRounds]).
+ * @property roundsFailed Das letzte Lesen der Runden ist gescheitert (kein Netz, Server gestört).
  */
 data class RoundState(
     val configured: Boolean,
@@ -98,6 +104,8 @@ data class RoundState(
     val message: RoundMessage? = null,
     val signingIn: Boolean = false,
     val openRound: Boolean = false,
+    val rounds: List<RoundSummary>? = null,
+    val roundsFailed: Boolean = false,
 ) {
     /** Verbunden, aber die Anmeldung fehlt oder ist abgelaufen: Bis zur neuen Anmeldung wird nichts abgeglichen. */
     val needsSignIn: Boolean get() = link != null && (account == null || problem == RoundProblem.SIGNED_OUT)
@@ -151,6 +159,12 @@ class RoundCoordinator(
     @Volatile
     private var started = false
 
+    /** Zählt die Anfragen nach den Runden des Kontos; nur die Antwort der jüngsten zählt ([refreshRounds]). */
+    private val roundsAsked = AtomicLong(0)
+
+    @Volatile
+    private var roundsAnswered = 0L
+
     /** Beginnt zu arbeiten; einmal beim Start der App. Ohne eingerichteten Server passiert nichts. */
     fun start() {
         if (!state.value.configured || started) return
@@ -163,6 +177,8 @@ class RoundCoordinator(
             var known: Pair<String?, RoundId?>? = null
             combine(account.account, store.link) { signedIn, link -> signedIn to link }.collect { (signedIn, link) ->
                 mutable.update { current ->
+                    // Die Runden gehören zum Konto: Mit einem anderen (oder ohne) gelten sie nicht mehr.
+                    val sameAccount = signedIn?.userId == current.account?.userId
                     if (link == null) {
                         // Ohne Runde gibt es nichts abzugleichen: alle Zähler zurück.
                         RoundState(
@@ -173,15 +189,23 @@ class RoundCoordinator(
                             message = current.message,
                             signingIn = current.signingIn,
                             openRound = current.openRound,
+                            rounds = current.rounds.takeIf { sameAccount },
+                            roundsFailed = current.roundsFailed && sameAccount,
                         )
                     } else {
+                        // Eine andere Runde (nach einem Wechsel): Hinweise und Abgelehntes der bisherigen gelten nicht mehr.
+                        val sameRound = current.link?.roundId == link.roundId
                         current.copy(
                             loaded = true,
                             account = signedIn,
                             link = link,
+                            notices = if (sameRound) current.notices else emptyList(),
+                            refused = if (sameRound) current.refused else 0,
                             unreadable = link.unreadable.size,
                             // Nach einer neuen Anmeldung gilt die alte Meldung nicht mehr.
                             problem = current.problem.takeUnless { it == RoundProblem.SIGNED_OUT && signedIn != current.account },
+                            rounds = current.rounds.takeIf { sameAccount },
+                            roundsFailed = current.roundsFailed && sameAccount,
                         )
                     }
                 }
@@ -297,30 +321,102 @@ class RoundCoordinator(
 
     // --- Runden ---
 
-    /** Die Runden des angemeldeten Kontos. */
-    suspend fun myRounds(): List<RoundSummary> = api.myRounds()
+    /**
+     * Liest die Runden des angemeldeten Kontos neu ([RoundState.rounds]). Scheitert das, bleibt die alte Liste stehen,
+     * und [RoundState.roundsFailed] sagt es. Ohne Anmeldung gibt es keine Liste.
+     */
+    suspend fun refreshRounds() {
+        val signedIn = state.value.account
+        if (signedIn == null) {
+            mutable.update { it.copy(rounds = null, roundsFailed = false) }
+            return
+        }
+        val asked = roundsAsked.incrementAndGet()
+        val rounds = try {
+            api.myRounds()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        mutable.update {
+            when {
+                // Inzwischen jemand anderes angemeldet: Diese Antwort gehört nicht mehr dazu.
+                it.account?.userId != signedIn.userId -> it
+                // Eine spätere Anfrage war schneller: Ihre Antwort ist die neuere.
+                asked < roundsAnswered -> it
+                else -> {
+                    roundsAnswered = asked
+                    it.copy(rounds = rounds ?: it.rounds, roundsFailed = rounds == null)
+                }
+            }
+        }
+    }
 
     suspend fun inviteInfo(token: String): InviteInfo = api.inviteInfo(token)
 
-    /** Ob auf dem Gerät etwas liegt, das beim Beitreten ersetzt würde. */
+    /** Ob auf dem Gerät etwas liegt, das beim Beitreten ersetzt würde (nur ohne verbundene Runde von Belang). */
     suspend fun hasOwnData(): Boolean = connection.hasOwnData(placeholders)
 
-    suspend fun create(name: String): SyncOutcome = applied(connection.create(name, userId(), placeholders))
-
-    /** Tritt bei und übernimmt die Daten der Runde; die Daten dieses Geräts werden dabei ersetzt. */
-    suspend fun join(token: String): SyncOutcome {
-        val outcome = connection.join(token, userId())
-        rememberInvite(null)
-        return applied(outcome)
+    /**
+     * Vor der Rückfrage zum Wechseln in eine andere Runde (docs/ARCHITEKTUR.md 8.9, „Rückfrage vor dem Wechseln“):
+     * gleicht vollständig ab und sagt, von welcher Runde aus gefragt wird und wie viele Änderungen danach noch warten
+     * (die gingen beim Wechseln verloren). Das Ergebnis geht mit der Bestätigung an [use], [join] bzw. [create]: Weicht
+     * das Gerät bis dahin davon ab, wird nicht gewechselt (siehe [RoundConnection]).
+     *
+     * @return `null`, wenn es nichts zu fragen gibt: Die verbundene Runde gibt es nicht mehr (dann steht die Meldung
+     *   [RoundMessage.DETACHED] da), oder das Gerät ist nicht mehr verbunden.
+     * @throws RoundException ohne Netz, bei einem Fehler des Servers oder wenn die Anmeldung fehlt oder abgelaufen ist.
+     */
+    suspend fun prepareSwitch(): SwitchFrom? {
+        val link = state.value.link ?: return null
+        if (!canSync()) throw RoundException(RoundError.SIGNED_OUT)
+        val pending = when (val outcome = run(full = true)) {
+            is SyncOutcome.Synced -> outcome.pending
+            SyncOutcome.Unchanged -> sync.pendingCount()
+            SyncOutcome.Detached, SyncOutcome.NotLinked -> return null
+            SyncOutcome.Offline -> throw RoundException(RoundError.OFFLINE)
+            SyncOutcome.SignedOut -> throw RoundException(RoundError.SIGNED_OUT)
+            is SyncOutcome.Failed -> throw RoundException(outcome.error)
+        }
+        return SwitchFrom(link.roundId, acceptedLoss = pending)
     }
 
-    suspend fun use(round: RoundSummary): SyncOutcome = applied(connection.use(round, userId()))
+    /**
+     * Legt eine Runde an (mit verbundener Runde beginnt sie leer, siehe [RoundConnection.create]) und liest danach die
+     * Runden des Kontos neu – auch wenn es scheitert, denn ein Versuch kann auf dem Server angekommen sein.
+     *
+     * @param from Was die Rückfrage gezeigt hat ([prepareSwitch]); ohne Runde `SwitchFrom(null)`.
+     */
+    suspend fun create(name: String, from: SwitchFrom? = null): SyncOutcome =
+        afterwardsRefreshing { applied(connection.create(name, userId(), placeholders, from)) }
+
+    /**
+     * Tritt bei und übernimmt die Daten der Runde; die Daten dieses Geräts werden dabei ersetzt. Die Einladung ist danach
+     * erledigt – außer es gibt die bisherige Runde nicht mehr ([SyncOutcome.Detached]): Dann ist das Gerät nicht
+     * gewechselt, und die Einladungskarte bleibt für den nächsten Versuch stehen.
+     */
+    suspend fun join(token: String, from: SwitchFrom? = null): SyncOutcome = afterwardsRefreshing {
+        val outcome = connection.join(token, userId(), from)
+        if (outcome != SyncOutcome.Detached) rememberInvite(null)
+        applied(outcome)
+    }
+
+    /** Verwendet eine Runde des Kontos auf diesem Gerät oder wechselt zu ihr. */
+    suspend fun use(round: RoundSummary, from: SwitchFrom? = null): SyncOutcome =
+        afterwardsRefreshing { applied(connection.use(round, userId(), from)) }
+
+    private suspend fun <T> afterwardsRefreshing(block: suspend () -> T): T = try {
+        block()
+    } finally {
+        withContext(NonCancellable) { refreshRounds() }
+    }
 
     /** „Das bin ich“; `player == null` heißt „Ich bin neu“. */
     suspend fun claim(player: PlayerId?, name: String): SyncOutcome = applied(connection.claim(player, name))
 
     suspend fun leave() {
-        connection.leave()
+        afterwardsRefreshing { connection.leave() }
         invites.setIssued(null)
     }
 
@@ -329,7 +425,7 @@ class RoundCoordinator(
      * das Konto das letzte Mitglied, löscht der Server die Runde.
      */
     suspend fun leaveRound(round: RoundSummary) {
-        api.leaveRound(round.id)
+        afterwardsRefreshing { api.leaveRound(round.id) }
         if (invites.issued()?.roundId == round.id.value) invites.setIssued(null)
     }
 

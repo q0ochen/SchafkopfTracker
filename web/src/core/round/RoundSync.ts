@@ -228,28 +228,40 @@ export class RoundSync {
    *   `Unchanged` aufhören. Für das regelmäßige Nachfragen, solange hier nichts geändert wurde.
    */
   sync(quick = false): Promise<SyncOutcome> {
-    return this.locked(async () => {
-      const link = await this.store.link();
-      if (link === null) return SyncOutcome.NotLinked;
-      // Eine andere Runde (zum Beispiel nach „Runde verlassen“ und „Neue Runde anlegen“): von vorn versuchen. Was
-      // eine Runde abgelehnt hat, sagt nichts über eine andere.
-      if (this.memory.roundId !== link.roundId) {
-        this.memory.roundId = link.roundId;
-        this.memory.rejected.clear();
-        this.memory.refusedEvenings.clear();
-        this.memory.refusedRules = null;
-      }
-      try {
-        return await new Run(this.api, this.store, this.players, this.evenings, this.settings, this.editor, this.memory, link, () =>
-          this.pendingCount(),
-        ).execute(quick);
-      } catch (error) {
-        if (!(error instanceof RoundException)) throw error;
-        if (error.error === "OFFLINE") return SyncOutcome.Offline;
-        if (error.error === "SIGNED_OUT") return SyncOutcome.SignedOut;
-        return SyncOutcome.failed(error.error);
-      }
-    });
+    return this.locked(() => this.syncLocked(quick));
+  }
+
+  /**
+   * Gleicht vollständig ab und führt danach `block` mit dem Ergebnis aus, ohne dass dazwischen ein anderer Abgleich
+   * läuft (Kotlin: `internal`). Für den Wechsel in eine andere Runde (`RoundConnection`): Was bis eben eingetragen
+   * wurde, ist dann oben, bevor das Gerät geleert wird.
+   */
+  syncThen<T>(block: (outcome: SyncOutcome) => Promise<T>): Promise<T> {
+    return this.locked(async () => block(await this.syncLocked(false)));
+  }
+
+  /** Ein Abgleich; nur innerhalb der eigenen Sperre. */
+  private async syncLocked(quick: boolean): Promise<SyncOutcome> {
+    const link = await this.store.link();
+    if (link === null) return SyncOutcome.NotLinked;
+    // Eine andere Runde (zum Beispiel nach „Runde verlassen“ und „Neue Runde anlegen“): von vorn versuchen. Was
+    // eine Runde abgelehnt hat, sagt nichts über eine andere.
+    if (this.memory.roundId !== link.roundId) {
+      this.memory.roundId = link.roundId;
+      this.memory.rejected.clear();
+      this.memory.refusedEvenings.clear();
+      this.memory.refusedRules = null;
+    }
+    try {
+      return await new Run(this.api, this.store, this.players, this.evenings, this.settings, this.editor, this.memory, link, () =>
+        this.pendingCount(),
+      ).execute(quick);
+    } catch (error) {
+      if (!(error instanceof RoundException)) throw error;
+      if (error.error === "OFFLINE") return SyncOutcome.Offline;
+      if (error.error === "SIGNED_OUT") return SyncOutcome.SignedOut;
+      return SyncOutcome.failed(error.error);
+    }
   }
 
   /**

@@ -160,7 +160,7 @@ async function start(): Promise<void> {
   const platform = browserPlatform();
   const services: Services = {
     store,
-    // Erst jetzt: Die Rückkehr aus der Anmeldung hat die Adresse schon auf „Gemeinsame Runde“ gestellt.
+    // Erst jetzt: Die Rückkehr aus der Anmeldung hat die Adresse schon auf „Gemeinsame Runden“ gestellt.
     router: new Router(),
     platform,
     backup: backupPort,

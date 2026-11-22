@@ -4,6 +4,7 @@ import android.os.Looper
 import android.os.Message
 import android.os.MessageQueue
 import android.os.SystemClock
+import androidx.compose.ui.platform.AndroidUiDispatcher
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -14,6 +15,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.lang.management.ManagementFactory
+import java.lang.reflect.Modifier
+import kotlin.coroutines.ContinuationInterceptor
 
 /**
  * Wartet, bis ein Text auf dem Bildschirm steht. Die Datenbank lädt im Hintergrund; davon weiß die Testumgebung von
@@ -51,7 +54,7 @@ fun ComposeTestRule.waitFor(
         val extra = runCatching(details).getOrElse { "(nicht lesbar: $it)" }
         throw AssertionError(
             "$what ist nach $timeoutMillis ms nicht erschienen. Auf dem Bildschirm steht: $seen. ${memory()} $extra\n" +
-                "${mainQueue()}\n${threads()}",
+                "${mainQueue()}\n${uiDispatcher()}\n${threads()}",
             e,
         )
     }
@@ -81,6 +84,29 @@ private fun mainQueue(): String = runCatching {
 }.getOrElse { "Hauptthread: nicht lesbar ($it)" }
 
 private const val MAX_MESSAGES = 30
+
+/**
+ * Der Zustand des Taktgebers, auf dem Compose seine Arbeit für den Hauptthread sammelt (`AndroidUiDispatcher.Main`):
+ * wie viel dort wartet und ob ein Durchlauf angemeldet ist. Am 21.11.2026 zeigte der Test der Startseite: Das ViewModel
+ * hatte die Abende, die Anzeige hörte zu („sammelnd: 1“), der Hauptthread war leer, und doch blieb die Anzeige beim
+ * Anfangsstand. Wartet hier Arbeit, obwohl ein Durchlauf als angemeldet gilt, ist der Taktgeber hängen geblieben.
+ * Gelesen über die Felder, weil es dafür keine Schnittstelle gibt.
+ */
+private fun uiDispatcher(): String = runCatching {
+    val dispatcher = AndroidUiDispatcher.Main[ContinuationInterceptor] ?: return@runCatching "AndroidUiDispatcher: keiner"
+    val fields = dispatcher.javaClass.declaredFields.filterNot { Modifier.isStatic(it.modifiers) }.map { field ->
+        field.isAccessible = true
+        val value: Any? = field.get(dispatcher)
+        val shown = when {
+            value is Collection<*> -> "${value.size} wartend"
+            value is Boolean -> value.toString()
+            value == null -> "null"
+            else -> value.javaClass.simpleName
+        }
+        "${field.name}=$shown"
+    }
+    "AndroidUiDispatcher: " + fields.joinToString(", ")
+}.getOrElse { "AndroidUiDispatcher: nicht lesbar ($it)" }
 
 /**
  * Wie viele gerade einen `StateFlow` aus `stateIn` sammeln (für Fehlermeldungen). Steht dort 0, hört die Oberfläche

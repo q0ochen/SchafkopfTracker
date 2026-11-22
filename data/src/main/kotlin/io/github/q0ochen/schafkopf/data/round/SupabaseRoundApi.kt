@@ -149,7 +149,9 @@ class SupabaseRoundApi(
 
     override suspend fun myRounds(): List<RoundSummary> =
         decode(rpc("my_rounds", JsonObject(emptyMap())), ListSerializer(SummaryRow.serializer()))
-            .map { RoundSummary(RoundId(it.id), it.name, it.rev, it.memberCount, it.myPlayerId?.let(::PlayerId), it.isCreator) }
+            .map {
+                RoundSummary(RoundId(it.id), it.name, it.rev, it.memberCount, it.myPlayerId?.let(::PlayerId), it.isCreator, it.memberNames.orEmpty())
+            }
 
     override suspend fun createRound(name: String): RoundId =
         RoundId(decode(rpc("create_round", buildJsonObject { put("p_name", name) }), String.serializer()))
@@ -275,6 +277,8 @@ class SupabaseRoundApi(
         @SerialName("member_count") val memberCount: Int,
         @SerialName("my_player_id") val myPlayerId: String? = null,
         @SerialName("is_creator") val isCreator: Boolean,
+        // Seit dem 21.11.2026; ein älterer Server liefert die Spalte nicht (docs/ARCHITEKTUR.md 8.3).
+        @SerialName("member_names") val memberNames: List<String>? = null,
     )
 
     @Serializable

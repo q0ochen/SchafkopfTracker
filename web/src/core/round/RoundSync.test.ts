@@ -10,7 +10,7 @@ import { DuplicateCheck } from "./DuplicateCheck";
 import { EveningMerge } from "./EveningMerge";
 import { InMemoryRoundServer } from "./InMemoryRound";
 import { RoundConnection } from "./RoundConnection";
-import { RoundException, toPlayer, type RemoteEvening, type RoundId, type RoundSummary } from "./RoundModels";
+import { RoundException, roundSummary, toPlayer, type RemoteEvening, type RoundId, type RoundSummary } from "./RoundModels";
 import { EveningNotStorableError } from "./RoundPorts";
 import { RoundSync, SyncOutcome, type SyncNotice } from "./RoundSync";
 import { delegate, Device, errorOf, game, P1, P2, P3, P4, PLACEHOLDERS, player, START, TestClock } from "./testing/fixtures";
@@ -124,16 +124,20 @@ describe("Verbinden", () => {
 
     expect(await one.link()).toBeNull();
     expect(await one.api.myRounds()).toHaveLength(1);
-    // Der zweite Versuch nimmt die leere Runde vom ersten.
-    expect((await one.connection.create("  Stammtisch ", one.userId, PLACEHOLDERS)).kind).toBe("Synced");
+    // Der zweite Versuch nimmt die leere Runde vom ersten, auch mit anderer Groß- und Kleinschreibung.
+    expect((await one.connection.create("  STAMMTISCH ", one.userId, PLACEHOLDERS)).kind).toBe("Synced");
     expect((await one.api.myRounds()).map((it) => it.id)).toEqual([await one.roundId()]);
-    // Eine Runde, in der schon etwas liegt, oder eine mit anderem Namen wird nie wiederverwendet.
+    expect((await one.link())?.roundName).toBe("Stammtisch");
+    // Eine Runde, in der schon etwas liegt, wird nie wiederverwendet; ihren Namen gibt es dann kein zweites Mal.
     await one.connection.disconnect();
-    expect((await one.connection.create("Stammtisch", one.userId, PLACEHOLDERS)).kind).toBe("Synced");
-    expect(await one.api.myRounds()).toHaveLength(2);
-    await one.connection.disconnect();
+    expect(await errorOf(() => one.connection.create("Stammtisch", one.userId, PLACEHOLDERS))).toBe("NAME_TAKEN");
+    expect(await one.link()).toBeNull();
+    expect(await one.api.myRounds()).toHaveLength(1);
+    // Eine leere Runde mit anderem Namen wird ebenso wenig wiederverwendet.
+    one.session.loseNextAnswer = true;
+    expect(await errorOf(() => one.connection.create("Leer", one.userId, PLACEHOLDERS))).toBe("OFFLINE");
     expect((await one.connection.create("Zweite Runde", one.userId, PLACEHOLDERS)).kind).toBe("Synced");
-    expect(await one.api.myRounds()).toHaveLength(3);
+    expect((await one.api.myRounds()).map((it) => it.name)).toEqual(["Stammtisch", "Leer", "Zweite Runde"]);
   });
 
   it("auch ein Name mit Leerraum innen findet die leere Runde vom ersten Versuch wieder", async () => {
@@ -171,7 +175,7 @@ describe("Verbinden", () => {
   it("eine Runde, die es nicht mehr gibt, lässt das Gerät unberührt", async () => {
     await three.firstStart();
     await three.startEvening("eigener");
-    const gone: RoundSummary = { id: "gibt-es-nicht", name: "Verschwunden", rev: 3, memberCount: 1, myPlayerId: null, isCreator: false };
+    const gone: RoundSummary = roundSummary({ id: "gibt-es-nicht", name: "Verschwunden", rev: 3, memberCount: 1, myPlayerId: null, isCreator: false });
 
     expect(await errorOf(() => three.connection.use(gone, three.userId))).toBe("NOT_MEMBER");
 

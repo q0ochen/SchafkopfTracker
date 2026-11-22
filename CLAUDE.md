@@ -155,8 +155,8 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
   Golden-Test fehl, bis die Datei mit `-PgoldenWrite=true` neu erzeugt und der Port in `web/` angepasst ist
   (Befehle in `web/README.md`).
 - **Immer die Zahl der Tests ansehen** (`build/test-results/**/*.xml`), nicht nur „BUILD SUCCESSFUL“. Stand:
-  `domain` 699, `data` 296, `database` 24, `app` 229, Web 686 Unit-Tests (dazu 9, die nur mit echtem Server
-  laufen) und 53 Oberflächen-Tests je Playwright-Projekt, Server 556 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
+  `domain` 729, `data` 296, `database` 24, `app` 255, Web 786 Unit-Tests (dazu 9, die nur mit echtem Server
+  laufen) und 64 Oberflächen-Tests je Playwright-Projekt, Server 578 pgTAP-Tests (die Workflows „Android“ und „Supabase“ prüfen Mindestzahlen). Der Build-Cache von Gradle ist
   bewusst aus (`gradle.properties`): Mit ihm ließ Kotlin nach einer Änderung an einer öffentlichen Schnittstelle
   stillschweigend die meisten Tests weg. Im Zweifel `--rerun-tasks` anhängen.
 - **Server der gemeinsamen Runde:** `supabase/tests/lokal/pruefen.sh` (mit `--installieren` holt es PostgreSQL, pgTAP
@@ -171,8 +171,9 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-`main` enthält alles bis Pull Request #27 (gesammelter Release vom 21.11.2026: Rückpfeil, geplante Abende,
-Ortsvorschläge; siehe unten); davor #26 („Abend bearbeiten“) und #25 (gemeinsame Runde, am 20.11.2026 auf Wunsch des
+`main` enthält alles bis Pull Request #28 („Abend teilen“ mit Vermögensverlauf, Statistik als Bild; am 21.11.2026
+abends zusammengeführt, siehe unten); davor #27 (gesammelter Release vom 21.11.2026: Rückpfeil, geplante Abende,
+Ortsvorschläge), #26 („Abend bearbeiten“) und #25 (gemeinsame Runde, am 20.11.2026 auf Wunsch des
 Nutzers angelegt, „Ja pull request anlegen“, und von ihm um 18:40 zusammengeführt). `entwicklung` ist noch auf dem älteren Stand.
 
 Schritt 1 bis 3 der Vorgabe sind fertig und getestet:
@@ -565,9 +566,91 @@ Aussagekräftiges Diagramm mit den Spielernamen enthalten ist“.
   ist seitdem genauer. Bei der Suche fiel ein zweiter wackliger Fall auf, der Fehler in `awaitFirst` (ebenda); der ist
   behoben. Mit dem Diagramm-Nachzug und den genaueren Meldungen: „Android“ 58 und 59 grün (Stand `1969ecb`, samt
   Installationstest im Emulator); 57 scheiterte am wackligen Test der Startseite (`loading=false, 2 Abende`).
-- Pull Request nach `main` am 21.11.2026 abends auf Wunsch des Nutzers angelegt („nein mach einen pull request. nicht
-  weiter sammeln“): „Abend teilen“ in beiden Apps, Diagramm-Nachzug in Android, Korrektur von `awaitFirst` und die
-  genaueren Meldungen des Tests der Startseite. Schließt kein Issue (der Wunsch kam direkt vom Nutzer).
+- Pull Request #28 nach `main` am 21.11.2026 abends auf Wunsch des Nutzers angelegt („nein mach einen pull request.
+  nicht weiter sammeln“): „Abend teilen“ in beiden Apps, Diagramm-Nachzug in Android, Korrektur von `awaitFirst` und
+  die genaueren Meldungen des Tests der Startseite. Schließt kein Issue (der Wunsch kam direkt vom Nutzer). Vom Nutzer
+  um 20:27 zusammengeführt (`8a49ea4`). Läufe auf `main` grün (Android 61, Web-App 36): Web-App neu auf GitHub Pages,
+  Testversion 61 (`0.1.0-test.61`) im Release `testversion` und in der F-Droid-Paketquelle.
+
+## Stand am 21.11.2026 (spätabends): Runde an den Abenden, Wunsch „Runden wechseln“
+
+Meldung des Nutzers (21.11.2026, Bildschirmfoto der Startseite der Web-App): Er hatte sich aus einer Runde abgemeldet
+und eine neue angelegt; auf der Startseite „sieht man nicht, zu welcher Runde der Abend gehört“, das solle „als Label
+irgendwo auftauchen“.
+
+- Umgesetzt in beiden Apps (Vertrag `docs/ARCHITEKTUR.md`, 8.9, „Abende auf dem Start-Bildschirm“): Ist das Gerät mit
+  einer Runde verbunden, trägt jede Abend-Karte (auch „Abend läuft“) unter dem Titel die umrandete Marke
+  „Runde: ‹Name›“ (eine Zeile, zu Lange enden mit „…“). Ohne Runde keine Marke. Android: `StartScreen.kt`
+  (`RoundLabel`, Text `start_evening_round`); Web: `StartScreen.tsx`, Klasse `.round-label`. Tests:
+  `RoundScreenshotTest` (Bildschirmfoto 54), `ScreenshotTest.start_mit_laufendem_abend` (ohne Runde keine Marke),
+  `e2e/round.spec.ts` und `e2e/app.spec.ts`. Die Zahl der Tests bleibt gleich (nur neue Prüfungen in alten Tests).
+- Gut zu wissen: Wer eine Runde verlässt oder sich abmeldet, behält die Abende als Kopie; legt er danach eine neue
+  Runde an, kommen diese Kopien mit in die neue Runde (8.9, „Alle Abende und Spieler dieses Geräts kommen mit“). Das
+  ist vermutlich beim Nutzer passiert.
+- Zweiter Wunsch des Nutzers am selben Abend: „wenn man die Runden, in denen man einmal war, … erneut auswählen
+  könnte“, „es müsste dann gemeinsame Runden heißen im Hauptbildschirm und dort müsste dann eine Dropdown-Liste zu den
+  Runden … existieren“, und „sicherzustellen, dass sich die Namen nicht doppeln“. Umgesetzt als **Runden wechseln**
+  (gewählt, weil es zu „in eine andere Runde einloggen“ passt; nicht gefragt, dem Nutzer im Bericht erklärt):
+  - Ein Gerät hält weiter nur EINE Runde. Wechseln = die verbundene Runde vollständig abgleichen, dann das Gerät
+    leeren und die andere Runde laden; die Abende der bisherigen bleiben auf dem Server (Vertrag 8.1, 8.7, 8.9).
+    Beitreten und „Neue Runde anlegen“ gehen jetzt auch mit verbundener Runde; eine neue Runde beginnt dann leer.
+    Was nach dem Abgleich noch wartet (etwa ein Abend, den der Server ablehnt), ginge verloren: Die Rückfrage nennt
+    die Zahl.
+  - Startseite: „Gemeinsame Runden“ mit der Auswahl „Runde“ (nur verbunden, angemeldet, mit mindestens einer weiteren
+    Runde), Rückfrage „Zur Runde ‹Ziel› wechseln?“. Bildschirm „Gemeinsame Runden“ (vorher „Gemeinsame Runde“):
+    verbunden zusätzlich Einladungskarte, „Deine anderen Runden“ (Wechseln, Verlassen), „Neue Runde anlegen“,
+    „Einladung einlösen“; Einstellungen: „Gemeinsame Runden“ mit „Runde: ‹Name›“ und Stand.
+  - Eindeutige Namen je Konto (`RoundNames`, ohne Groß/Klein, bereinigt wie der Server): Vorschlag „Schafkopfrunde 2“
+    usw., „Du hast schon eine Runde mit diesem Namen.“; der Server prüft dasselbe (`create_round` → `name_taken`).
+    Gleichnamige Runden durch Beitreten bleiben möglich; Listen und Auswahl nennen dann die Mitglieder
+    (`my_rounds.member_names`).
+  - Server: Migration `20261121200000_runde_auswahl.sql` (578 pgTAP-Tests, dazu ein Fall für zwei Geräte desselben
+    Kontos in `nebenlaeufig.sh`). **Wird erst mit „Supabase Deploy“ (von Hand, nach dem Release) auf dem echten
+    Server wirksam;** bis dahin fehlen nur die Mitgliedernamen, und die Namen prüft allein die App.
+  - Kotlin: `domain.round.RoundNames` (`reusable`, `blocking`), `SwitchFrom`, `RoundConnection` (`switchDevice`,
+    `clearDevice`), `RoundSync.syncThen`, `RoundCoordinator` (`rounds`, `roundsFailed`, `refreshRounds`,
+    `prepareSwitch`), `ui/round/RoundSwitch.kt` (Auswahl, Rückfrage, „Einen Moment …“ über allem, `roundSelection`,
+    `knownRounds`), `StartViewModel` (Wechsel über die Auswahl). Bildschirmfotos 67 bis 71. Golden-Abschnitt
+    `roundNames`. Tests: `RoundSwitchTest`, `RoundNamesTest` (domain), `RoundSelectionTest`, `StartRoundSwitchTest`
+    und neue Fälle in `RoundCoordinatorTest`, `RoundViewModelTest`, `RoundScreenshotTest`.
+  - Eine unabhängige Durchsicht (21.11.2026 nachts) fand zwei mittlere Lücken, beide behoben: Ein Spiel, das mitten im
+    Wechsel eingetragen wurde, ging still verloren (jetzt: letzter Abgleich in derselben Sperre direkt vor dem Leeren,
+    Vergleich mit der Zahl aus der Rückfrage, sonst `CHANGED_MEANWHILE`; dazu „Einen Moment …“ über allem); die
+    Namensprüfung der Oberfläche verhinderte die Wiederverwendung einer leeren Runde nach verlorener Antwort. Dazu
+    kleinere: Bestätigung prüft die Runde der Rückfrage (`SwitchFrom`), Zug ohne Abbruch (`NonCancellable`), Einladung
+    bleibt bei `Detached`, Hinweise der alten Runde weg, jüngste Antwort der Rundenliste zählt, Getipptes bleibt,
+    Hinweis auf die automatische Sicherung, auf der Startseite nur die Meldung nach `Detached`. Bekannte Grenze: Wird
+    die App mitten im Leeren beendet, bleibt eine Teilkopie ohne Runde (auf dem Server fehlt nichts).
+  - Außerhalb dieser Aufgabe aufgefallen (noch offen): `GameFormViewModel.save` ruft `onSaved()` auch, wenn
+    `editor.update` `null` liefert (Abend inzwischen gelöscht, etwa von einem anderen Handy): Das Spiel ist dann weg,
+    und das Formular schließt sich, als wäre es gespeichert. Die Web-App vermutlich ebenso.
+  - Gut zu wissen: Ein Test, der auf das Ergebnis eines ViewModels wartet, muss auf die Anzeige warten (Suche nach
+    Text oder Beschreibung); `waitFor` mit einer Bedingung ohne Compose lässt den Hauptthread von Robolectric nicht
+    laufen, und das ViewModel bleibt stehen. Zwischen Leeren und Verbinden ist das Gerät kurz ohne Runde und leer.
+  - Der wacklige Test der Startseite trat hier am 21.11.2026 nachts wieder auf (`start_mit_geplantem_abend_dunkel`)
+    und zeigte zum ersten Mal alles: ViewModel `loading=false, 2 Abende`, „sammelnd: 1“, Lebenszyklus RESUMED,
+    Hauptthread mit 0 Nachrichten, auf dem Bildschirm weder Abende noch „Noch kein Abend eingetragen“, also der
+    Anfangsstand (`loading=true`). Der Zustand kam beim Sammler an der Oberfläche nie an, obwohl nichts mehr wartet.
+    Verdacht: Die Fortsetzung des Sammlers hängt im Taktgeber von Compose (`AndroidUiDispatcher.Main`, ein Objekt für
+    den ganzen Prozess) oder im Test-Dispatcher der alten Testregel (`createComposeRule` v1, als veraltet markiert;
+    v2 nimmt `StandardTestDispatcher`). Die Meldung nennt seitdem auch die Felder von `AndroidUiDispatcher.Main`.
+    Tritt es wieder auf: Wartet dort Arbeit, während ein Durchlauf als angemeldet gilt, hängt der Taktgeber; dann
+    die Testregel v2 erproben. Gleich der nächste volle Lauf war grün.
+  - Web-App (gebaut von einem Helfer nach dem Vertrag, von Claude durchgesehen und geprüft): Port von `RoundNames`,
+    `SwitchFrom`, `syncThen` und `RoundConnection` in `web/src/core/round` (dazu Golden-Test `roundNames`),
+    Steuerung `web/src/round/controller.ts` (`rounds`, `prepareSwitch`, `switchWork`, `RoundState.switching`),
+    `picker.ts` (Auswahl der Startseite), `screenModel.ts`, `texts.ts`, Bildschirme `StartScreen.tsx`,
+    `RoundScreen.tsx`, `App.tsx` (modaler Dialog „Einen Moment …“ an der Wurzel). Unterschiede zu Android, beide im
+    Vertrag: „Einen Moment …“ über der ganzen App (die Zurück-Taste des Browsers lässt sich nicht sperren), und beim
+    Lesen der Runden gilt eine Antwort schon dann nicht mehr, wenn danach erneut gelesen wurde. Bildschirmfotos
+    `48-start-runden-auswahl`, `49-runde-wechseln-rueckfrage`, `49b-runde-verbunden-andere-runden`,
+    `49c-runde-anlegen-rueckfrage`, `49d-runde-wechsel-laeuft`. Nicht geprüft: wie sich der Dialog in Safari auf dem
+    iPhone und bei der Zurück-Geste von Chrome auf Android verhält.
+  - Geprüft am 21.11.2026 spätabends: „Android“ 65, „Web-App“ 39 (auch WebKit) und „Supabase“ 22 grün (Stand
+    `5fabaed`, mit den Proben beider Apps gegen einen echten lokalen Supabase-Stack samt neuer Migration).
+  - Pull Request #29 nach `main` am 22.11.2026 auf Wunsch des Nutzers angelegt („Ja bitte pull request anlegen“):
+    Runde an jedem Abend, Runden wechseln, eindeutige Namen, Server-Migration. Schließt kein Issue. Nach dem
+    Zusammenführen muss der Nutzer „Supabase Deploy“ einmal starten (im Pull Request und im Bericht gesagt).
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 

@@ -79,9 +79,15 @@ internal fun evening(vararg entries: EveningEntry, id: String = "abend"): Evenin
 
 internal fun Evening.ids(): List<String> = entries.map { it.id.value }
 
-/** Ein Server-Zugang, in den sich ein Test einklinken kann: [beforeSave] läuft vor jedem Hochladen eines Abends. */
+/**
+ * Ein Server-Zugang, in den sich ein Test einklinken kann: [beforeSave] läuft vor dem nächsten Hochladen eines Abends,
+ * [afterHead] nach jeder Anfrage nach dem Kopf einer Runde (zum Beispiel: mitten im Wechsel wird etwas eingetragen).
+ */
 internal class HookedApi(private val inner: RoundApi) : RoundApi by inner {
     var beforeSave: (suspend () -> Unit)? = null
+    var afterHead: (suspend (RoundId) -> Unit)? = null
+
+    override suspend fun head(round: RoundId): RoundHead? = inner.head(round).also { afterHead?.invoke(round) }
 
     override suspend fun saveEvening(round: RoundId, evening: Evening, expectedVersion: Int, deleted: Boolean): SavedEvening? {
         val hook = beforeSave

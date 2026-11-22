@@ -301,7 +301,7 @@ export class Phone {
     return this.controller.getState();
   }
 
-  /** Der Bildschirm „Gemeinsame Runde“ dieses Handys. */
+  /** Der Bildschirm „Gemeinsame Runden“ dieses Handys. */
   screen(): RoundScreenModel {
     return new RoundScreenModel(this.controller, () => this.store.getState().evenings.length);
   }

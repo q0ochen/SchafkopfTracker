@@ -2,10 +2,12 @@
  * Die Einladungsseite der Web-App (`#/einladung/<Code>`, docs/ARCHITEKTUR.md, Abschnitt 8.9): Wer einen
  * Einladungslink antippt, landet hier. Der Code steht zum Kopieren da (am iPhone öffnen sich Links in Safari, die App
  * vom Home-Bildschirm hat aber einen eigenen Speicher); auf Android geht es in die Android-App, sonst gleich hier weiter.
- * Was die Seite zeigt, entscheidet `ui/invitePage.ts`.
+ * Auch ein Gerät, das schon mit einer Runde verbunden ist, kann hier beitreten (und danach zwischen den Runden
+ * wechseln). Was die Seite zeigt, entscheidet `ui/invitePage.ts`.
  */
 import { useState } from "preact/hooks";
 import { InviteLinks } from "../../core/round/InviteLinks";
+import { ROUNDS_TITLE } from "../../round/texts";
 import { TopBar } from "../components";
 import { useRoundState, useServices } from "../context";
 import { alreadyLinkedText, invitePage, IPHONE_HINT } from "../invitePage";
@@ -46,33 +48,25 @@ export function InviteScreen({ token: text }: { token: string }) {
             In der Android-App öffnen
           </a>
         ) : null}
-        {page.joinHere ? (
-          <button
-            type="button"
-            class={buttonClass(page.primary === "join")}
-            onClick={() => {
-              // Der Code wird gemerkt, auch über die Anmeldung hinweg; eingelöst wird er auf „Gemeinsame Runde“.
-              round?.rememberInvite(token);
-              router.open({ name: "round" }, { replace: true });
-            }}
-          >
-            Hier beitreten
-          </button>
-        ) : (
-          <>
-            <p class="invite-hint">{alreadyLinkedText(linkedRound ?? "")}</p>
-            <button type="button" class={buttonClass(page.primary === "round")} onClick={() => router.open({ name: "round" }, { replace: true })}>
-              Zur gemeinsamen Runde
-            </button>
-          </>
-        )}
+        {page.alreadyLinked && linkedRound !== null ? <p class="invite-hint">{alreadyLinkedText(linkedRound)}</p> : null}
+        <button
+          type="button"
+          class={buttonClass(page.primary === "join")}
+          onClick={() => {
+            // Der Code wird gemerkt, auch über die Anmeldung hinweg; eingelöst wird er auf „Gemeinsame Runden“.
+            round?.rememberInvite(token);
+            router.open({ name: "round" }, { replace: true });
+          }}
+        >
+          Hier beitreten
+        </button>
       </>
     );
   }
 
   return (
     <div class="screen">
-      <TopBar title="Gemeinsame Runde" onBack={() => router.back()} />
+      <TopBar title={ROUNDS_TITLE} onBack={() => router.back()} />
       <main class="content round">{body}</main>
     </div>
   );

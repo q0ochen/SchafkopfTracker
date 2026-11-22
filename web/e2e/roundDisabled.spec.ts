@@ -1,6 +1,6 @@
 /*
  * Die App ohne Server der gemeinsamen Runde (so entsteht sie ohne `VITE_SUPABASE_URL` und
- * `VITE_SUPABASE_PUBLISHABLE_KEY`): „Gemeinsame Runde“ zeigt nur den Hinweis, und außer den Ortsvorschlägen verlässt
+ * `VITE_SUPABASE_PUBLISHABLE_KEY`): „Gemeinsame Runden“ zeigt nur den Hinweis, und außer den Ortsvorschlägen verlässt
  * nichts das Gerät.
  */
 import type { Evening, Player } from "../src/core/model";
@@ -8,7 +8,7 @@ import { RuleSets } from "../src/core/rules/RuleSet";
 import { encodeEvening, encodePlayers } from "../src/data/format";
 import { expect, expectAccessible, openApp, test } from "./support";
 
-test("ohne Server zeigt „Gemeinsame Runde“ nur den Hinweis, und die App spricht mit niemandem", async ({ page, baseURL }) => {
+test("ohne Server zeigt „Gemeinsame Runden“ nur den Hinweis, und die App spricht mit niemandem", async ({ page, baseURL }) => {
   const foreign: string[] = [];
   const origin = new URL(baseURL ?? "").origin;
   page.on("request", (request) => {
@@ -17,11 +17,13 @@ test("ohne Server zeigt „Gemeinsame Runde“ nur den Hinweis, und die App spri
   });
 
   await openApp(page);
-  const row = page.getByRole("button", { name: /^Gemeinsame Runde/ });
+  const row = page.getByRole("button", { name: /^Gemeinsame Runden/ });
   await expect(row).toContainText("Alle tragen vom eigenen Handy ein");
+  // Ohne Server gibt es keine Runden zur Auswahl.
+  await expect(page.getByRole("combobox", { name: "Runde", exact: true })).toBeHidden();
   await row.click();
 
-  await expect(page.getByRole("heading", { level: 1, name: "Gemeinsame Runde" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Gemeinsame Runden", exact: true })).toBeVisible();
   await expect(page.getByText("Der Server ist noch nicht eingerichtet.")).toBeVisible();
   await expect(page.getByText("Sobald er eingerichtet ist, können alle vom eigenen Handy eintragen.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Mit Google anmelden" })).toBeHidden();
@@ -29,7 +31,7 @@ test("ohne Server zeigt „Gemeinsame Runde“ nur den Hinweis, und die App spri
 
   // Auch aus den Einstellungen führt die Zeile dorthin.
   await openApp(page, "/einstellungen");
-  await page.getByRole("button", { name: /^Gemeinsame Runde/ }).click();
+  await page.getByRole("button", { name: /^Gemeinsame Runden/ }).click();
   await expect(page.getByText("Der Server ist noch nicht eingerichtet.")).toBeVisible();
   await page.getByRole("button", { name: "Zurück" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Einstellungen" })).toBeVisible();

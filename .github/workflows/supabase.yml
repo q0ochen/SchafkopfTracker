@@ -76,7 +76,7 @@ jobs:
         run: |
           zeile="$(grep -E '^Files=[0-9]+, Tests=[0-9]+' pgtap.log | tail -n 1)"
           tests="$(printf '%s' "$zeile" | sed -E 's/^Files=[0-9]+, Tests=([0-9]+).*/\1/')"
-          mindestens=556
+          mindestens=578
           echo "pgTAP: ${tests:-0} Tests (mindestens $mindestens erwartet)"
           if [ -z "$tests" ] || [ "$tests" -lt "$mindestens" ]; then
             echo "::error title=Zu wenige pgTAP-Tests::Gelaufen sind ${tests:-0} Tests, erwartet werden mindestens $mindestens. Wurde eine Testdatei übersprungen oder gelöscht?"

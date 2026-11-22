@@ -785,6 +785,22 @@ button.card {
   vertical-align: middle;
 }
 
+/* Runde eines Abends auf der Startseite (docs/ARCHITEKTUR.md 8.9): umrandet in der Farbe des Textes, damit sie neben
+   „geplant“ und „läuft“ nicht auffällt und in der hervorgehobenen Karte „Abend läuft“ ebenso gut zu lesen ist. */
+.round-label {
+  display: inline-block;
+  max-width: 100%;
+  margin: 2px 0 6px;
+  padding: 1px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .standing-line {
   display: flex;
   justify-content: space-between;
@@ -1391,6 +1407,36 @@ button.card {
   margin-top: 16px;
 }
 
+/* „Einen Moment …“ über allem, solange ein Wechsel in eine andere Runde vorbereitet wird oder läuft. */
+.switch-progress {
+  width: auto;
+  min-width: min(92vw, 280px);
+}
+
+.switch-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 48px;
+  font-size: 17px;
+}
+
+.spinner {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 4px solid var(--outline-variant);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .radio-row {
   display: flex;
   align-items: center;
@@ -1505,6 +1551,91 @@ button.card {
 
 .round-row .hint {
   margin: 0;
+}
+
+/*
+ * Auf dem Start-Bildschirm ist die Zeile „Gemeinsame Runden“ eine Karte mit eigenem Knopf (Überschrift und
+ * Statuszeile öffnen den Bildschirm) und darunter der Runden-Auswahl (docs/ARCHITEKTUR.md 8.9). Der Knopf füllt die
+ * Karte bis an ihren Rand, damit die ganze obere Fläche antippbar bleibt.
+ */
+.round-row-open {
+  display: block;
+  width: calc(100% + 32px);
+  min-height: 56px;
+  margin: -16px -16px 0;
+  padding: 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Steht in der Karte nichts darunter, reicht der Knopf auch unten bis an den Rand. */
+.round-row-open:only-child {
+  margin-bottom: -16px;
+}
+
+.round-row-open:active {
+  background: var(--surface-3);
+}
+
+.round-row-name {
+  overflow-wrap: anywhere;
+}
+
+.round-row > .hint[role="status"] {
+  margin-top: 8px;
+}
+
+.round-row .message-card {
+  margin-bottom: 0;
+}
+
+/* Eine native Auswahlliste (am iPhone das gewohnte Rad), so hoch wie ein Tippziel und mit Pfeil in Textfarbe. */
+.select-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+}
+
+.select-field label {
+  font-size: 15px;
+  color: var(--on-surface-variant);
+}
+
+.select-wrap {
+  position: relative;
+}
+
+.select-wrap select {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 44px 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--outline);
+  background: var(--surface-1);
+  font-size: 17px;
+  appearance: none;
+  -webkit-appearance: none;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.select-wrap select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.select-wrap .icon {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .card.accent {

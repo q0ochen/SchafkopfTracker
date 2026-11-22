@@ -1,61 +1,42 @@
 /*
- * Gemeinsame Runde (docs/ARCHITEKTUR.md, Abschnitt 8.9, Texte wörtlich): anmelden, Runde anlegen oder beitreten,
- * „Das bin ich“, Mitglieder, einladen, verlassen. Wie `ui/round/RoundScreen.kt` der Android-App; die Logik steckt in
- * `round/screenModel.ts` und `round/controller.ts`.
+ * Gemeinsame Runden (docs/ARCHITEKTUR.md, Abschnitt 8.9, Texte wörtlich): anmelden, Runde anlegen oder beitreten,
+ * „Das bin ich“, Mitglieder, einladen, zwischen den Runden des Kontos wechseln, verlassen. Wie `ui/round/RoundScreen.kt`
+ * der Android-App; die Logik steckt in `round/screenModel.ts` und `round/controller.ts`.
  */
 import { useEffect, useId, useMemo, useState } from "preact/hooks";
 import type { Player, PlayerId } from "../../core/model";
-import type { RoundLink, RoundSummary } from "../../core/round/RoundModels";
+import type { InviteInfo, RoundLink, RoundSummary } from "../../core/round/RoundModels";
+import { RoundNames } from "../../core/round/RoundNames";
+import { suggestedRoundName } from "../../round/actions";
 import { needsSignIn, type RoundController, type RoundState } from "../../round/controller";
-import { RoundScreenModel, type Farewell, type RoundUi, type RoundUiError } from "../../round/screenModel";
+import { RoundScreenModel, type Farewell, type RoundUi } from "../../round/screenModel";
 import {
   farewellText,
   inviteMessage,
   LAST_MEMBER_TEXT,
   LEAVE_ROUND_TEXT,
   memberCountText,
+  membersText,
   messageText,
-  NO_CODE_ERROR,
+  newRoundHint,
   noticeText,
   pendingWarning,
   replaceText,
+  roundChoiceLabel,
   roundErrorText,
-  STORAGE_FAILED_TEXT,
+  ROUNDS_TITLE,
 } from "../../round/texts";
 import { ChoiceTile, Dialog, Hint, PlayerName, SectionHeading, TopBar } from "../components";
 import { useAppState, useRoundState, useServices } from "../context";
-import { StatusLine } from "../round";
+import { MessageCard, StatusLine, SwitchDialog, uiErrorText } from "../round";
 import { RoundDisabledScreen } from "./RoundDisabledScreen";
 
 /** Ein vorbelegter Name ist noch keiner: Dann bleibt das Feld „Dein Name“ leer. */
 const PLACEHOLDER_NAME = /^Spieler \d+$/;
 
-function errorText(error: RoundUiError): string {
-  switch (error.kind) {
-    case "NoCode":
-      return NO_CODE_ERROR;
-    case "Storage":
-      return STORAGE_FAILED_TEXT;
-    case "Server":
-      return roundErrorText(error.error, error.roundName);
-  }
-}
-
 /** Ob das Konto das einzige Mitglied der verbundenen Runde ist (soweit bekannt): Dann löscht „Runde verlassen“ sie. */
 function onlyMember(link: RoundLink | null): boolean {
   return link !== null && link.members.length > 0 && link.members.every((member) => member.userId === link.userId);
-}
-
-/** Eine Meldung, die stehen bleibt, bis man sie mit „OK“ wegtippt; Screenreader lesen sie von selbst vor. */
-function MessageCard({ text, onDismiss, isError }: { text: string; onDismiss: () => void; isError?: boolean }) {
-  return (
-    <div class={isError ? "message-card error" : "message-card"} role={isError ? "alert" : "status"}>
-      <span>{text}</span>
-      <button type="button" class="text-button" onClick={onDismiss}>
-        OK
-      </button>
-    </div>
-  );
 }
 
 function TextField({
@@ -118,104 +99,180 @@ function SignedOut({ invited, busy, onSignIn }: { invited: boolean; busy: boolea
   );
 }
 
+// --- Teile, die es mit und ohne verbundene Runde gibt ---
+
+/** Die Karte „Einladung in die Runde ‹Name›“, solange eine Einladung wartet (ein geöffneter Link). */
+function InviteCard({ invite, busy, model }: { invite: InviteInfo | null; busy: boolean; model: RoundScreenModel }) {
+  const titleId = useId();
+  return (
+    <section class="card highlight" aria-labelledby={titleId}>
+      <h2 id={titleId} class="card-title">
+        Einladung in die Runde {invite?.roundName ?? "…"}
+      </h2>
+      {invite ? <p class="card-line">{memberCountText(invite.memberCount)}</p> : null}
+      <button type="button" class="button primary main full-width spaced-top" disabled={busy} onClick={() => void model.joinInvited()}>
+        Beitreten
+      </button>
+      <button type="button" class="text-button full-width" disabled={busy} onClick={() => model.discardInvite()}>
+        Einladung verwerfen
+      </button>
+    </section>
+  );
+}
+
+/**
+ * Die Runden des Kontos zur Auswahl: ohne verbundene Runde „Deine Runden“ mit „Auf diesem Gerät verwenden“, mit
+ * verbundener „Deine anderen Runden“ mit „Wechseln“; dazu jeweils „Verlassen“. Ließen sie sich nicht laden (und ist
+ * noch keine Liste bekannt), sagt es der Bildschirm – sonst sähe es auf einem neuen Handy aus, als gäbe es keine.
+ *
+ * @param rounds Die gezeigten Runden; `all` alle des Kontos (zum Erkennen gleichnamiger Runden).
+ */
+function RoundList({
+  title,
+  rounds,
+  all,
+  failed,
+  linked,
+  ui,
+  model,
+}: {
+  title: string;
+  rounds: readonly RoundSummary[];
+  all: readonly RoundSummary[];
+  failed: boolean;
+  linked: boolean;
+  ui: RoundUi;
+  model: RoundScreenModel;
+}) {
+  if (rounds.length === 0) {
+    if (!failed) return null;
+    return (
+      <>
+        <SectionHeading>{title}</SectionHeading>
+        <p>Deine Runden ließen sich nicht laden.</p>
+        <button type="button" class="button full-width" disabled={ui.busy} onClick={() => void model.retry()}>
+          Erneut versuchen
+        </button>
+      </>
+    );
+  }
+  // Heißen zwei Runden gleich, unterscheiden sie die Vorlesetexte der Knöpfe an den Mitgliedern.
+  const duplicates = RoundNames.duplicates(all);
+  return (
+    <>
+      <SectionHeading>{title}</SectionHeading>
+      <ul class="list" aria-label={title}>
+        {rounds.map((round) => {
+          const label = roundChoiceLabel(round, duplicates.has(round.id));
+          return (
+            <li key={round.id} class="card">
+              <span class="card-title">{round.name}</span>
+              <span class="card-line hint">{membersText(round)}</span>
+              <button
+                type="button"
+                class="button full-width spaced-top"
+                disabled={ui.busy}
+                aria-label={linked ? `Zu ${label} wechseln` : `${label} auf diesem Gerät verwenden`}
+                onClick={() => void model.use(round)}
+              >
+                {linked ? "Wechseln" : "Auf diesem Gerät verwenden"}
+              </button>
+              <button
+                type="button"
+                class="text-button danger-text full-width"
+                disabled={ui.busy}
+                aria-label={`${label} verlassen`}
+                onClick={() => model.askLeave(round)}
+              >
+                Verlassen
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+/**
+ * „Neue Runde anlegen“. Die Vorgabe im Feld ist „Schafkopfrunde“ oder, ist der Name schon vergeben, die erste freie
+ * Fassung mit Nummer (docs/ARCHITEKTUR.md 8.7; eine eigene, noch leere Runde zählt nicht, die verbundene immer). Das Feld
+ * folgt der Vorgabe (die Liste der Runden kommt oft erst nach dem ersten Bild), bis jemand selbst tippt; was getippt
+ * ist, bleibt.
+ *
+ * @param linkedRoundName Die verbundene Runde; `null` ohne Runde (dann kommen die Daten des Geräts mit).
+ */
+function NewRoundForm({
+  state,
+  linkedRoundName,
+  busy,
+  model,
+}: {
+  state: RoundState;
+  linkedRoundName: string | null;
+  busy: boolean;
+  model: RoundScreenModel;
+}) {
+  const [typed, setTyped] = useState<string | null>(null);
+  const name = typed ?? suggestedRoundName(state);
+  return (
+    <form
+      aria-label="Neue Runde anlegen"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (name.trim() !== "") void model.create(name);
+      }}
+    >
+      <SectionHeading>Neue Runde anlegen</SectionHeading>
+      <TextField label="Name der Runde" value={name} onInput={setTyped} capitalize="sentences" maxLength={60} />
+      <Hint>{newRoundHint(linkedRoundName)}</Hint>
+      {/* Mit verbundener Runde ist „Einladen“ die Hauptaktion; eine weitere Runde anzulegen ist die Ausnahme. */}
+      <button
+        type="submit"
+        class={linkedRoundName === null ? "button primary main full-width spaced-top" : "button main full-width spaced-top"}
+        disabled={busy || name.trim() === ""}
+      >
+        Runde anlegen
+      </button>
+    </form>
+  );
+}
+
+/** „Einladung einlösen“: einen Link oder bloßen Code einfügen. */
+function RedeemForm({ busy, model }: { busy: boolean; model: RoundScreenModel }) {
+  const [code, setCode] = useState("");
+  return (
+    <form
+      aria-label="Einladung einlösen"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (code.trim() !== "") void model.redeem(code);
+      }}
+    >
+      <SectionHeading>Einladung einlösen</SectionHeading>
+      <TextField label="Link oder Code" value={code} onInput={setCode} />
+      <button type="submit" class="button full-width spaced-top" disabled={busy || code.trim() === ""}>
+        Beitreten
+      </button>
+    </form>
+  );
+}
+
 // --- Angemeldet, ohne Runde ---
 
 function SignedIn({ state, ui, model }: { state: RoundState; ui: RoundUi; model: RoundScreenModel }) {
-  const [name, setName] = useState("Schafkopfrunde");
-  const [code, setCode] = useState("");
   const email = state.account?.email ?? null;
-  const rounds = ui.rounds ?? [];
-  const inviteTitleId = useId();
+  const rounds = state.rounds ?? [];
   return (
     <>
       <Hint>{email === null ? "Angemeldet" : `Angemeldet als ${email}`}</Hint>
 
-      {state.pendingInvite !== null ? (
-        <section class="card highlight" aria-labelledby={inviteTitleId}>
-          <h2 id={inviteTitleId} class="card-title">
-            Einladung in die Runde {ui.invite?.roundName ?? "…"}
-          </h2>
-          {ui.invite ? <p class="card-line">{memberCountText(ui.invite.memberCount)}</p> : null}
-          <button type="button" class="button primary main full-width spaced-top" disabled={ui.busy} onClick={() => void model.joinInvited()}>
-            Beitreten
-          </button>
-          <button type="button" class="text-button full-width" disabled={ui.busy} onClick={() => model.discardInvite()}>
-            Einladung verwerfen
-          </button>
-        </section>
-      ) : null}
+      {state.pendingInvite !== null ? <InviteCard invite={ui.invite} busy={ui.busy} model={model} /> : null}
 
-      {ui.roundsFailed && rounds.length === 0 ? (
-        // Ohne diesen Hinweis sähe es auf einem neuen Handy aus, als gäbe es keine Runde.
-        <>
-          <SectionHeading>Deine Runden</SectionHeading>
-          <p>Deine Runden ließen sich nicht laden.</p>
-          <button type="button" class="button full-width" disabled={ui.busy} onClick={() => void model.retry()}>
-            Erneut versuchen
-          </button>
-        </>
-      ) : null}
+      <RoundList title="Deine Runden" rounds={rounds} all={rounds} failed={state.roundsFailed} linked={false} ui={ui} model={model} />
 
-      {rounds.length > 0 ? (
-        <>
-          <SectionHeading>Deine Runden</SectionHeading>
-          <ul class="list" aria-label="Deine Runden">
-            {rounds.map((round: RoundSummary) => (
-              <li key={round.id} class="card">
-                <span class="card-title">{round.name}</span>
-                <span class="card-line hint">{memberCountText(round.memberCount)}</span>
-                <button
-                  type="button"
-                  class="button full-width spaced-top"
-                  disabled={ui.busy}
-                  aria-label={`${round.name} auf diesem Gerät verwenden`}
-                  onClick={() => void model.use(round)}
-                >
-                  Auf diesem Gerät verwenden
-                </button>
-                <button
-                  type="button"
-                  class="text-button danger-text full-width"
-                  disabled={ui.busy}
-                  aria-label={`${round.name} verlassen`}
-                  onClick={() => model.askLeave(round)}
-                >
-                  Verlassen
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-
-      <form
-        aria-label="Neue Runde anlegen"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (name.trim() !== "") void model.create(name);
-        }}
-      >
-        <SectionHeading>Neue Runde anlegen</SectionHeading>
-        <TextField label="Name der Runde" value={name} onInput={setName} capitalize="sentences" maxLength={60} />
-        <Hint>Alle Abende und Spieler dieses Geräts kommen mit in die Runde.</Hint>
-        <button type="submit" class="button primary main full-width spaced-top" disabled={ui.busy || name.trim() === ""}>
-          Runde anlegen
-        </button>
-      </form>
-
-      <form
-        aria-label="Einladung einlösen"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (code.trim() !== "") void model.redeem(code);
-        }}
-      >
-        <SectionHeading>Einladung einlösen</SectionHeading>
-        <TextField label="Link oder Code" value={code} onInput={setCode} />
-        <button type="submit" class="button full-width spaced-top" disabled={ui.busy || code.trim() === ""}>
-          Beitreten
-        </button>
-      </form>
+      <NewRoundForm state={state} linkedRoundName={null} busy={ui.busy} model={model} />
+      <RedeemForm busy={ui.busy} model={model} />
 
       <hr class="divider" />
       <button type="button" class="text-button" disabled={ui.busy} onClick={() => void model.askFarewell("SIGN_OUT")}>
@@ -370,6 +427,10 @@ function ShareCard({ roundName, link, onDone }: { roundName: string; link: strin
   );
 }
 
+/**
+ * Mit verbundener Runde. Ist die Anmeldung abgelaufen, bleiben nur „Mit Google anmelden“, die Mitglieder und
+ * „Abmelden“; alles andere bräuchte den Server.
+ */
 function Linked({
   state,
   link,
@@ -387,8 +448,13 @@ function Linked({
 }) {
   const expired = needsSignIn(state);
   const byId = useMemo(() => new Map(players.map((it) => [it.id, it])), [players]);
+  const rounds = state.rounds ?? [];
+  const others = rounds.filter((it) => it.id !== link.roundId);
   return (
     <>
+      {/* Eine wartende Einladung (geöffneter Link) steht ganz oben. */}
+      {!expired && state.pendingInvite !== null ? <InviteCard invite={ui.invite} busy={ui.busy} model={model} /> : null}
+
       <h2 class="round-heading">{link.roundName}</h2>
       <p class="round-status-row">
         <StatusLine state={state} live />
@@ -433,6 +499,8 @@ function Linked({
           </button>
           <Hint>Der Link gilt 14 Tage.</Hint>
           {ui.shareLink !== null ? <ShareCard roundName={link.roundName} link={ui.shareLink} onDone={() => model.shared()} /> : null}
+
+          <RoundList title="Deine anderen Runden" rounds={others} all={rounds} failed={state.roundsFailed} linked ui={ui} model={model} />
         </>
       )}
 
@@ -449,6 +517,13 @@ function Linked({
           </button>
         </>
       ) : null}
+
+      {expired ? null : (
+        <>
+          <NewRoundForm state={state} linkedRoundName={link.roundName} busy={ui.busy} model={model} />
+          <RedeemForm busy={ui.busy} model={model} />
+        </>
+      )}
 
       <hr class="divider" />
       <div class="row">
@@ -565,17 +640,18 @@ function Configured({ controller }: { controller: RoundController }) {
   }, [model]);
 
   // Meldungen und Fehler stehen oben; wer gerade weiter unten getippt hat, soll sie trotzdem sehen.
-  const showsMessage = state.message !== null || ui.error !== null;
+  const showsMessage = state.message !== null || ui.message !== null || ui.error !== null;
   useEffect(() => {
     if (showsMessage) window.scrollTo({ top: 0 });
-  }, [showsMessage, state.message, ui.error]);
+  }, [showsMessage, state.message, ui.message, ui.error]);
 
   // Auch während die Anmeldung nach der Rückkehr aus dem Browser eingelöst wird, ruhen die Knöpfe.
   const shown: RoundUi = state.signingIn ? { ...ui, busy: true } : ui;
   const link = state.link;
   let body;
   if (link !== null) {
-    body = <Linked state={state} link={link} ui={shown} model={model} controller={controller} players={players} />;
+    // Je Runde neu: Was in „Wer bist du?“ oder „Neue Runde anlegen“ gewählt oder getippt war, gilt nach einem Wechsel nicht mehr.
+    body = <Linked key={link.roundId} state={state} link={link} ui={shown} model={model} controller={controller} players={players} />;
   } else if (!state.loaded) {
     // Die Anmeldung wird noch gelesen (oder die Anbindung an den Server lässt sich gerade nicht laden).
     body = state.problem === "OFFLINE" ? <p>{roundErrorText("OFFLINE")}</p> : null;
@@ -589,9 +665,11 @@ function Configured({ controller }: { controller: RoundController }) {
     <>
       <main class="content round">
         {state.message !== null ? <MessageCard text={messageText(state.message)} onDismiss={() => controller.clearMessage()} /> : null}
-        {ui.error !== null ? <MessageCard text={errorText(ui.error)} onDismiss={() => model.clearError()} isError /> : null}
+        {ui.message !== null ? <MessageCard text={messageText(ui.message)} onDismiss={() => model.clearMessage()} /> : null}
+        {ui.error !== null ? <MessageCard text={uiErrorText(ui.error)} onDismiss={() => model.clearError()} isError /> : null}
         {body}
-        {shown.busy || (!state.loaded && link === null && state.problem !== "OFFLINE") ? (
+        {/* Während eines Wechsels steht „Einen Moment …“ ohnehin über allem (`SwitchProgress`). */}
+        {(shown.busy && !state.switching) || (!state.loaded && link === null && state.problem !== "OFFLINE") ? (
           <p class="hint" role="status">
             Einen Moment …
           </p>
@@ -607,6 +685,9 @@ function Configured({ controller }: { controller: RoundController }) {
           }}
         />
       ) : null}
+      {ui.switching !== null ? (
+        <SwitchDialog confirm={ui.switching} onCancel={() => model.cancelSwitch()} onConfirm={() => void model.confirmSwitch()} />
+      ) : null}
       {ui.farewell !== null ? <FarewellDialog kind={ui.farewell} pending={ui.farewellPending} link={link} model={model} /> : null}
       {ui.leaving !== null ? <LeaveRoundDialog round={ui.leaving} model={model} /> : null}
     </>
@@ -618,7 +699,7 @@ export function RoundScreen() {
   if (round === null) return <RoundDisabledScreen />;
   return (
     <div class="screen">
-      <TopBar title="Gemeinsame Runde" onBack={() => router.back()} />
+      <TopBar title={ROUNDS_TITLE} onBack={() => router.back()} />
       <Configured controller={round} />
     </div>
   );

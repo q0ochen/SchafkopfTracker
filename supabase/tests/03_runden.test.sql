@@ -104,8 +104,10 @@ select is((select char_length(name) from public.rounds where id = pg_temp.runde(
 select is((select name from public.rounds where id = pg_temp.runde('r3')), 'Ä' || repeat('ö', 39),
   'create_round: gezählt werden Zeichen, nicht Bytes (40 Umlaute)');
 select pg_temp.merke('r4', public.create_round('Dieselbe')::text);
-select pg_temp.merke('r5', public.create_round('Dieselbe')::text);
-select isnt(pg_temp.runde('r4'), pg_temp.runde('r5'), 'create_round: Zwei Runden dürfen gleich heißen');
+-- Seit dem 21.11.2026 hat ein Konto keine zwei Runden desselben Namens mehr (Einzelheiten in 08_runden_auswahl).
+select throws_ok($$ select public.create_round('Dieselbe') $$, 'P0001', 'name_taken',
+  'create_round: Einen Namen, den das Konto schon hat, gibt es nicht zweimal → name_taken');
+select pg_temp.merke('r5', public.create_round('Noch eine')::text);
 
 -- Obergrenze: 5 Runden je Konto
 select throws_ok($$ select public.create_round('Die sechste') $$, 'P0001', 'limit_reached',

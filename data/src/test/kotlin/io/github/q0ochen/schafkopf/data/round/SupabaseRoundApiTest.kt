@@ -296,8 +296,11 @@ class SupabaseRoundApiTest {
         server.enqueueJson(200, "\"${round.value}\"")
         server.enqueueJson(
             200,
-            """[{"id":"${round.value}","name":"Stammtisch","rev":9,"member_count":3,"my_player_id":"spieler-2","is_creator":false},
-                {"id":"andere","name":"Zweite","rev":1,"member_count":1,"my_player_id":null,"is_creator":true}]""",
+            // Die zweite Zeile wie von einem Server vor dem 21.11.2026 (ohne member_names), die dritte mit null.
+            """[{"id":"${round.value}","name":"Stammtisch","rev":9,"member_count":3,"my_player_id":"spieler-2","is_creator":false,
+                  "member_names":["Anna","Zwei"]},
+                {"id":"andere","name":"Zweite","rev":1,"member_count":1,"my_player_id":null,"is_creator":true},
+                {"id":"dritte","name":"Dritte","rev":2,"member_count":1,"my_player_id":null,"is_creator":true,"member_names":null}]""",
         )
         server.enqueueJson(200, "\"0123456789abcdef0123456789abcdef\"")
         server.enqueueJson(200, """[{"round_id":"${round.value}","round_name":"Stammtisch","member_count":3,"already_member":true}]""")
@@ -309,8 +312,12 @@ class SupabaseRoundApiTest {
         assertEquals(round, api.createRound("Stammtisch"))
         assertEquals(
             listOf(
-                RoundSummary(round, "Stammtisch", rev = 9, memberCount = 3, myPlayerId = PlayerId("spieler-2"), isCreator = false),
+                RoundSummary(
+                    round, "Stammtisch", rev = 9, memberCount = 3, myPlayerId = PlayerId("spieler-2"), isCreator = false,
+                    memberNames = listOf("Anna", "Zwei"),
+                ),
                 RoundSummary(RoundId("andere"), "Zweite", rev = 1, memberCount = 1, myPlayerId = null, isCreator = true),
+                RoundSummary(RoundId("dritte"), "Dritte", rev = 2, memberCount = 1, myPlayerId = null, isCreator = true),
             ),
             api.myRounds(),
         )

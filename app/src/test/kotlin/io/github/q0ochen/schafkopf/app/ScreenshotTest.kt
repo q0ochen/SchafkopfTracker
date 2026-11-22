@@ -12,6 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -206,6 +207,8 @@ class ScreenshotTest {
             "ViewModel: ${viewModel?.state?.value?.let { "loading=${it.loading}, ${it.evenings.size} Abende" }}, " +
                 "sammelnd: ${subscribers(viewModel?.state)}, Lebenszyklus: ${lifecycle?.currentState}"
         }
+        // Ohne gemeinsame Runde trägt kein Abend die Marke „Runde: …“ (docs/ARCHITEKTUR.md 8.9).
+        compose.onAllNodesWithText("Runde:", substring = true).assertCountEquals(0)
         capture("01_start")
     }
 

@@ -1,13 +1,16 @@
 /*
- * Startseite: laufender Abend, „Neuer Abend“, Statistik, Spieler, Einstellungen und alle Abende. Ein geplanter Abend
- * (docs/ARCHITEKTUR.md 4.2) steht nur in der Liste, mit der Marke „geplant“.
+ * Startseite: laufender Abend, „Neuer Abend“, Statistik, Spieler, Einstellungen, die Zeile „Gemeinsame Runden“ und alle
+ * Abende. Ein geplanter Abend (docs/ARCHITEKTUR.md 4.2) steht nur in der Liste, mit der Marke „geplant“. Mit
+ * gemeinsamer Runde trägt jeder Abend die Marke „Runde: ‹Name›“ (8.9): Ein Gerät hängt an höchstens einer Runde, und
+ * dann gehören alle Abende darauf zu ihr. Hat das Konto mehrere Runden, lässt sich in der Zeile „Gemeinsame Runden“
+ * zwischen ihnen wechseln (Runden-Auswahl, 8.9).
  */
 import { useMemo } from "preact/hooks";
 import { isRunning } from "../../core/evening/Evening";
 import { EveningCalculator } from "../../core/evening/EveningCalculator";
 import type { Evening } from "../../core/model";
 import { Amount, TopBar } from "../components";
-import { useAppState, useNames, useServices } from "../context";
+import { useAppState, useNames, useRoundState, useServices } from "../context";
 import { formatDate, plural } from "../format";
 import { isPlanned, localDateOf } from "../localDate";
 import { RoundRow } from "../round";
@@ -41,8 +44,12 @@ function card(evening: Evening, names: ReadonlyMap<string, string>, today: strin
   return { evening, running: isRunning(evening), planned: isPlanned(evening, today), games: computed.gamesPlayed, standings };
 }
 
-/** Datum, Zahl der Spiele und die Rangliste eines Abends. */
-function EveningSummary({ item }: { item: EveningCard }) {
+/**
+ * Datum, Zahl der Spiele und die Rangliste eines Abends.
+ *
+ * @param roundName Die verbundene Runde; `null` ohne Runde, dann gibt es keine Marke.
+ */
+function EveningSummary({ item, roundName }: { item: EveningCard; roundName: string | null }) {
   const date = formatDate(item.evening.startedAt);
   const asMoney = item.evening.rules.displayAsMoney;
   return (
@@ -51,6 +58,7 @@ function EveningSummary({ item }: { item: EveningCard }) {
         {item.evening.location.trim() === "" ? date : `${date} · ${item.evening.location}`}
         {item.planned ? <span class="badge">geplant</span> : item.running ? <span class="badge">läuft</span> : null}
       </span>
+      {roundName !== null ? <span class="round-label">Runde: {roundName}</span> : null}
       <span class="card-line hint">{plural(item.games, "Spiel", "Spiele")}</span>
       {item.standings.map((standing) => (
         <span class="standing-line" key={standing.id}>
@@ -80,6 +88,7 @@ export function StartScreen() {
   const { store, router } = useServices();
   const { evenings, unreadableEvenings } = useAppState();
   const names = useNames();
+  const roundName = useRoundState().link?.roundName ?? null;
   const today = localDateOf(store.clock.now());
   const cards = useMemo(() => evenings.map((evening) => card(evening, names, today)), [evenings, names, today]);
   // „Abend läuft“ zeigt nie einen geplanten Abend, auch wenn er in der Liste ganz oben steht (der neueste zuerst).
@@ -95,7 +104,7 @@ export function StartScreen() {
             <h2 id="running-title" class="card-title">
               Abend läuft
             </h2>
-            <EveningSummary item={running} />
+            <EveningSummary item={running} roundName={roundName} />
             <button
               type="button"
               class="button primary main full-width spaced-top"
@@ -123,7 +132,7 @@ export function StartScreen() {
             Einstellungen
           </button>
         </nav>
-        <RoundRow />
+        <RoundRow picker />
 
         <h2 class="section-heading">Abende</h2>
         {unreadableEvenings.length > 0 ? (
@@ -139,7 +148,7 @@ export function StartScreen() {
             {cards.map((item) => (
               <li key={item.evening.id}>
                 <button type="button" class="card" onClick={() => router.open({ name: "board", eveningId: item.evening.id })}>
-                  <EveningSummary item={item} />
+                  <EveningSummary item={item} roundName={roundName} />
                 </button>
               </li>
             ))}

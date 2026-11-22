@@ -271,7 +271,7 @@ select results_eq(
        ('is_round_member', 'p_round uuid', 'boolean'),
        ('join_round', 'p_token text', 'uuid'),
        ('leave_round', 'p_round uuid', 'void'),
-       ('my_rounds', '', 'TABLE(id uuid, name text, rev bigint, member_count integer, my_player_id text, is_creator boolean)'),
+       ('my_rounds', '', 'TABLE(id uuid, name text, rev bigint, member_count integer, my_player_id text, is_creator boolean, member_names text[])'),
        ('save_evening', 'p_round uuid, p_id text, p_doc jsonb, p_expected_version integer, p_deleted boolean', 'TABLE(version integer, rev bigint)'),
        ('save_player', 'p_round uuid, p_id text, p_name text, p_color_index integer, p_archived boolean, p_deleted boolean', 'bigint'),
        ('save_rules', 'p_round uuid, p_rules jsonb', 'bigint') $$,

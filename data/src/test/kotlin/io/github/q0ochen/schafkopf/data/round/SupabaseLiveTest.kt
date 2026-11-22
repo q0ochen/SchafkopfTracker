@@ -343,7 +343,11 @@ class SupabaseLiveTest {
             listOf(RemotePlayer(seating[1], "Bert", 5, archived = false, position = 2, owner = bert.userId, nameLocked = true, rev = 5)),
             anna.api.playersSince(round, 4),
         )
-        assertEquals(listOf(RoundSummary(round, "Stammtisch am Freitag", 5, 2, seating[1], isCreator = false)), bert.api.myRounds())
+        // member_names (seit dem 21.11.2026): die Namen der übernommenen Spieler, hier nur Berts.
+        assertEquals(
+            listOf(RoundSummary(round, "Stammtisch am Freitag", 5, 2, seating[1], isCreator = false, memberNames = listOf("Bert"))),
+            bert.api.myRounds(),
+        )
         // Derselbe Aufruf noch einmal (zum Beispiel nach einer verlorenen Antwort): Der Name bleibt.
         bert.api.claimPlayer(round, seating[1], "Anders", 6)
         assertEquals("Bert", anna.api.playersSince(round, 5).single().name)
@@ -458,12 +462,14 @@ class SupabaseLiveTest {
     }
 
     @Test
-    fun `mehr als fuenf Runden je Konto lehnt der Server ab`() = runBlocking {
+    fun `mehr als fuenf Runden je Konto und doppelte Namen lehnt der Server ab`() = runBlocking {
         val anna = newAccount()
         assertEquals(RoundError.INVALID_NAME, errorOf { anna.api.createRound("   ") }?.error)
         assertEquals(RoundError.INVALID_NAME, errorOf { anna.api.createRound("x".repeat(41)) }?.error)
         repeat(5) { anna.api.createRound("Runde ${it + 1}") }
 
+        // Seit dem 21.11.2026: ein Name je Konto, ohne Groß/Klein, geprüft vor der Obergrenze.
+        assertEquals(RoundError.NAME_TAKEN, errorOf { anna.api.createRound("  RUNDE   1 ") }?.error)
         assertEquals(RoundError.LIMIT_REACHED, errorOf { anna.api.createRound("Runde 6") }?.error)
         assertEquals(List(5) { "Runde ${it + 1}" }, anna.api.myRounds().map { it.name })
     }

@@ -99,8 +99,17 @@ class RoundSync(
      * @param quick Nur nachsehen, ob der Server etwas Neues hat (eine kleine Anfrage), und sonst sofort mit
      *   [SyncOutcome.Unchanged] aufhören. Für das regelmäßige Nachfragen, solange hier nichts geändert wurde.
      */
-    suspend fun sync(quick: Boolean = false): SyncOutcome = mutex.withLock {
-        val link = store.link.first() ?: return@withLock SyncOutcome.NotLinked
+    suspend fun sync(quick: Boolean = false): SyncOutcome = mutex.withLock { syncLocked(quick) }
+
+    /**
+     * Gleicht vollständig ab und führt danach [block] mit dem Ergebnis aus, ohne dass dazwischen ein anderer Abgleich
+     * läuft. Für den Wechsel in eine andere Runde ([RoundConnection]): Was bis eben eingetragen wurde, ist dann oben,
+     * bevor das Gerät geleert wird.
+     */
+    internal suspend fun <T> syncThen(block: suspend (SyncOutcome) -> T): T = mutex.withLock { block(syncLocked(quick = false)) }
+
+    private suspend fun syncLocked(quick: Boolean): SyncOutcome {
+        val link = store.link.first() ?: return SyncOutcome.NotLinked
         if (remembered != link.roundId) {
             // Eine andere Runde (zum Beispiel nach „Runde verlassen“ und „Neue Runde anlegen“): von vorn versuchen.
             remembered = link.roundId
@@ -108,7 +117,7 @@ class RoundSync(
             refusedEvenings.clear()
             refusedRules = null
         }
-        try {
+        return try {
             Run(link).execute(quick)
         } catch (e: RoundException) {
             when (e.error) {
