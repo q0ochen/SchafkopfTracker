@@ -606,8 +606,8 @@ irgendwo auftauchen“.
     Gleichnamige Runden durch Beitreten bleiben möglich; Listen und Auswahl nennen dann die Mitglieder
     (`my_rounds.member_names`).
   - Server: Migration `20261121200000_runde_auswahl.sql` (578 pgTAP-Tests, dazu ein Fall für zwei Geräte desselben
-    Kontos in `nebenlaeufig.sh`). **Wird erst mit „Supabase Deploy“ (von Hand, nach dem Release) auf dem echten
-    Server wirksam;** bis dahin fehlen nur die Mitgliedernamen, und die Namen prüft allein die App.
+    Kontos in `nebenlaeufig.sh`). Auf dem echten Server seit dem 22.11.2026 (Lauf 3 von „Supabase Deploy“, siehe
+    unten); Apps von vor Pull Request #29 übergehen `member_names` (`ignoreUnknownKeys`, supabase-js).
   - Kotlin: `domain.round.RoundNames` (`reusable`, `blocking`), `SwitchFrom`, `RoundConnection` (`switchDevice`,
     `clearDevice`), `RoundSync.syncThen`, `RoundCoordinator` (`rounds`, `roundsFailed`, `refreshRounds`,
     `prepareSwitch`), `ui/round/RoundSwitch.kt` (Auswahl, Rückfrage, „Einen Moment …“ über allem, `roundSelection`,
@@ -661,7 +661,12 @@ irgendwo auftauchen“.
     https://github.com/q0ochen/SchafkopfTracker/actions/workflows/supabase-deploy.yml, dort „Run workflow“, Zweig
     `main`. Auf dem iPhone erscheint der Knopf eventuell erst mit „Desktop-Website anfordern“. Angeboten ist, dass
     Claude den Lauf über die API startet, aber nur auf ausdrückliche Bitte („Starte du“), weil er den echten Server
-    ändert. Nach dem Lauf prüfen: Probelauf nennt genau `20261121200000_runde_auswahl.sql`, dann grün.
+    ändert.
+  - Danach hat der Nutzer ihn selbst gestartet: Lauf 3 (07:05 UTC, Stand `ff3ef56`) grün. Der Probelauf nannte genau
+    `20261121200000_runde_auswahl.sql`, angewendet ohne Fehler. Damit ist alles aus Pull Request #29 in Betrieb.
+    Im Protokoll warnt die CLI (fest auf 2.122.1): „supabase db push will target the local database by default in
+    the next major version. Pass --linked“. Wer die CLI in `supabase-deploy.yml` auf v3 hebt, muss bei beiden
+    `db push` `--linked` ergänzen, sonst zielt der Deploy nicht mehr auf das echte Projekt.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
