@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<fdroid>
+	<repo icon="icon.png" name="Schafkopf Tracker – Testversionen" pubkey="308204f7308202dfa003020102020848d1157af15bc8e1300d06092a864886f70d01010c05003029312730250603550403131e53636861666b6f706620547261636b657220462d44726f6964205265706f3020170d3236313131353138313931365a180f32303534303430323138313931365a3029312730250603550403131e53636861666b6f706620547261636b657220462d44726f6964205265706f30820222300d06092a864886f70d01010105000382020f003082020a0282020100b042ade01b78fdff1650412d35a6fb0d9152d238959686d7f0c642995f6725dde10f6167cbe4eb96366e55875bc01a1b19ffa36c06a4097681f5731e73a8306c8020bcfb0aeb01711c4d4f850ce67b53c9bef85bd6199b07a4c8e9443cab6653685e6fa9b51cd84b3cc571d1f3f7124486a513524354b14583a646eb457ad2476fda80ad90cf7797a26d79875aa721ccb3a8e1018f238451fdf1251982cd0de84e244663b1f092ae754afbd127dc0e1cb01b59f1ecb053973d0cc147ffc4fe534a534718d290c31e10053d5dbdcc84455d6e5e2478bae2f48e5dbd59e0518deb6183a08d4270343ec2d4ceabb54ebff52577f38ecebf697544504452d21b9b0e05989cdda7c4eb5359f32790c66b7abb5deee75a3dee77e7e45991ee3b6f34eebe82f97c7cafb7dbfa3dae9effdc653225dfeffe692a1b2a6d6999dcdb27fe2fe05fbf4bbf9c611adb9655567e968dc2caa1799646052e4b48f494b7264dc2b376bc0b63d2de8de55fe4a77559715531003423b4b25cede19cd68e10b1d4b4bcf948678d13a74114ba82f15f47d93d3d45bbe8325bd869da32f46fd838c90a1faefa4e1d91cc7ca3d009451e874c6064f326dd0f91c08ab69772455841b25e35a112bb4ba4d32d4833973dacfe418a985c7a482dbce38357270132a69f6fc06b46ca93f9fb0b68f543e2482fcdeb6532cedaf7b7d74af812834dc1263bc2e2190203010001a321301f301d0603551d0e0416041424a85dc58f13cefec9818814f58bd65a2396b5a1300d06092a864886f70d01010c05000382020100a3fafa161d62d8f44404fd7cce4b0cf6828d58d376f7bc1a495d7fc971073678cbfd5c8000b40b81afd4f5dbd428ff821250cd4a3ac69c7065c1a8d230a86e69cc76557cbdb368de3b77904dcbad6505c8e4c49e4931a5f176c7035c21a45b7025031603b828dd1dd0da72cecb85717c8ee704c5f1c958581e50fb135e7594541f9a3ca59cbb1d4b378163466c09c26c1297a11de5dfdb100d060c71ae4ad536166d5edff683c096de8f413c2b4c6ee493889bb21f20ef427d500821eec492dcc541662602659a2c3a7f181da2d1b1b4ab6516436de4c8e3477776a6cdc07f7c0d0c24240602ba021a0c010c4231be020f367ac3c1bb0bf7b958338be2fd222bf66cfe52fdfcf07128eced8edaf681ce57b51f5b8d6d5eddf2a3bb4913204e1d2abe4a99484c63f1180d8dcf4685f0b4eca547b1f3594b9ca5126825743455184edd1f81010805dc3aced99e7b8ea9dcdf7179548c6051a347ffff6c2aeb92e2b29f7618425c8b14e56131ec4b8c2b575e49a53b33a76b4ca3488860d54a5bdab696787de4f84a721ead2f19651279d7ee845bea8a7b7a30d63468cb5f65f2e817c3b76ea43792e74819e3afca272b714c688442dc2e9d09c70441a2f575f3b77b6d8fe84220639b5755942c229bf0afd8fde32c4072ac08dd902f55ed29773e054597034243922b29cbbba2213337d5b755d77339457f09c2fe0f8d5d01bc42" timestamp="1795330650" url="https://raw.githubusercontent.com/q0ochen/SchafkopfTracker/fdroid-repo/fdroid/repo" version="20002">
+		<description>Testversionen des Schafkopf Trackers, automatisch aus dem öffentlichen Quellcode auf GitHub gebaut. Das ist nicht das offizielle F-Droid-Verzeichnis.</description>
+	</repo>
+	<application id="io.github.q0ochen.schafkopf">
+		<id>io.github.q0ochen.schafkopf</id>
+		<added>2026-11-22</added>
+		<lastupdated>2026-11-22</lastupdated>
+		<name>Schafkopf Tracker</name>
+		<summary>Score and settle Bavarian Schafkopf evenings to the cent</summary>
+		<desc>&lt;p&gt;&lt;b&gt;For Schafkopf evenings at the pub.&lt;/b&gt; After every game one player records what was played, and the app works out to the cent who receives or pays how much. The app is in German.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;b&gt;Game types:&lt;/b&gt; Rufspiel, Über Kreuz, Farbsolo, Wenz and Geier, with Laufende, Schneider, Schwarz, Tout and Sie, Kontra and Retour.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Doubling:&lt;/b&gt; every player who knocked doubles the value (matchbox symbol); “6 Nixer” start a Bock round in which games count double.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Evening:&lt;/b&gt; running totals with places, dealer and Bock counter; every game can be edited or deleted later and everything is recalculated at once.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Configurable rules:&lt;/b&gt; tariffs, Laufende, Bock round, pot split for solo games; every evening keeps its own rules.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Closing and statistics:&lt;/b&gt; final standings and who pays whom; statistics for one evening or all evenings with a balance history chart, game types, a knocking index, Bock king, solo specialist and favourite partners.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Sharing:&lt;/b&gt; closing and statistics as text or as an image, for example to Signal or Telegram.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Backup:&lt;/b&gt; save and restore a file (also exchangeable with the iPhone web app) and, if you like, automatically after every change, directly to Google Drive or into a file you pick once.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Evening commentator:&lt;/b&gt; a funny, slightly teasing summary of the evening, or a review of all evenings, in Bavarian, from text templates or, if you like, written by a language model (Google Gemini with your own key).&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Shared round:&lt;/b&gt; if you like, everyone records from their own phone and sees the same standings, also mixed with the iPhone web app. Everybody sets their own name; the app shows who deals and marks games that were recorded twice. This needs a free server of your own (Supabase) and a Google account for each player.&lt;/li&gt;
+&lt;li&gt;&lt;b&gt;Made for dimly lit pubs:&lt;/b&gt; dark design, large buttons, works with a screen reader.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;b&gt;Privacy:&lt;/b&gt; without the optional extras everything stays on the device. The app uses the internet only for them: the shared round (names, evenings and rules are then stored on the round's server; only its members can read them), backup to Google Drive, the evening commentator with a language model (sends only after consent, without real names by default) and place suggestions (the typed place goes to photon.komoot.io, an OpenStreetMap search, without location). No ads, no tracking.&lt;/p&gt;
+
+&lt;p&gt;&lt;b&gt;Test version:&lt;/b&gt; the watch app comes later. For the iPhone there is a web app with the same calculations.&lt;/p&gt;
+
+&lt;p&gt;Free software (CC0 1.0). Source code: &lt;a href=&quot;https://github.com/q0ochen/SchafkopfTracker&quot;&gt;github.com/q0ochen/SchafkopfTracker&lt;/a&gt;&lt;/p&gt;
+</desc>
+		<license>CC0-1.0</license>
+		<categories>Games</categories>
+		<category>Games</category>
+		<web>https://q0ochen.github.io/SchafkopfTracker/</web>
+		<source>https://github.com/q0ochen/SchafkopfTracker</source>
+		<tracker>https://github.com/q0ochen/SchafkopfTracker/issues</tracker>
+		<author>Schafkopf Tracker</author>
+		<marketversion></marketversion>
+		<marketvercode>1068</marketvercode>
+		<antifeatures>NonFreeNet</antifeatures>
+		<package>
+			<version>0.1.0-test.68</version>
+			<versioncode>1068</versioncode>
+			<apkname>io.github.q0ochen.schafkopf_1068.apk</apkname>
+			<hash type="sha256">810801d6a0c65552a70b17643d167d8e7727b3bc7f81f71d3ededd3647a28cb7</hash>
+			<size>11799864</size>
+			<sdkver>26</sdkver>
+			<targetSdkVersion>37</targetSdkVersion>
+			<added>2026-11-22</added>
+			<sig>9b2977e4005b2fcec059e02bb1552d9d</sig>
+			<permissions>ACCESS_NETWORK_STATE,FOREGROUND_SERVICE,INTERNET,RECEIVE_BOOT_COMPLETED,WAKE_LOCK,io.github.q0ochen.schafkopf.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION</permissions>
+			<nativecode>arm64-v8a,armeabi-v7a,x86,x86_64</nativecode>
+		</package>
+		<package>
+			<version>0.1.0-test.61</version>
+			<versioncode>1061</versioncode>
+			<apkname>io.github.q0ochen.schafkopf_1061.apk</apkname>
+			<hash type="sha256">cf29350f8b327ef08f8c6d4250fa100e156d0ad142a3be781eea96249492ca01</hash>
+			<size>11759132</size>
+			<sdkver>26</sdkver>
+			<targetSdkVersion>37</targetSdkVersion>
+			<added>2026-11-22</added>
+			<sig>9b2977e4005b2fcec059e02bb1552d9d</sig>
+			<permissions>ACCESS_NETWORK_STATE,FOREGROUND_SERVICE,INTERNET,RECEIVE_BOOT_COMPLETED,WAKE_LOCK,io.github.q0ochen.schafkopf.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION</permissions>
+			<nativecode>arm64-v8a,armeabi-v7a,x86,x86_64</nativecode>
+		</package>
+	</application>
+</fdroid>
