@@ -171,8 +171,9 @@ Dort gibt es den Werkzeug-Ordner nicht. Gebaut wird mit dem Gradle-Wrapper des P
 
 ## Stand am 15.11.2026 (spätabends, nach der ersten Cloud-Sitzung)
 
-`main` enthält alles bis Pull Request #28 („Abend teilen“ mit Vermögensverlauf, Statistik als Bild; am 21.11.2026
-abends zusammengeführt, siehe unten); davor #27 (gesammelter Release vom 21.11.2026: Rückpfeil, geplante Abende,
+`main` enthält alles bis Pull Request #29 (Runde an jedem Abend, Runden wechseln, eindeutige Rundennamen; am
+22.11.2026 morgens zusammengeführt, siehe unten); davor #28 („Abend teilen“ mit Vermögensverlauf, Statistik als Bild),
+#27 (gesammelter Release vom 21.11.2026: Rückpfeil, geplante Abende,
 Ortsvorschläge), #26 („Abend bearbeiten“) und #25 (gemeinsame Runde, am 20.11.2026 auf Wunsch des
 Nutzers angelegt, „Ja pull request anlegen“, und von ihm um 18:40 zusammengeführt). `entwicklung` ist noch auf dem älteren Stand.
 
@@ -651,6 +652,16 @@ irgendwo auftauchen“.
   - Pull Request #29 nach `main` am 22.11.2026 auf Wunsch des Nutzers angelegt („Ja bitte pull request anlegen“):
     Runde an jedem Abend, Runden wechseln, eindeutige Namen, Server-Migration. Schließt kein Issue. Nach dem
     Zusammenführen muss der Nutzer „Supabase Deploy“ einmal starten (im Pull Request und im Bericht gesagt).
+  - Vom Nutzer am 22.11.2026 um 06:49 UTC zusammengeführt (`ff3ef56`). Läufe auf `main` grün (Android 68 samt
+    Installationstest, Web-App 42 auch mit WebKit, Supabase 25): Web-App neu auf GitHub Pages, Testversion 68
+    (`0.1.0-test.68`) im Release `testversion` und in der F-Droid-Paketquelle. Der Zweig
+    `claude/gracious-keller-48tcn0` ist danach auf `ff3ef56` vorgerückt (ohne Erzwingen).
+  - „Supabase Deploy“ war um 07:02 UTC noch nicht gestartet (letzter Lauf: 2 vom 20.11.2026). Der Nutzer wusste nicht,
+    wo er den Workflow startet („In Supabase?“): Er läuft auf GitHub. Deshalb immer den direkten Link nennen,
+    https://github.com/q0ochen/SchafkopfTracker/actions/workflows/supabase-deploy.yml, dort „Run workflow“, Zweig
+    `main`. Auf dem iPhone erscheint der Knopf eventuell erst mit „Desktop-Website anfordern“. Angeboten ist, dass
+    Claude den Lauf über die API startet, aber nur auf ausdrückliche Bitte („Starte du“), weil er den echten Server
+    ändert. Nach dem Lauf prüfen: Probelauf nennt genau `20261121200000_runde_auswahl.sql`, dann grün.
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
