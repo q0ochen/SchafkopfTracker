@@ -647,8 +647,10 @@ irgendwo auftauchen“.
     `49c-runde-anlegen-rueckfrage`, `49d-runde-wechsel-laeuft`. Nicht geprüft: wie sich der Dialog in Safari auf dem
     iPhone und bei der Zurück-Geste von Chrome auf Android verhält.
   - Geprüft am 21.11.2026 spätabends: „Android“ 65, „Web-App“ 39 (auch WebKit) und „Supabase“ 22 grün (Stand
-    `5fabaed`, mit den Proben beider Apps gegen einen echten lokalen Supabase-Stack samt neuer Migration). Kein Pull
-    Request; dem Nutzer angeboten.
+    `5fabaed`, mit den Proben beider Apps gegen einen echten lokalen Supabase-Stack samt neuer Migration).
+  - Pull Request #29 nach `main` am 22.11.2026 auf Wunsch des Nutzers angelegt („Ja bitte pull request anlegen“):
+    Runde an jedem Abend, Runden wechseln, eindeutige Namen, Server-Migration. Schließt kein Issue. Nach dem
+    Zusammenführen muss der Nutzer „Supabase Deploy“ einmal starten (im Pull Request und im Bericht gesagt).
 
 ## Offene Entscheidungen (beim Nutzer bzw. Hauptentwickler)
 
